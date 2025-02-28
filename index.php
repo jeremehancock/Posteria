@@ -341,11 +341,6 @@
 		    exit;
 		}
 		
-		if (rename($sourcePath, $targetPath)) {
-		    echo json_encode(['success' => true]);
-		} else {
-		    echo json_encode(['success' => false, 'error' => 'Failed to move file']);
-		}
 		exit;
 	}
 
@@ -531,47 +526,6 @@
 		    echo json_encode(['success' => true]);
 		} else {
 		    echo json_encode(['success' => false, 'error' => 'Failed to delete file']);
-		}
-		exit;
-	}
-
-	// Handle file rename
-	if (isLoggedIn() && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'rename') {
-		header('Content-Type: application/json');
-		
-		$oldFilename = isset($_POST['old_filename']) ? $_POST['old_filename'] : '';
-		$newFilename = isset($_POST['new_filename']) ? $_POST['new_filename'] : '';
-		$directory = isset($_POST['directory']) ? $_POST['directory'] : '';
-		
-		if (empty($oldFilename) || empty($newFilename) || empty($directory) || !isset($config['directories'][$directory])) {
-		    echo json_encode(['success' => false, 'error' => 'Invalid request']);
-		    exit;
-		}
-		
-		// Add extension from old filename if not provided in new filename
-		if (!pathinfo($newFilename, PATHINFO_EXTENSION)) {
-		    $newFilename .= '.' . pathinfo($oldFilename, PATHINFO_EXTENSION);
-		}
-		
-		$oldFilepath = $config['directories'][$directory] . $oldFilename;
-		$newFilepath = $config['directories'][$directory] . $newFilename;
-		
-		// Check if a file with the new name already exists
-		if (file_exists($newFilepath) && $oldFilename !== $newFilename) {
-		    echo json_encode(['success' => false, 'error' => 'A file with this name already exists']);
-		    exit;
-		}
-		
-		// Security checks
-		if (!isValidFilename($oldFilename) || !isValidFilename($newFilename) || !file_exists($oldFilepath)) {
-		    echo json_encode(['success' => false, 'error' => 'Invalid file']);
-		    exit;
-		}
-		
-		if (rename($oldFilepath, $newFilepath)) {
-		    echo json_encode(['success' => true]);
-		} else {
-		    echo json_encode(['success' => false, 'error' => 'Failed to rename file']);
 		}
 		exit;
 	}
@@ -1230,19 +1184,6 @@
 			border-color: #c73e3e;
 		}
 
-		.modal-button.rename,
-		.modal-button.move {
-			background: linear-gradient(45deg, var(--accent-primary), #ff9f43);
-			color: #1f1f1f;
-		}
-
-		.modal-button.rename:hover,
-		.modal-button.move:hover {
-			background: linear-gradient(45deg, #f5b025, #ffa953);
-			transform: translateY(-1px);
-			box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-		}
-
 		/* Login Form Styles */
 		.login-container {
 			max-width: 400px;
@@ -1300,15 +1241,6 @@
 
 		/* Error Messages */
 		.login-error,
-		.rename-error {
-			color: var(--danger-color);
-			background: rgba(239, 68, 68, 0.1);
-			border: 1px solid var(--danger-color);
-			padding: 12px;
-			border-radius: 6px;
-			margin-bottom: 16px;
-			display: none;
-		}
 
 		/* Upload Form Styles */
 		.upload-modal .modal-content {
@@ -1851,31 +1783,26 @@
     100% { transform: rotate(360deg); }
 }
 
-.send-to-plex-btn {
-    background: linear-gradient(45deg, #282a36, #44475a) !important; /* Plex-inspired colors */
-    color: #f8f8f2 !important;
-}
-
-.send-to-plex-btn:hover {
-    background: linear-gradient(45deg, #44475a, #6272a4) !important;
-    transform: translateY(-2px);
-}
-
-.send-to-plex-btn svg {
-    stroke: #ff9f43; /* Accent color for the icon to make it stand out */
-}
-
 /* Send to Plex confirmation button */
 .send-to-plex-confirm {
-    background: linear-gradient(45deg, #282a36, #44475a) !important;
-    color: #f8f8f2 !important;
-    border: none !important;
+        background: linear-gradient(45deg, var(--accent-primary), #ff9f43);
+        color: #1f1f1f;
 }
 
 .send-to-plex-confirm:hover {
-    background: linear-gradient(45deg, #44475a, #6272a4) !important;
-    transform: translateY(-1px);
+        background: linear-gradient(45deg, #f5b025, #ffa953);
+        transform: translateY(-2px);
 }
+
+ .import-from-plex-confirm {
+        background: linear-gradient(45deg, var(--accent-primary), #ff9f43);
+        color: #1f1f1f;
+}
+
+.import-from-plex-confirm:hover {
+        background: linear-gradient(45deg, #f5b025, #ffa953);
+        transform: translateY(-2px);
+ }
     </style>
 </head>
 
@@ -2484,36 +2411,14 @@
     <button class="overlay-action-button import-from-plex-btn" 
             data-filename="<?php echo htmlspecialchars($image['filename']); ?>"
             data-dirname="<?php echo htmlspecialchars($image['directory']); ?>">
-        <svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
-            <polyline points="10 17 15 12 10 7"></polyline>
-            <line x1="15" y1="12" x2="3" y2="12"></line>
-        </svg>
+                <svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
+                    <polyline points="8 7 3 12 8 17"></polyline>
+                    <line x1="3" y1="12" x2="15" y2="12"></line>
+                </svg>
         Import from Plex
     </button>
-    <?php else: ?>
-    <!-- Show regular Move button for non-Plex files -->
-    <button class="overlay-action-button move-btn" 
-            data-filename="<?php echo htmlspecialchars($image['filename']); ?>"
-            data-dirname="<?php echo htmlspecialchars($image['directory']); ?>">
-        <svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
-            <polyline points="10 17 15 12 10 7"></polyline>
-            <line x1="15" y1="12" x2="3" y2="12"></line>
-        </svg>
-        Move
-    </button>
     <?php endif; ?>
-    
-    <button class="overlay-action-button rename-btn" 
-            data-filename="<?php echo htmlspecialchars($image['filename']); ?>" 
-            data-dirname="<?php echo htmlspecialchars($image['directory']); ?>"
-            data-basename="<?php echo htmlspecialchars(pathinfo($image['filename'], PATHINFO_FILENAME)); ?>">
-        <svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
-        </svg>
-        Rename
-    </button>
     
     <button class="overlay-action-button delete-btn" 
             data-filename="<?php echo htmlspecialchars($image['filename']); ?>"
@@ -2562,57 +2467,6 @@
 		        </form>
 		    </div>
 		</div>
-
-		<!-- Rename Modal -->
-		<div id="renameModal" class="modal">
-			<div class="modal-content">
-				<div class="modal-header">
-				    <h3>Rename Poster</h3>
-				    <button type="button" class="modal-close-btn">×</button>
-				</div>
-				<form id="renameForm" method="POST">
-				    <input type="hidden" name="action" value="rename">
-				    <input type="hidden" name="old_filename" id="oldFilename">
-				    <input type="hidden" name="directory" id="renameDirectory">
-				    <div class="rename-error" style="display: none; color: var(--danger-color); background: rgba(239, 68, 68, 0.1); border: 1px solid var(--danger-color); padding: 12px; border-radius: 6px; margin-bottom: 16px;"></div>
-				    <div style="margin-bottom: 20px;">
-				        <input type="text" name="new_filename" id="newFilename" class="login-input" placeholder="Enter new filename" required>
-				    </div>
-				    <div class="modal-actions">
-				        <button type="button" class="modal-button cancel" id="cancelRename">Cancel</button>
-				        <button type="submit" class="modal-button rename">Rename</button>
-				    </div>
-				</form>
-			</div>
-		</div>
-		
-		<!-- Move Modal -->
-		<div id="moveModal" class="modal">
-		<div class="modal-content">
-		    <div class="modal-header">
-		        <h3>Move Poster</h3>
-		        <button type="button" class="modal-close-btn">×</button>
-		    </div>
-		    <form id="moveForm" method="POST">
-		        <input type="hidden" name="action" value="move">
-		        <input type="hidden" name="filename" id="moveFilename">
-		        <input type="hidden" name="source_directory" id="moveSourceDirectory">
-		        <div style="margin-bottom: 20px;">
-		            <label for="moveTargetDirectory" style="display: block; margin-bottom: 8px; color: var(--text-primary);">Select Target Directory:</label>
-				<select name="target_directory" id="moveTargetDirectory" class="login-input">
-					<?php foreach ($config['directories'] as $dirKey => $dirPath): ?>
-						<option value="<?php echo htmlspecialchars($dirKey); ?>">
-							<?php echo formatDirectoryName($dirKey); ?>
-						</option>
-					<?php endforeach; ?>
-				</select>
-		        </div>
-		        <div class="modal-actions">
-		            <button type="button" class="modal-button cancel" id="cancelMove">Cancel</button>
-		            <button type="submit" class="modal-button move">Move</button>
-		        </div>
-		    </form>
-		</div>
 	</div>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -2625,8 +2479,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const loginModal = document.getElementById('loginModal');
     const uploadModal = document.getElementById('uploadModal');
     const deleteModal = document.getElementById('deleteModal');
-    const renameModal = document.getElementById('renameModal');
-    const moveModal = document.getElementById('moveModal');
     const plexImportModal = document.getElementById('plexImportModal');
     const plexErrorModal = document.getElementById('plexErrorModal');
     
@@ -2639,30 +2491,21 @@ document.addEventListener('DOMContentLoaded', function() {
     const closeLoginButton = loginModal?.querySelector('.modal-close-btn');
     const closeUploadButton = uploadModal?.querySelector('.modal-close-btn');
     const closeDeleteButton = deleteModal?.querySelector('.modal-close-btn');
-    const closeRenameButton = renameModal?.querySelector('.modal-close-btn');
-    const closeMoveButton = moveModal?.querySelector('.modal-close-btn');
     const closePlexImportButton = plexImportModal?.querySelector('.modal-close-btn');
     const closeErrorModalButton = plexErrorModal?.querySelector('.modal-close-btn');
     
     // Form elements
     const loginForm = document.querySelector('.login-form');
     const deleteForm = document.getElementById('deleteForm');
-    const renameForm = document.getElementById('renameForm');
-    const moveForm = document.getElementById('moveForm');
     
     // Input elements
     const deleteFilenameInput = document.getElementById('deleteFilename');
     const deleteDirectoryInput = document.getElementById('deleteDirectory');
     const oldFilenameInput = document.getElementById('oldFilename');
-    const renameDirectoryInput = document.getElementById('renameDirectory');
     const newFilenameInput = document.getElementById('newFilename');
-    const moveFilenameInput = document.getElementById('moveFilename');
-    const moveSourceDirectoryInput = document.getElementById('moveSourceDirectory');
-    const moveTargetDirectorySelect = document.getElementById('moveTargetDirectory');
     
     // Error elements
     const loginError = document.querySelector('.login-error');
-    const renameError = document.querySelector('.rename-error');
     
     // Notification elements
     const copyNotification = document.getElementById('copyNotification');
@@ -4385,7 +4228,6 @@ function initializeImportFromPlexButtons() {
                 // Check if button already exists to avoid duplicates
                 if (!overlayActions.querySelector('.import-from-plex-btn')) {
                     // Create button to replace the Move button
-                    const moveButton = overlayActions.querySelector('.move-btn');
                     
                     if (moveButton) {
                         const directoryValue = moveButton.getAttribute('data-dirname');
@@ -4403,9 +4245,6 @@ function initializeImportFromPlexButtons() {
                             </svg>
                             Import from Plex
                         `;
-                        
-                        // Replace the move button with the import button
-                        moveButton.parentNode.replaceChild(importFromPlexButton, moveButton);
                         
                         // Add event listener
                         importFromPlexButton.addEventListener('click', importFromPlexHandler);
@@ -5477,148 +5316,7 @@ function showImportResults(results, skipped) {
             });
         }
     }
-    
-    // =========== RENAME MODAL ===========
-    if (renameModal) {
-        function showRenameError(message) {
-            if (renameError) {
-                renameError.textContent = message;
-                renameError.style.display = 'block';
-            }
-        }
-        
-        function hideRenameError() {
-            if (renameError) {
-                renameError.style.display = 'none';
-                renameError.textContent = '';
-            }
-        }
-        
-        function validateFilename(filename) {
-            // Check for periods in the filename (excluding extension)
-            const periodCount = filename.split('.').length - 1;
-            if (periodCount > 0) {
-                showRenameError('Filename cannot contain periods');
-                return false;
-            }
-            
-            // Check for slashes and backslashes in the filename
-            if (filename.includes('/') || filename.includes('\\')) {
-                showRenameError('Filename cannot contain slashes');
-                return false;
-            }
-            return true;
-        }
-        
-        // When closing the modal, clear any error messages
-        document.getElementById('cancelRename')?.addEventListener('click', () => {
-            hideRenameError();
-            hideModal(renameModal, renameForm);
-        });
-        
-        closeRenameButton?.addEventListener('click', () => {
-            hideRenameError();
-            hideModal(renameModal, renameForm);
-        });
-        
-        // Close when clicking outside the modal
-        renameModal.addEventListener('click', (e) => {
-            if (e.target === renameModal) {
-                hideRenameError();
-                hideModal(renameModal, renameForm);
-            }
-        });
-        
-        // Real-time validation as user types
-        document.getElementById('newFilename')?.addEventListener('input', function(e) {
-            const filename = e.target.value;
-            validateFilename(filename);
-        });
-        
-        // Handle form submission
-        if (renameForm) {
-            renameForm.addEventListener('submit', async function(e) {
-                e.preventDefault();
-                hideRenameError();
-                
-                const newFilename = document.getElementById('newFilename').value;
-                if (!validateFilename(newFilename)) {
-                    return;
-                }
-                
-                const formData = new FormData(renameForm);
-                
-                try {
-                    const response = await fetch(window.location.href, {
-                        method: 'POST',
-                        body: formData
-                    });
-                    
-                    const data = await response.json();
-                    
-                    if (data.success) {
-                        hideModal(renameModal);
-                        window.location.reload();
-                    } else {
-                        showRenameError(data.error || 'Failed to rename file');
-                    }
-                } catch (error) {
-                    showRenameError('An error occurred while renaming the file');
-                }
-            });
-        }
-    }
-    
-    // =========== MOVE MODAL ===========
-    if (moveModal) {
-        // Fix close button
-        const cancelMoveBtn = document.getElementById('cancelMove');
-        if (cancelMoveBtn) {
-            cancelMoveBtn.addEventListener('click', () => {
-                hideModal(moveModal, moveForm);
-            });
-        }
 
-        // Close when clicking outside the modal
-        moveModal.addEventListener('click', (e) => {
-            if (e.target === moveModal) {
-                hideModal(moveModal, moveForm);
-            }
-        });
-        
-        // Fix close button
-        if (closeMoveButton) {
-            closeMoveButton.addEventListener('click', () => {
-                hideModal(moveModal, moveForm);
-            });
-        }
-        
-        // Handle form submission
-        if (moveForm) {
-            moveForm.addEventListener('submit', async function(e) {
-                e.preventDefault();
-                const formData = new FormData(moveForm);
-                
-                try {
-                    const response = await fetch(window.location.href, {
-                        method: 'POST',
-                        body: formData
-                    });
-                    
-                    const data = await response.json();
-                    
-                    if (data.success) {
-                        hideModal(moveModal);
-                        window.location.reload();
-                    } else {
-                        alert(data.error || 'Failed to move file');
-                    }
-                } catch (error) {
-                    alert('An error occurred while moving the file');
-                }
-            });
-        }
-    }
     
     // =========== COMMON FUNCTIONALITY ===========
     
@@ -5635,8 +5333,6 @@ function showImportResults(results, skipped) {
             }
             
             if (deleteModal?.classList.contains('show')) hideModal(deleteModal, deleteForm);
-            if (renameModal?.classList.contains('show')) hideModal(renameModal, renameForm);
-            if (moveModal?.classList.contains('show')) hideModal(moveModal, moveForm);
             if (plexErrorModal?.classList.contains('show')) hideModal(plexErrorModal);
         }
     });
@@ -5683,39 +5379,6 @@ function showImportResults(results, skipped) {
         deleteFilenameInput.value = filename;
         deleteDirectoryInput.value = dirname;
         showModal(deleteModal);
-    }
-
-    function renameHandler(e) {
-        e.preventDefault();
-        const filename = this.getAttribute('data-filename');
-        const dirname = this.getAttribute('data-dirname');
-        const basename = this.getAttribute('data-basename');
-        oldFilenameInput.value = filename;
-        renameDirectoryInput.value = dirname;
-        newFilenameInput.value = basename;
-        newFilenameInput.select();
-        showModal(renameModal);
-    }
-
-    function moveHandler(e) {
-        e.preventDefault();
-        const filename = this.getAttribute('data-filename');
-        const dirname = this.getAttribute('data-dirname');
-        moveFilenameInput.value = filename;
-        moveSourceDirectoryInput.value = dirname;
-        
-        // Remove the current directory from target options
-        Array.from(moveTargetDirectorySelect.options).forEach(option => {
-            option.disabled = option.value === dirname;
-        });
-        
-        // Select the first enabled option
-        const firstEnabledOption = Array.from(moveTargetDirectorySelect.options).find(option => !option.disabled);
-        if (firstEnabledOption) {
-            firstEnabledOption.selected = true;
-        }
-        
-        showModal(moveModal);
     }
 
     function copyUrlHandler() {
@@ -5772,18 +5435,6 @@ function showImportResults(results, skipped) {
         document.querySelectorAll('.delete-btn').forEach(button => {
             button.removeEventListener('click', deleteHandler);
             button.addEventListener('click', deleteHandler);
-        });
-
-        // Rename buttons
-        document.querySelectorAll('.rename-btn').forEach(button => {
-            button.removeEventListener('click', renameHandler);
-            button.addEventListener('click', renameHandler);
-        });
-
-        // Move buttons
-        document.querySelectorAll('.move-btn').forEach(button => {
-            button.removeEventListener('click', moveHandler);
-            button.addEventListener('click', moveHandler);
         });
     }
     
