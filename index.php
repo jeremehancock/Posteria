@@ -1782,6 +1782,100 @@
 				font-size: 14px;
 			}
 		}
+/* Send to Plex Styles */
+
+/* Notification containers */
+.plex-notification {
+    position: fixed;
+    bottom: 25px;
+    right: 25px;
+    padding: 0;
+    border-radius: 8px;
+    box-shadow: var(--shadow-md);
+    z-index: 1000;
+    font-weight: 600;
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.plex-notification.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.plex-notification-content {
+    display: flex;
+    align-items: center;
+    padding: 12px 24px;
+}
+
+/* Success notification */
+.plex-notification.plex-success {
+    background: linear-gradient(45deg, #2ed573, #7bed9f);
+    color: #1e1e1e;
+}
+
+.plex-notification.plex-success svg {
+    margin-right: 10px;
+}
+
+/* Error notification */
+.plex-notification.plex-error {
+    background: linear-gradient(45deg, #ff4757, #ff6b81);
+    color: #ffffff;
+}
+
+.plex-notification.plex-error svg {
+    margin-right: 10px;
+}
+
+/* Sending notification and spinner */
+.plex-notification.plex-sending {
+    background: linear-gradient(45deg, var(--accent-primary), #ff9f43);
+    color: #1e1e1e;
+}
+
+.plex-spinner {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    border-top-color: #ffffff;
+    animation: plex-spin 1s infinite linear;
+    margin-right: 10px;
+}
+
+@keyframes plex-spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.send-to-plex-btn {
+    background: linear-gradient(45deg, #282a36, #44475a) !important; /* Plex-inspired colors */
+    color: #f8f8f2 !important;
+}
+
+.send-to-plex-btn:hover {
+    background: linear-gradient(45deg, #44475a, #6272a4) !important;
+    transform: translateY(-2px);
+}
+
+.send-to-plex-btn svg {
+    stroke: #ff9f43; /* Accent color for the icon to make it stand out */
+}
+
+/* Send to Plex confirmation button */
+.send-to-plex-confirm {
+    background: linear-gradient(45deg, #282a36, #44475a) !important;
+    color: #f8f8f2 !important;
+    border: none !important;
+}
+
+.send-to-plex-confirm:hover {
+    background: linear-gradient(45deg, #44475a, #6272a4) !important;
+    transform: translateY(-1px);
+}
     </style>
 </head>
 
@@ -1806,6 +1900,24 @@
                 </div>
             </div>
         </div>
+        
+		<!-- Add this HTML before the closing </body> tag -->
+<div id="plexConfirmModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Send to Plex</h3>
+            <button type="button" class="modal-close-btn">×</button>
+        </div>
+        <div class="modal-body">
+            <p>Are you sure you want to send this poster to Plex?</p>
+            <p id="plexConfirmFilename" style="margin-top: 10px; font-weight: 500; overflow-wrap: break-word;" data-filename="" data-dirname=""></p>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="modal-button cancel" id="cancelPlexSend">Cancel</button>
+            <button type="button" class="modal-button send-to-plex-confirm">Send</button>
+        </div>
+    </div>
+</div>
 
 		<!-- Upload Modal -->
 		<div id="uploadModal" class="modal upload-modal">
@@ -2349,36 +2461,57 @@
 				                        </svg>
 				                        Download
 				                    </a>
-				                    <?php if (isLoggedIn()): ?>
-										<button class="overlay-action-button move-btn" 
-											data-filename="<?php echo htmlspecialchars($image['filename']); ?>"
-											data-dirname="<?php echo htmlspecialchars($image['directory']); ?>">
-										<svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-											<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
-											<polyline points="10 17 15 12 10 7"></polyline>
-											<line x1="15" y1="12" x2="3" y2="12"></line>
-										</svg>
-											Move
-										</button>
-				                        <button class="overlay-action-button rename-btn" 
-				                             data-filename="<?php echo htmlspecialchars($image['filename']); ?>" 
-				                             data-dirname="<?php echo htmlspecialchars($image['directory']); ?>"
-				                             data-basename="<?php echo htmlspecialchars(pathinfo($image['filename'], PATHINFO_FILENAME)); ?>">
-				                            <svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-				                                <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
-				                            </svg>
-				                            Rename
-				                        </button>
-				                        <button class="overlay-action-button delete-btn" 
-				                             data-filename="<?php echo htmlspecialchars($image['filename']); ?>"
-				                             data-dirname="<?php echo htmlspecialchars($image['directory']); ?>">
-				                        	<svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-				                                <polyline points="3 6 5 6 21 6"></polyline>
-				                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-				                            </svg>
-				                            Delete
-				                        </button>
-				                    <?php endif; ?>
+<?php if (isLoggedIn()): ?>
+    <?php 
+    // Check if filename contains "Plex" to determine if we should show the Send to Plex button
+    $isPlexFile = strpos(strtolower($image['filename']), 'plex') !== false;
+    
+    // Only show Send to Plex button for Plex files
+    if ($isPlexFile): 
+    ?>
+    <button class="overlay-action-button send-to-plex-btn" 
+            data-filename="<?php echo htmlspecialchars($image['filename']); ?>"
+            data-dirname="<?php echo htmlspecialchars($image['directory']); ?>">
+        <svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
+            <polyline points="16 6 12 2 8 6"></polyline>
+            <line x1="12" y1="2" x2="12" y2="15"></line>
+        </svg>
+        Send to Plex
+    </button>
+    <?php endif; ?>
+    
+    <button class="overlay-action-button move-btn" 
+            data-filename="<?php echo htmlspecialchars($image['filename']); ?>"
+            data-dirname="<?php echo htmlspecialchars($image['directory']); ?>">
+        <svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
+            <polyline points="10 17 15 12 10 7"></polyline>
+            <line x1="15" y1="12" x2="3" y2="12"></line>
+        </svg>
+        Move
+    </button>
+    
+    <button class="overlay-action-button rename-btn" 
+            data-filename="<?php echo htmlspecialchars($image['filename']); ?>" 
+            data-dirname="<?php echo htmlspecialchars($image['directory']); ?>"
+            data-basename="<?php echo htmlspecialchars(pathinfo($image['filename'], PATHINFO_FILENAME)); ?>">
+        <svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
+        </svg>
+        Rename
+    </button>
+    
+    <button class="overlay-action-button delete-btn" 
+            data-filename="<?php echo htmlspecialchars($image['filename']); ?>"
+            data-dirname="<?php echo htmlspecialchars($image['directory']); ?>">
+        <svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+        </svg>
+        Delete
+    </button>
+<?php endif; ?>
 				                </div>
 				            </div>
 							<div class="gallery-caption" data-full-text="<?php echo htmlspecialchars(pathinfo($image['filename'], PATHINFO_FILENAME)); ?>">
@@ -3796,6 +3929,251 @@ function closeImportResultsHandler() {
             }, 300);
         });
     }
+    
+// Send to Plex functionality
+
+// Function to send image to Plex
+async function sendToPlex(filename, directory) {
+    // Show a loading notification
+    const notification = showSendingNotification();
+    
+    try {
+        const formData = new FormData();
+        formData.append('action', 'send_to_plex');
+        formData.append('filename', filename);
+        formData.append('directory', directory);
+        
+        const response = await fetch('./include/send-to-plex.php', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // Show success notification
+            showPlexSuccessNotification();
+        } else {
+            // Show error notification
+            showPlexErrorNotification(data.error || 'Failed to send poster to Plex');
+        }
+    } catch (error) {
+        // Show error notification
+        showPlexErrorNotification('Error sending poster to Plex: ' + error.message);
+    } finally {
+        // Hide the sending notification
+        notification.remove();
+    }
+}
+
+// Function to show sending notification
+function showSendingNotification() {
+    const notification = document.createElement('div');
+    notification.className = 'plex-notification plex-sending';
+    notification.innerHTML = `
+        <div class="plex-notification-content">
+            <div class="plex-spinner"></div>
+            <span>Sending to Plex...</span>
+        </div>
+    `;
+    document.body.appendChild(notification);
+    
+    // Force reflow to trigger animation
+    notification.offsetHeight;
+    notification.classList.add('show');
+    
+    return notification;
+}
+
+// Function to show success notification
+function showPlexSuccessNotification() {
+    const notification = document.createElement('div');
+    notification.className = 'plex-notification plex-success';
+    notification.innerHTML = `
+        <div class="plex-notification-content">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                <polyline points="22 4 12 14.01 9 11.01"></polyline>
+            </svg>
+            <span>Sent to Plex successfully!</span>
+        </div>
+    `;
+    document.body.appendChild(notification);
+    
+    // Force reflow to trigger animation
+    notification.offsetHeight;
+    notification.classList.add('show');
+    
+    // Auto-remove after 3 seconds
+    setTimeout(() => {
+        notification.classList.remove('show');
+        setTimeout(() => {
+            notification.remove();
+        }, 300); // Match transition duration
+    }, 3000);
+}
+
+// Function to show error notification
+function showPlexErrorNotification(message) {
+    const notification = document.createElement('div');
+    notification.className = 'plex-notification plex-error';
+    notification.innerHTML = `
+        <div class="plex-notification-content">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+            <span>${message}</span>
+        </div>
+    `;
+    document.body.appendChild(notification);
+    
+    // Force reflow to trigger animation
+    notification.offsetHeight;
+    notification.classList.add('show');
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        notification.classList.remove('show');
+        setTimeout(() => {
+            notification.remove();
+        }, 300); // Match transition duration
+    }, 5000);
+}
+
+// Send to Plex handler function
+function sendToPlexHandler(e) {
+    e.preventDefault();
+    const filename = this.getAttribute('data-filename');
+    const directory = this.getAttribute('data-dirname');
+    
+    // Store the data in the modal
+    const modal = document.getElementById('plexConfirmModal');
+    const filenameElement = document.getElementById('plexConfirmFilename');
+    
+    filenameElement.textContent = filename;
+    filenameElement.setAttribute('data-filename', filename);
+    filenameElement.setAttribute('data-dirname', directory);
+    
+    // Show the modal
+    showModal(modal);
+}
+
+function initPlexConfirmModal() {
+    const modal = document.getElementById('plexConfirmModal');
+    if (!modal) {
+        console.error("Plex confirm modal not found");
+        return;
+    }
+    
+    // Get elements - fix for the cancelButton selector
+    const closeButton = modal.querySelector('.modal-close-btn');
+    const cancelButton = document.getElementById('cancelPlexSend');
+    const confirmButton = modal.querySelector('.send-to-plex-confirm');
+    
+    // Log what we found to help debug
+    console.log("Modal elements:", { 
+        modal: modal, 
+        closeButton: closeButton,
+        cancelButton: cancelButton,
+        confirmButton: confirmButton
+    });
+    
+    // Close button handler
+    if (closeButton) {
+        closeButton.addEventListener('click', function() {
+            hideModal(modal);
+        });
+    }
+    
+    // Cancel button handler
+    if (cancelButton) {
+        cancelButton.addEventListener('click', function() {
+            hideModal(modal);
+        });
+    }
+    
+    // Confirm button handler
+    if (confirmButton) {
+        confirmButton.addEventListener('click', function() {
+            const filenameElement = document.getElementById('plexConfirmFilename');
+            const filename = filenameElement.getAttribute('data-filename');
+            const directory = filenameElement.getAttribute('data-dirname');
+            
+            // Hide the modal
+            hideModal(modal);
+            
+            // Send the poster to Plex
+            sendToPlex(filename, directory);
+        });
+    }
+    
+    // Click outside to close - make sure this handler works
+    modal.addEventListener('click', function(e) {
+        if (e.target === modal) {
+            hideModal(modal);
+        }
+    });
+    
+    // Escape key to close
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && modal.classList.contains('show')) {
+            hideModal(modal);
+        }
+    });
+}
+
+// Function to check if a filename has "Plex" in it
+function isPlexFile(filename) {
+    return filename.toLowerCase().includes('plex');
+}
+
+// Function to initialize Send to Plex buttons
+function initializeSendToPlexButtons() {
+    // Add Send to Plex button to appropriate gallery items
+    document.querySelectorAll('.gallery-item').forEach(item => {
+        const filenameElement = item.querySelector('.gallery-caption');
+        const overlayActions = item.querySelector('.image-overlay-actions');
+        
+        if (filenameElement && overlayActions) {
+            const filename = filenameElement.getAttribute('data-full-text');
+            
+            // Only show the Send to Plex button for files with "Plex" in the name
+            if (isPlexFile(filename)) {
+                // Check if button already exists to avoid duplicates
+                if (!overlayActions.querySelector('.send-to-plex-btn')) {
+                    // Create button before the existing Delete button
+                    const deleteButton = overlayActions.querySelector('.delete-btn');
+                    
+                    if (deleteButton) {
+                        const directoryValue = deleteButton.getAttribute('data-dirname');
+                        const filenameValue = deleteButton.getAttribute('data-filename');
+                        
+                        const sendToPlexButton = document.createElement('button');
+                        sendToPlexButton.className = 'overlay-action-button send-to-plex-btn';
+                        sendToPlexButton.setAttribute('data-filename', filenameValue);
+                        sendToPlexButton.setAttribute('data-dirname', directoryValue);
+                        sendToPlexButton.innerHTML = `
+                            <svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
+                                <polyline points="16 6 12 2 8 6"></polyline>
+                                <line x1="12" y1="2" x2="12" y2="15"></line>
+                            </svg>
+                            Send to Plex
+                        `;
+                        
+                        // Insert before Delete button
+                        deleteButton.parentNode.insertBefore(sendToPlexButton, deleteButton);
+                        
+                        // Add event listener
+                        sendToPlexButton.addEventListener('click', sendToPlexHandler);
+                    }
+                }
+            }
+        }
+    });
+}
     
     // =========== PLEX IMPORT MODAL ===========
     
@@ -5462,7 +5840,16 @@ function showImportResults(results, skipped) {
         });
     });
    
-
+    const sendToPlexButtons = document.querySelectorAll('.send-to-plex-btn');
+    console.log("Found Send to Plex buttons:", sendToPlexButtons.length);
+    
+    sendToPlexButtons.forEach(button => {
+        button.addEventListener('click', sendToPlexHandler);
+    });
+    
+    // Initialize the Plex confirm modal
+    initPlexConfirmModal();
+    
     // Handle browser back/forward
     window.addEventListener('popstate', function() {
         location.reload();
@@ -5474,6 +5861,7 @@ function showImportResults(results, skipped) {
     initializeGalleryFeatures();
     initializeButtons();
     initializeTruncation();
+
     
     // Call truncation after images load and on resize
     document.querySelectorAll('.gallery-image').forEach(img => {
