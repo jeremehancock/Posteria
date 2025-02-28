@@ -2463,7 +2463,7 @@
 				                    </a>
 <?php if (isLoggedIn()): ?>
     <?php 
-    // Check if filename contains "Plex" to determine if we should show the Send to Plex button
+    // Check if filename contains "Plex" to determine if we should show the Plex-related buttons
     $isPlexFile = strpos(strtolower($image['filename']), 'plex') !== false;
     
     // Only show Send to Plex button for Plex files
@@ -2479,8 +2479,20 @@
         </svg>
         Send to Plex
     </button>
-    <?php endif; ?>
     
+    <!-- Import from Plex button (instead of Move) for Plex files -->
+    <button class="overlay-action-button import-from-plex-btn" 
+            data-filename="<?php echo htmlspecialchars($image['filename']); ?>"
+            data-dirname="<?php echo htmlspecialchars($image['directory']); ?>">
+        <svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
+            <polyline points="10 17 15 12 10 7"></polyline>
+            <line x1="15" y1="12" x2="3" y2="12"></line>
+        </svg>
+        Import from Plex
+    </button>
+    <?php else: ?>
+    <!-- Show regular Move button for non-Plex files -->
     <button class="overlay-action-button move-btn" 
             data-filename="<?php echo htmlspecialchars($image['filename']); ?>"
             data-dirname="<?php echo htmlspecialchars($image['directory']); ?>">
@@ -2491,6 +2503,7 @@
         </svg>
         Move
     </button>
+    <?php endif; ?>
     
     <button class="overlay-action-button rename-btn" 
             data-filename="<?php echo htmlspecialchars($image['filename']); ?>" 
@@ -4063,7 +4076,6 @@ function sendToPlexHandler(e) {
 function initPlexConfirmModal() {
     const modal = document.getElementById('plexConfirmModal');
     if (!modal) {
-        console.error("Plex confirm modal not found");
         return;
     }
     
@@ -4071,14 +4083,6 @@ function initPlexConfirmModal() {
     const closeButton = modal.querySelector('.modal-close-btn');
     const cancelButton = document.getElementById('cancelPlexSend');
     const confirmButton = modal.querySelector('.send-to-plex-confirm');
-    
-    // Log what we found to help debug
-    console.log("Modal elements:", { 
-        modal: modal, 
-        closeButton: closeButton,
-        cancelButton: cancelButton,
-        confirmButton: confirmButton
-    });
     
     // Close button handler
     if (closeButton) {
@@ -4120,6 +4124,294 @@ function initPlexConfirmModal() {
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape' && modal.classList.contains('show')) {
             hideModal(modal);
+        }
+    });
+}
+
+function createImportFromPlexModal() {
+    const modalHTML = `
+    <div id="importFromPlexModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Import from Plex</h3>
+                <button type="button" class="modal-close-btn">×</button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to import this poster from Plex?</p>
+                <p id="importFromPlexFilename" style="margin-top: 10px; font-weight: 500; overflow-wrap: break-word;" data-filename="" data-dirname=""></p>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="modal-button cancel" id="cancelImportFromPlex">Cancel</button>
+                <button type="button" class="modal-button import-from-plex-confirm">Import</button>
+            </div>
+        </div>
+    </div>
+    `;
+    
+    // Append the modal HTML to the body
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+}
+
+function initImportFromPlexFeature() {
+    const modal = document.getElementById('importFromPlexModal');
+    if (!modal) {
+        console.error("Import from Plex modal not found");
+        return;
+    }
+    
+    // Get elements
+    const closeButton = modal.querySelector('.modal-close-btn');
+    const cancelButton = document.getElementById('cancelImportFromPlex');
+    const confirmButton = modal.querySelector('.import-from-plex-confirm');
+    
+    // Close button handler
+    if (closeButton) {
+        closeButton.addEventListener('click', function() {
+            hideModal(modal);
+        });
+    }
+    
+    // Cancel button handler
+    if (cancelButton) {
+        cancelButton.addEventListener('click', function() {
+            hideModal(modal);
+        });
+    }
+    
+    // Confirm button handler
+    if (confirmButton) {
+        confirmButton.addEventListener('click', function() {
+            const filenameElement = document.getElementById('importFromPlexFilename');
+            const filename = filenameElement.getAttribute('data-filename');
+            const directory = filenameElement.getAttribute('data-dirname');
+            
+            // Hide the modal
+            hideModal(modal);
+            
+            // Import the poster from Plex
+            importFromPlex(filename, directory);
+        });
+    }
+    
+    // Click outside to close - make sure this handler works
+    modal.addEventListener('click', function(e) {
+        if (e.target === modal) {
+            hideModal(modal);
+        }
+    });
+    
+    // Escape key to close
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && modal.classList.contains('show')) {
+            hideModal(modal);
+        }
+    });
+}
+
+// Import from Plex handler function
+function importFromPlexHandler(e) {
+    e.preventDefault();
+    const filename = this.getAttribute('data-filename');
+    const directory = this.getAttribute('data-dirname');
+    
+    // Store the data in the modal
+    const modal = document.getElementById('importFromPlexModal');
+    const filenameElement = document.getElementById('importFromPlexFilename');
+    
+    filenameElement.textContent = filename;
+    filenameElement.setAttribute('data-filename', filename);
+    filenameElement.setAttribute('data-dirname', directory);
+    
+    // Show the modal
+    showModal(modal);
+}
+
+// Function to send the import request to the server
+async function importFromPlex(filename, directory) {
+    // Show a loading notification
+    const notification = showImportingNotification();
+    
+    try {
+        const formData = new FormData();
+        formData.append('action', 'import_from_plex');
+        formData.append('filename', filename);
+        formData.append('directory', directory);
+        
+        const response = await fetch('./include/import-from-plex.php', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // Show success notification
+            showImportSuccessNotification();
+            
+            // Refresh the image to show the updated version
+            refreshImage(filename, directory);
+        } else {
+            // Show error notification
+            showImportErrorNotification(data.error || 'Failed to import poster from Plex');
+        }
+    } catch (error) {
+        // Show error notification
+        showImportErrorNotification('Error importing poster from Plex: ' + error.message);
+    } finally {
+        // Hide the sending notification
+        notification.remove();
+    }
+}
+
+function refreshImage(filename, directory) {
+    const images = document.querySelectorAll('.gallery-image');
+    images.forEach(img => {
+        const imgPath = img.getAttribute('data-src');
+        if (imgPath && imgPath.includes(filename)) {
+            // Add a timestamp to force a cache refresh
+            const timestamp = new Date().getTime();
+            const newSrc = imgPath + '?t=' + timestamp;
+            
+            // Set the new source
+            img.src = '';
+            img.setAttribute('data-src', newSrc);
+            img.src = newSrc;
+            
+            // Reset loading state
+            img.classList.remove('loaded');
+            const placeholder = img.previousElementSibling;
+            if (placeholder && placeholder.classList.contains('gallery-image-placeholder')) {
+                placeholder.classList.remove('hidden');
+            }
+            
+            // Set loaded class when the new image loads
+            img.onload = function() {
+                img.classList.add('loaded');
+                if (placeholder) {
+                    placeholder.classList.add('hidden');
+                }
+            };
+        }
+    });
+}
+
+// Function to show importing notification
+function showImportingNotification() {
+    const notification = document.createElement('div');
+    notification.className = 'plex-notification plex-sending';
+    notification.innerHTML = `
+        <div class="plex-notification-content">
+            <div class="plex-spinner"></div>
+            <span>Importing from Plex...</span>
+        </div>
+    `;
+    document.body.appendChild(notification);
+    
+    // Force reflow to trigger animation
+    notification.offsetHeight;
+    notification.classList.add('show');
+    
+    return notification;
+}
+
+// Function to show success notification
+function showImportSuccessNotification() {
+    const notification = document.createElement('div');
+    notification.className = 'plex-notification plex-success';
+    notification.innerHTML = `
+        <div class="plex-notification-content">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                <polyline points="22 4 12 14.01 9 11.01"></polyline>
+            </svg>
+            <span>Imported from Plex successfully!</span>
+        </div>
+    `;
+    document.body.appendChild(notification);
+    
+    // Force reflow to trigger animation
+    notification.offsetHeight;
+    notification.classList.add('show');
+    
+    // Auto-remove after 3 seconds
+    setTimeout(() => {
+        notification.classList.remove('show');
+        setTimeout(() => {
+            notification.remove();
+        }, 300); // Match transition duration
+    }, 3000);
+}
+
+// Function to show error notification
+function showImportErrorNotification(message) {
+    const notification = document.createElement('div');
+    notification.className = 'plex-notification plex-error';
+    notification.innerHTML = `
+        <div class="plex-notification-content">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+            <span>${message}</span>
+        </div>
+    `;
+    document.body.appendChild(notification);
+    
+    // Force reflow to trigger animation
+    notification.offsetHeight;
+    notification.classList.add('show');
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        notification.classList.remove('show');
+        setTimeout(() => {
+            notification.remove();
+        }, 300); // Match transition duration
+    }, 5000);
+}
+
+function initializeImportFromPlexButtons() {
+    // Add Import from Plex button to appropriate gallery items
+    document.querySelectorAll('.gallery-item').forEach(item => {
+        const filenameElement = item.querySelector('.gallery-caption');
+        const overlayActions = item.querySelector('.image-overlay-actions');
+        
+        if (filenameElement && overlayActions) {
+            const filename = filenameElement.getAttribute('data-full-text');
+            
+            // Only show the Import from Plex button for files with "Plex" in the name
+            if (isPlexFile(filename)) {
+                // Check if button already exists to avoid duplicates
+                if (!overlayActions.querySelector('.import-from-plex-btn')) {
+                    // Create button to replace the Move button
+                    const moveButton = overlayActions.querySelector('.move-btn');
+                    
+                    if (moveButton) {
+                        const directoryValue = moveButton.getAttribute('data-dirname');
+                        const filenameValue = moveButton.getAttribute('data-filename');
+                        
+                        const importFromPlexButton = document.createElement('button');
+                        importFromPlexButton.className = 'overlay-action-button import-from-plex-btn';
+                        importFromPlexButton.setAttribute('data-filename', filenameValue);
+                        importFromPlexButton.setAttribute('data-dirname', directoryValue);
+                        importFromPlexButton.innerHTML = `
+                            <svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
+                                <polyline points="10 17 15 12 10 7"></polyline>
+                                <line x1="15" y1="12" x2="3" y2="12"></line>
+                            </svg>
+                            Import from Plex
+                        `;
+                        
+                        // Replace the move button with the import button
+                        moveButton.parentNode.replaceChild(importFromPlexButton, moveButton);
+                        
+                        // Add event listener
+                        importFromPlexButton.addEventListener('click', importFromPlexHandler);
+                    }
+                }
+            }
         }
     });
 }
@@ -5841,19 +6133,28 @@ function showImportResults(results, skipped) {
     });
    
     const sendToPlexButtons = document.querySelectorAll('.send-to-plex-btn');
-    console.log("Found Send to Plex buttons:", sendToPlexButtons.length);
     
     sendToPlexButtons.forEach(button => {
         button.addEventListener('click', sendToPlexHandler);
     });
     
-    // Initialize the Plex confirm modal
-    initPlexConfirmModal();
+    document.querySelectorAll('.import-from-plex-btn').forEach(button => {
+        button.addEventListener('click', importFromPlexHandler);
+    });
+    
     
     // Handle browser back/forward
     window.addEventListener('popstate', function() {
         location.reload();
     });
+    
+    const originalInitButtons = window.initializeButtons;
+    if (typeof originalInitButtons === 'function') {
+        window.initializeButtons = function() {
+            originalInitButtons();
+            initializeImportFromPlexButtons();
+        };
+    }
     
     // =========== INITIALIZATION ===========
     
@@ -5861,6 +6162,9 @@ function showImportResults(results, skipped) {
     initializeGalleryFeatures();
     initializeButtons();
     initializeTruncation();
+    initPlexConfirmModal();
+    createImportFromPlexModal();
+    initImportFromPlexFeature();
 
     
     // Call truncation after images load and on resize
