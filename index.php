@@ -1827,7 +1827,75 @@
                 </div>
             </div>
         </div>
+  
+  <!-- Change Poster Modal -->
+<div id="changePosterModal" class="modal upload-modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Change Poster</h3>
+            <button type="button" class="modal-close-btn">×</button>
+        </div>
         
+        <p id="changePosterFilename" style="margin: 10px 24px; font-weight: 500; overflow-wrap: break-word;" data-filename="" data-dirname=""></p>
+        
+        <div class="upload-tabs">
+            <button class="upload-tab-btn active" data-tab="file">Upload from Disk</button>
+            <button class="upload-tab-btn" data-tab="url">Upload from URL</button>
+        </div>
+        
+        <div class="upload-content">
+            <!-- Common error message div for both forms -->
+            <div class="change-poster-error" style="display: none; color: var(--danger-color); background: rgba(239, 68, 68, 0.1); border: 1px solid var(--danger-color); padding: 12px; border-radius: 6px; margin-bottom: 16px;"></div>
+
+            <form id="fileChangePosterForm" class="upload-form active" method="POST" enctype="multipart/form-data">
+                <input type="hidden" name="action" value="change_poster">
+                <input type="hidden" name="upload_type" value="file">
+                <input type="hidden" name="original_filename" id="fileChangePosterOriginalFilename">
+                <input type="hidden" name="directory" id="fileChangePosterDirectory">
+                
+                <div class="upload-input-group">
+                    <div class="custom-file-input">
+                        <input type="file" name="new_poster" id="fileChangePosterInput" accept=".jpg,.jpeg,.png,.webp">
+                        <label for="fileChangePosterInput">
+                            <svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="17 8 12 3 7 8"></polyline>
+                                <line x1="12" y1="3" x2="12" y2="15"></line>
+                            </svg>
+                            Choose Poster
+                            <span class="file-name"></span>
+                        </label>
+                    </div>
+                </div>
+                <div class="upload-input-group">
+                    <button type="submit" class="upload-button" disabled>Replace Poster</button>
+                </div>
+                <div class="upload-help">
+                    Maximum file size: 5MB<br>
+                    Allowed types: jpg, jpeg, png, webp
+                </div>
+            </form>
+
+            <form id="urlChangePosterForm" class="upload-form" method="POST">
+                <input type="hidden" name="action" value="change_poster">
+                <input type="hidden" name="upload_type" value="url">
+                <input type="hidden" name="original_filename" id="urlChangePosterOriginalFilename">
+                <input type="hidden" name="directory" id="urlChangePosterDirectory">
+                
+                <div class="upload-input-group">
+                    <input type="url" name="image_url" class="login-input" placeholder="Enter poster URL..." required>
+                </div>
+                <div class="upload-input-group">
+                    <button type="submit" class="upload-button">Replace Poster</button>
+                </div>
+                <div class="upload-help">
+                    Maximum file size: 5MB<br>
+                    Allowed types: jpg, jpeg, png, webp
+                </div>
+            </form>
+        </div>
+    </div>
+</div>     
 		<!-- Add this HTML before the closing </body> tag -->
 <div id="plexConfirmModal" class="modal">
     <div class="modal-content">
@@ -5799,11 +5867,366 @@ function showImportResults(results, skipped) {
         location.reload();
     });
     
+    const changePosterModal = document.getElementById('changePosterModal');
+    const closeChangePosterButton = changePosterModal?.querySelector('.modal-close-btn');
+    const fileChangePosterForm = document.getElementById('fileChangePosterForm');
+    const urlChangePosterForm = document.getElementById('urlChangePosterForm');
+    const fileChangePosterInput = document.getElementById('fileChangePosterInput');
+    const changeError = document.querySelector('.change-poster-error');
+    
+    // Initialize Change Poster buttons on all Plex posters
+    function initChangePosters() {
+        document.querySelectorAll('.gallery-item').forEach(item => {
+            const filenameElement = item.querySelector('.gallery-caption');
+            const overlayActions = item.querySelector('.image-overlay-actions');
+            
+            if (filenameElement && overlayActions) {
+                const filename = filenameElement.getAttribute('data-full-text');
+                
+                // Only show the Change Poster button for files with "Plex" in the name
+                if (isPlexFile(filename)) {
+                    // Check if button already exists to avoid duplicates
+                    if (!overlayActions.querySelector('.change-poster-btn')) {
+                        // Get the delete button as reference for positioning
+                        const deleteButton = overlayActions.querySelector('.delete-btn');
+                        
+                        if (deleteButton) {
+                            const directoryValue = deleteButton.getAttribute('data-dirname');
+                            const filenameValue = deleteButton.getAttribute('data-filename');
+                            
+                            const changePosterButton = document.createElement('button');
+                            changePosterButton.className = 'overlay-action-button change-poster-btn';
+                            changePosterButton.setAttribute('data-filename', filenameValue);
+                            changePosterButton.setAttribute('data-dirname', directoryValue);
+                            changePosterButton.innerHTML = `
+                                <svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                    <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                                    <polyline points="21 15 16 10 5 21"></polyline>
+                                </svg>
+                                Change Poster
+                            `;
+                            
+                            // Insert before Delete button
+                            deleteButton.parentNode.insertBefore(changePosterButton, deleteButton);
+                            
+                            // Add event listener
+                            changePosterButton.addEventListener('click', changePosterHandler);
+                        }
+                    }
+                }
+            }
+        });
+    }
+    
+    // Change Poster click handler
+    function changePosterHandler(e) {
+        e.preventDefault();
+        const filename = this.getAttribute('data-filename');
+        const dirname = this.getAttribute('data-dirname');
+        
+        // Update the modal with file info
+        document.getElementById('changePosterFilename').textContent = `Changing poster: ${filename}`;
+        document.getElementById('fileChangePosterOriginalFilename').value = filename;
+        document.getElementById('fileChangePosterDirectory').value = dirname;
+        document.getElementById('urlChangePosterOriginalFilename').value = filename;
+        document.getElementById('urlChangePosterDirectory').value = dirname;
+        
+        // Reset file input
+        fileChangePosterInput.value = '';
+        const fileNameElement = fileChangePosterInput.parentElement.querySelector('.file-name');
+        if (fileNameElement) {
+            fileNameElement.textContent = '';
+        }
+        
+        // Reset URL input
+        const urlInput = urlChangePosterForm.querySelector('input[name="image_url"]');
+        if (urlInput) {
+            urlInput.value = '';
+        }
+        
+        // Disable submit button until a file is selected
+        const fileSubmitButton = fileChangePosterForm.querySelector('button[type="submit"]');
+        if (fileSubmitButton) {
+            fileSubmitButton.disabled = true;
+        }
+        
+        // Hide any previous error messages
+        hideChangeError();
+        
+        // Reset to file tab
+        const fileTabs = changePosterModal.querySelectorAll('.upload-tab-btn');
+        fileTabs.forEach(tab => {
+            if (tab.getAttribute('data-tab') === 'file') {
+                tab.classList.add('active');
+            } else {
+                tab.classList.remove('active');
+            }
+        });
+        
+        // Show file form, hide URL form
+        fileChangePosterForm.classList.add('active');
+        urlChangePosterForm.classList.remove('active');
+        
+        // Show the modal
+        showModal(changePosterModal);
+    }
+    
+    // File input change handler
+    if (fileChangePosterInput) {
+        fileChangePosterInput.addEventListener('change', function(e) {
+            const fileName = e.target.files[0]?.name || '';
+            const fileNameElement = this.parentElement.querySelector('.file-name');
+            if (fileNameElement) {
+                fileNameElement.textContent = fileName;
+            }
+            
+            // Enable/disable submit button based on file selection
+            const submitButton = fileChangePosterForm.querySelector('button[type="submit"]');
+            if (submitButton) {
+                submitButton.disabled = !fileName;
+            }
+        });
+    }
+    
+    // Tab functionality for the Change Poster modal
+    const changePosterTabs = changePosterModal.querySelectorAll('.upload-tab-btn');
+    const changePosterForms = changePosterModal.querySelectorAll('.upload-form');
+    
+    changePosterTabs.forEach(tab => {
+        tab.addEventListener('click', function() {
+            const tabName = this.getAttribute('data-tab');
+            
+            // Update active tab
+            changePosterTabs.forEach(t => t.classList.remove('active'));
+            this.classList.add('active');
+            
+            // Show active form
+            changePosterForms.forEach(form => {
+                if (form.id === tabName + 'ChangePosterForm') {
+                    form.classList.add('active');
+                } else {
+                    form.classList.remove('active');
+                }
+            });
+            
+            // Clear any error messages
+            hideChangeError();
+        });
+    });
+    
+    // Form submission handler - File upload
+    if (fileChangePosterForm) {
+        fileChangePosterForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            // Show a loading notification
+            const notification = showNotification('Replacing poster...', 'loading');
+            
+            try {
+                const formData = new FormData(this);
+                
+                const response = await fetch('./include/change-poster.php', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+				if (data.success) {
+				
+				    // Remove the loading notification first
+					notification.remove();
+					
+					// Hide the modal
+					hideModal(changePosterModal);
+					
+					// Show success notification
+					showNotification('Poster successfully replaced!', 'success');
+					
+					// Refresh the image to show the updated version
+					const filename = formData.get('original_filename');
+					const directory = formData.get('directory');
+					refreshImage(filename, directory);
+				} else {
+					// Show error in modal
+					showChangeError(data.error || 'Failed to replace poster from URL');
+					notification.remove();
+				}
+            } catch (error) {
+                // Show error in modal
+                showChangeError('Error replacing poster: ' + error.message);
+                notification.remove();
+            }
+        });
+    }
+    
+    // Form submission handler - URL upload
+    if (urlChangePosterForm) {
+        urlChangePosterForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            // Show a loading notification
+            const notification = showNotification('Replacing poster from URL...', 'loading');
+            
+            try {
+                const formData = new FormData(this);
+                
+                const response = await fetch('./include/change-poster.php', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+				if (data.success) {
+				
+					// Remove the loading notification first
+					notification.remove();
+					
+					// Hide the modal
+					hideModal(changePosterModal);
+					
+					// Show success notification
+					showNotification('Poster successfully replaced!', 'success');
+					
+					// Refresh the image to show the updated version
+					const filename = formData.get('original_filename');
+					const directory = formData.get('directory');
+					refreshImage(filename, directory);
+				} else {
+					// Show error in modal
+					showChangeError(data.error || 'Failed to replace poster from URL');
+					notification.remove();
+				}
+            } catch (error) {
+                // Show error in modal
+                showChangeError('Error replacing poster: ' + error.message);
+                notification.remove();
+            }
+        });
+    }
+    
+    // Error handling functions
+    function showChangeError(message) {
+        if (changeError) {
+            changeError.textContent = message;
+            changeError.style.display = 'block';
+        }
+    }
+    
+    function hideChangeError() {
+        if (changeError) {
+            changeError.textContent = '';
+            changeError.style.display = 'none';
+        }
+    }
+    
+    // Modal close handlers
+    if (closeChangePosterButton) {
+        closeChangePosterButton.addEventListener('click', function() {
+            hideModal(changePosterModal);
+        });
+    }
+    
+    // Click outside to close
+    if (changePosterModal) {
+        changePosterModal.addEventListener('click', function(e) {
+            if (e.target === changePosterModal) {
+                hideModal(changePosterModal);
+            }
+        });
+    }
+    
+    // Show notification function
+    function showNotification(message, type) {
+        const notification = document.createElement('div');
+        notification.className = `plex-notification plex-${type}`;
+        
+        let iconHtml = '';
+        if (type === 'success') {
+            iconHtml = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                <polyline points="22 4 12 14.01 9 11.01"></polyline>
+            </svg>`;
+        } else if (type === 'error') {
+            iconHtml = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>`;
+        } else if (type === 'loading') {
+            iconHtml = `<div class="plex-spinner"></div>`;
+        }
+        
+        notification.innerHTML = `
+            <div class="plex-notification-content">
+                ${iconHtml}
+                <span>${message}</span>
+            </div>
+        `;
+        
+        document.body.appendChild(notification);
+        
+        // Force reflow to trigger animation
+        notification.offsetHeight;
+        notification.classList.add('show');
+        
+        // Auto-remove after 3 seconds for success/error notifications
+        if (type !== 'loading') {
+            setTimeout(() => {
+                notification.classList.remove('show');
+                setTimeout(() => {
+                    notification.remove();
+                }, 300); // Match transition duration
+            }, 3000);
+        }
+        
+        return notification;
+    }
+    
+    // Refresh image function (reuse the existing function)
+    function refreshImage(filename, directory) {
+        const images = document.querySelectorAll('.gallery-image');
+        images.forEach(img => {
+            const imgPath = img.getAttribute('data-src');
+            if (imgPath && imgPath.includes(filename)) {
+                // Add a timestamp to force a cache refresh
+                const timestamp = new Date().getTime();
+                const newSrc = imgPath + '?t=' + timestamp;
+                
+                // Set the new source
+                img.src = '';
+                img.setAttribute('data-src', newSrc);
+                img.src = newSrc;
+                
+                // Reset loading state
+                img.classList.remove('loaded');
+                const placeholder = img.previousElementSibling;
+                if (placeholder && placeholder.classList.contains('gallery-image-placeholder')) {
+                    placeholder.classList.remove('hidden');
+                }
+                
+                // Set loaded class when the new image loads
+                img.onload = function() {
+                    img.classList.add('loaded');
+                    if (placeholder) {
+                        placeholder.classList.add('hidden');
+                    }
+                };
+            }
+        });
+    }
+    
+    // Initialize change poster buttons
+    initChangePosters();
+    
+    // Add to global initialization function if it exists
     const originalInitButtons = window.initializeButtons;
     if (typeof originalInitButtons === 'function') {
         window.initializeButtons = function() {
             originalInitButtons();
-            initializeImportFromPlexButtons();
+            initChangePosters();
         };
     }
     

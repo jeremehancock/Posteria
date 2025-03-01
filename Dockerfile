@@ -38,6 +38,7 @@ COPY index.php /var/www/html/
 COPY include/plex-import.php /var/www/html/include/
 COPY include/send-to-plex.php /var/www/html/include/
 COPY include/import-from-plex.php /var/www/html/include/
+COPY include/change-poster.php /var/www/html/include/
 COPY include/jellyfin-import.php /var/www/html/include/
 COPY include/config.php /var/www/html/include/
 
