@@ -2810,48 +2810,50 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				                        </svg>
 				                        Download
 				                    </a>
-<?php if (isLoggedIn()): ?>
-    <?php 
-    // Check if filename contains "Plex" to determine if we should show the Plex-related buttons
-    $isPlexFile = strpos(strtolower($image['filename']), '**plex**') !== false;
-    
-    // Only show Send to Plex button for Plex files
-    if ($isPlexFile): 
-    ?>
-    <button class="overlay-action-button send-to-plex-btn" 
-            data-filename="<?php echo htmlspecialchars($image['filename']); ?>"
-            data-dirname="<?php echo htmlspecialchars($image['directory']); ?>">
-				<svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-				    <path d="M9 3h-4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4"></path>
-				    <polyline points="16 7 21 12 16 17"></polyline>
-				    <line x1="21" y1="12" x2="9" y2="12"></line>
-				</svg>
-        Send to Plex
-    </button>
-    
-    <!-- Import from Plex button for Plex files -->
-    <button class="overlay-action-button import-from-plex-btn" 
-            data-filename="<?php echo htmlspecialchars($image['filename']); ?>"
-            data-dirname="<?php echo htmlspecialchars($image['directory']); ?>">
-                <svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
-                    <polyline points="8 7 3 12 8 17"></polyline>
-                    <line x1="3" y1="12" x2="15" y2="12"></line>
-                </svg>
-        Get from Plex
-    </button>
-    <?php endif; ?>
-    
-    <button class="overlay-action-button delete-btn" 
-            data-filename="<?php echo htmlspecialchars($image['filename']); ?>"
-            data-dirname="<?php echo htmlspecialchars($image['directory']); ?>">
-        <svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="3 6 5 6 21 6"></polyline>
-            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-        </svg>
-        Delete
-    </button>
-<?php endif; ?>
+									<?php if (isLoggedIn()): ?>
+										<?php 
+										// Check if filename contains "Plex" to determine if we should show the Plex-related buttons
+										$isPlexFile = strpos(strtolower($image['filename']), '**plex**') !== false;
+										
+										// Only show Send to Plex button for Plex files
+										if ($isPlexFile): 
+										?>
+										<button class="overlay-action-button send-to-plex-btn" 
+												data-filename="<?php echo htmlspecialchars($image['filename']); ?>"
+												data-dirname="<?php echo htmlspecialchars($image['directory']); ?>">
+													<svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+														<path d="M9 3h-4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4"></path>
+														<polyline points="16 7 21 12 16 17"></polyline>
+														<line x1="21" y1="12" x2="9" y2="12"></line>
+													</svg>
+											Send to Plex
+										</button>
+										
+										<!-- Import from Plex button for Plex files -->
+										<button class="overlay-action-button import-from-plex-btn" 
+												data-filename="<?php echo htmlspecialchars($image['filename']); ?>"
+												data-dirname="<?php echo htmlspecialchars($image['directory']); ?>">
+													<svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+														<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
+														<polyline points="8 7 3 12 8 17"></polyline>
+														<line x1="3" y1="12" x2="15" y2="12"></line>
+													</svg>
+											Get from Plex
+										</button>
+										<?php endif; ?>
+										
+										<button class="overlay-action-button delete-btn" 
+												data-filename="<?php echo htmlspecialchars($image['filename']); ?>"
+												data-dirname="<?php echo htmlspecialchars($image['directory']); ?>"
+												data-orphaned="<?php echo (strpos(strtolower($image['filename']), '**plex**') === false && 
+																	 strpos(strtolower($image['filename']), '**jellyfin**') === false) ? 'true' : 'false'; ?>">
+											<svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+												<polyline points="3 6 5 6 21 6"></polyline>
+												<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+											</svg>
+											Delete Orphan
+										</button>
+									<?php endif; ?>
 				                </div>
 				            </div>
 							<div class="gallery-caption" data-full-text="<?php echo htmlspecialchars(pathinfo($image['filename'], PATHINFO_FILENAME)); ?>">
@@ -2886,6 +2888,9 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		            <button type="button" class="modal-close-btn">×</button>
 		        </div>
 		        <p>Are you sure you want to delete this poster? This action cannot be undone.</p>
+		        <div style="margin: 20px 0; padding: 15px; background: rgba(255, 159, 67, 0.1); border: 1px solid var(--accent-primary); border-radius: 6px;">
+						<p style="margin: 0;">This is an orphaned poster.</p>
+				</div>
 		        <form id="deleteForm" method="POST">
 		            <input type="hidden" name="action" value="delete">
 		            <input type="hidden" name="filename" id="deleteFilename">
@@ -7251,6 +7256,17 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		        }, 300);
 		    });
 		});
+	
+		// =========== HANDLE ORPHANS ===========	
+		function hideNonOrphanedDeleteButtons() {
+			document.querySelectorAll('.delete-btn').forEach(button => {
+				const isOrphaned = button.getAttribute('data-orphaned') === 'true';
+				if (!isOrphaned) {
+					button.style.display = 'none';
+				}
+			});
+		}
+
 		
 		// =========== INITIALIZATION ===========
 		
@@ -7261,6 +7277,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		initPlexConfirmModal();
 		createImportFromPlexModal();
 		initImportFromPlexFeature();
+		hideNonOrphanedDeleteButtons();
 		
 		// Call truncation after images load and on resize
 		document.querySelectorAll('.gallery-image').forEach(img => {
