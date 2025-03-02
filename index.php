@@ -2253,7 +2253,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
             </button>
             <div class="dropdown-content">
                 <?php if (!empty($plex_config['token']) && !empty($plex_config['server_url'])): ?>
-                <a href="#" id="showPlexImportModal">Impo
+                <a href="#" id="showPlexImportModal">
                 	From Plex
                 </a>
                 <?php endif; ?>
