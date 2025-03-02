@@ -2539,7 +2539,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
         Send to Plex
     </button>
     
-    <!-- Import from Plex button (instead of Move) for Plex files -->
+    <!-- Import from Plex button for Plex files -->
     <button class="overlay-action-button import-from-plex-btn" 
             data-filename="<?php echo htmlspecialchars($image['filename']); ?>"
             data-dirname="<?php echo htmlspecialchars($image['directory']); ?>">
@@ -2548,7 +2548,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
                     <polyline points="8 7 3 12 8 17"></polyline>
                     <line x1="3" y1="12" x2="15" y2="12"></line>
                 </svg>
-        Import from Plex
+        Get from Plex
     </button>
     <?php endif; ?>
     
@@ -5423,7 +5423,7 @@ document.addEventListener('DOMContentLoaded', function() {
             <div id="importFromPlexModal" class="modal">
                 <div class="modal-content">
                     <div class="modal-header">
-                        <h3>Import from Plex</h3>
+                        <h3>Get from Plex</h3>
                         <button type="button" class="modal-close-btn">×</button>
                     </div>
                     <div class="modal-body">
@@ -5432,7 +5432,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     </div>
                     <div class="modal-actions">
                         <button type="button" class="modal-button cancel" id="cancelImportFromPlex">Cancel</button>
-                        <button type="button" class="modal-button import-from-plex-confirm">Import</button>
+                        <button type="button" class="modal-button import-from-plex-confirm">Get</button>
                     </div>
                 </div>
             </div>
@@ -5529,7 +5529,7 @@ document.addEventListener('DOMContentLoaded', function() {
             formData.append('filename', filename);
             formData.append('directory', directory);
             
-            const response = await fetch('./include/import-from-plex.php', {
+            const response = await fetch('./include/get-from-plex.php', {
                 method: 'POST',
                 body: formData
             });
@@ -6084,7 +6084,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                     <polyline points="10 17 15 12 10 7"></polyline>
                                     <line x1="15" y1="12" x2="3" y2="12"></line>
                                 </svg>
-                                Import from Plex
+                                Get from Plex
                             `;
                             
                             // Add event listener
