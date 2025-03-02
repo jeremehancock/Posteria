@@ -1262,6 +1262,23 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			opacity: 0.9;
 			z-index: 0;
 		}
+		
+		/* Orphaned Badge */
+		.orphaned-badge {
+			position: absolute;
+			bottom: 10px;
+			padding: 4px 8px;
+			border-radius: 4px;
+			font-size: 12px;
+			opacity: 0.9;
+			z-index: 0;
+			width: 80%;
+			justify-content: center;
+			font-size: 1rem;
+			background: #8B0000;
+			color: var(--text-primary);
+			border: 1px solid #a83232;
+		}
 
 		/* Image Actions */
 		.image-overlay-actions {
@@ -2785,6 +2802,13 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 										<?php echo formatDirectoryName($image['directory']); ?>
 									</div>
 				                <?php endif; ?>
+				                
+
+									<div class="orphaned-badge" data-orphaned="<?php echo (strpos(strtolower($image['filename']), '**plex**') === false && strpos(strtolower($image['filename']), '**jellyfin**') === false) ? 'true' : 'false'; ?>" style="display: none;">
+										Orphaned
+									</div>
+
+				                
 				                <div class="gallery-image-placeholder">
 				                    <div class="loading-spinner"></div>
 				                </div>
@@ -6972,6 +6996,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		    initializeSendToPlexButtons();
 		    initializeImportFromPlexButtons();
 		    initializeImportFromJellyfinButtons();
+		    showOrphanedBadge();
 		}
 		
 		// Debounce function for resize handling
@@ -7536,6 +7561,15 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				}
 			});
 		}
+		
+		function showOrphanedBadge() {
+			document.querySelectorAll('.orphaned-badge').forEach(button => {
+				const isOrphaned = button.getAttribute('data-orphaned') === 'true';
+				if (isOrphaned) {
+					button.style.display = 'flex';
+				}
+			});
+		}
 
 		
 		// =========== INITIALIZATION ===========
@@ -7550,6 +7584,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		createImportFromJellyfinModal();
 		initImportFromJellyfinFeature();
 		hideNonOrphanedDeleteButtons();
+		showOrphanedBadge();
 		
 		
 		// Call truncation after images load and on resize
