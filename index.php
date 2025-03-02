@@ -28,555 +28,587 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
  
-    error_reporting(E_ALL);
-	ini_set('display_errors', 0);
+// Error reporting and session management
+error_reporting(E_ALL);
+ini_set('display_errors', 0);
+session_start();
 
-	session_start();
-	
-	// Helper function to get environment variable with fallback
-	function getEnvWithFallback($key, $default) {
-		$value = getenv($key);
-		return $value !== false ? $value : $default;
-	}
+/**
+ * Helper Functions
+ */
 
-	// Helper function to get integer environment variable with fallback
-	function getIntEnvWithFallback($key, $default) {
-		$value = getenv($key);
-		return $value !== false ? intval($value) : $default;
-	}
-	
-	$site_title = getEnvWithFallback('SITE_TITLE', 'Posteria');
-	
-	require_once './include/config.php';
-	
-	$config = [
-		'directories' => [
-			'movies' => 'posters/movies/',
-			'tv-shows' => 'posters/tv-shows/',
-			'tv-seasons' => 'posters/tv-seasons/',
-			'collections' => 'posters/collections/'
-		],
-		'imagesPerPage' => getIntEnvWithFallback('IMAGES_PER_PAGE', 24),
-		'allowedExtensions' => ['jpg', 'jpeg', 'png', 'webp'],
-		'siteUrl' => (!empty($_SERVER['HTTPS']) ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . rtrim(dirname($_SERVER['PHP_SELF']), '/') . '/',
-		'maxFileSize' => getIntEnvWithFallback('MAX_FILE_SIZE', 5 * 1024 * 1024) // 5MB default
-	];
+// Helper function to get environment variable with fallback
+function getEnvWithFallback($key, $default) {
+    $value = getenv($key);
+    return $value !== false ? $value : $default;
+}
 
-	$loginError = '';
+// Helper function to get integer environment variable with fallback
+function getIntEnvWithFallback($key, $default) {
+    $value = getenv($key);
+    return $value !== false ? intval($value) : $default;
+}
 
-	// Get current directory filter from URL parameter
-	$currentDirectory = isset($_GET['directory']) ? trim($_GET['directory']) : '';
-	if (!empty($currentDirectory) && !isset($config['directories'][$currentDirectory])) {
-		$currentDirectory = '';
-	}
+// Site title configuration
+$site_title = getEnvWithFallback('SITE_TITLE', 'Posteria');
 
+// Include configuration file
+require_once './include/config.php';
 
-	function sendJsonResponse($success, $error = null) {
-		header('Content-Type: application/json');
-		echo json_encode([
-		    'success' => $success,
-		    'error' => $error
-		]);
-		exit;
-	}
-	
-	function getImageFiles($config, $currentDirectory = '') {
-		$files = [];
-		
-		if (empty($currentDirectory)) {
-		    // Get files from all directories
-		    foreach ($config['directories'] as $dirKey => $dirPath) {
-		        if (is_dir($dirPath)) {
-		            if ($handle = opendir($dirPath)) {
-		                while (($file = readdir($handle)) !== false) {
-		                    $extension = strtolower(pathinfo($file, PATHINFO_EXTENSION));
-		                    if (in_array($extension, $config['allowedExtensions'])) {
-		                        $files[] = [
-		                            'filename' => $file,
-		                            'directory' => $dirKey,
-		                            'fullpath' => $dirPath . $file
-		                        ];
-		                    }
-		                }
-		                closedir($handle);
-		            }
-		        }
-		    }
-		} else {
-		    // Get files from specific directory
-		    $dirPath = $config['directories'][$currentDirectory];
-		    if (is_dir($dirPath)) {
-		        if ($handle = opendir($dirPath)) {
-		            while (($file = readdir($handle)) !== false) {
-		                $extension = strtolower(pathinfo($file, PATHINFO_EXTENSION));
-		                if (in_array($extension, $config['allowedExtensions'])) {
-		                    $files[] = [
-		                        'filename' => $file,
-		                        'directory' => $currentDirectory,
-		                        'fullpath' => $dirPath . $file
-		                    ];
-		                }
-		            }
-		            closedir($handle);
-		        }
-		    }
-		}
-		
-		// Sort files alphabetically
-		usort($files, function($a, $b) {
-		    return strnatcasecmp($a['filename'], $b['filename']);
-		});
-		
-		return $files;
-	}
+/**
+ * Application Configuration
+ */
+$config = [
+    'directories' => [
+        'movies' => 'posters/movies/',
+        'tv-shows' => 'posters/tv-shows/',
+        'tv-seasons' => 'posters/tv-seasons/',
+        'collections' => 'posters/collections/'
+    ],
+    'imagesPerPage' => getIntEnvWithFallback('IMAGES_PER_PAGE', 24),
+    'allowedExtensions' => ['jpg', 'jpeg', 'png', 'webp'],
+    'siteUrl' => (!empty($_SERVER['HTTPS']) ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . rtrim(dirname($_SERVER['PHP_SELF']), '/') . '/',
+    'maxFileSize' => getIntEnvWithFallback('MAX_FILE_SIZE', 5 * 1024 * 1024) // 5MB default
+];
 
-	function fuzzySearch($pattern, $str) {
-		$pattern = strtolower($pattern);
-		$str = strtolower($str);
-		$patternLength = strlen($pattern);
-		$strLength = strlen($str);
-		
-		if ($patternLength > $strLength) {
-		    return false;
-		}
-		
-		if ($patternLength === $strLength) {
-		    return $pattern === $str;
-		}
-		
-		$previousIndex = -1;
-		for ($i = 0; $i < $patternLength; $i++) {
-		    $currentChar = $pattern[$i];
-		    $index = strpos($str, $currentChar, $previousIndex + 1);
-		    
-		    if ($index === false) {
-		        return false;
-		    }
-		    
-		    $previousIndex = $index;
-		}
-		
-		return true;
-	}
+$loginError = '';
 
-	function filterImages($images, $searchQuery) {
-		if (empty($searchQuery)) {
-		    return $images;
-		}
-		
-		$filteredImages = [];
-		foreach ($images as $image) {
-		    $filename = pathinfo($image['filename'], PATHINFO_FILENAME);
-		    if (fuzzySearch($searchQuery, $filename)) {
-		        $filteredImages[] = $image;
-		    }
-		}
-		
-		return $filteredImages;
-	}
+// Get current directory filter from URL parameter
+$currentDirectory = isset($_GET['directory']) ? trim($_GET['directory']) : '';
+if (!empty($currentDirectory) && !isset($config['directories'][$currentDirectory])) {
+    $currentDirectory = '';
+}
 
-	function isLoggedIn() {
-		return isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true;
-	}
+/**
+ * Utility Functions
+ */
 
-	function isValidFilename($filename) {
-		// Check for slashes and backslashes
-		if (strpos($filename, '/') !== false || strpos($filename, '\\') !== false) {
-		    return false;
-		}
-		return true;
-	}
+// Send JSON response and exit
+function sendJsonResponse($success, $error = null) {
+    header('Content-Type: application/json');
+    echo json_encode([
+        'success' => $success,
+        'error' => $error
+    ]);
+    exit;
+}
 
-	function formatDirectoryName($dirKey) {
-		$text = str_replace('-', ' ', $dirKey);
-		
-		// Handle TV-related text
-		if (stripos($text, 'tv') === 0) {
-		    $text = 'TV ' . ucwords(substr($text, 3));
-		} else {
-		    $text = ucwords($text);
-		}
-		
-		return $text;
-	}
+// Get image files from directory
+function getImageFiles($config, $currentDirectory = '') {
+    $files = [];
+    
+    if (empty($currentDirectory)) {
+        // Get files from all directories
+        foreach ($config['directories'] as $dirKey => $dirPath) {
+            if (is_dir($dirPath)) {
+                if ($handle = opendir($dirPath)) {
+                    while (($file = readdir($handle)) !== false) {
+                        $extension = strtolower(pathinfo($file, PATHINFO_EXTENSION));
+                        if (in_array($extension, $config['allowedExtensions'])) {
+                            $files[] = [
+                                'filename' => $file,
+                                'directory' => $dirKey,
+                                'fullpath' => $dirPath . $file
+                            ];
+                        }
+                    }
+                    closedir($handle);
+                }
+            }
+        }
+    } else {
+        // Get files from specific directory
+        $dirPath = $config['directories'][$currentDirectory];
+        if (is_dir($dirPath)) {
+            if ($handle = opendir($dirPath)) {
+                while (($file = readdir($handle)) !== false) {
+                    $extension = strtolower(pathinfo($file, PATHINFO_EXTENSION));
+                    if (in_array($extension, $config['allowedExtensions'])) {
+                        $files[] = [
+                            'filename' => $file,
+                            'directory' => $currentDirectory,
+                            'fullpath' => $dirPath . $file
+                        ];
+                    }
+                }
+                closedir($handle);
+            }
+        }
+    }
+    
+    // Sort files alphabetically
+    usort($files, function($a, $b) {
+        return strnatcasecmp($a['filename'], $b['filename']);
+    });
+    
+    return $files;
+}
 
-	function generateUniqueFilename($originalName, $directory) {
-		$info = pathinfo($originalName);
-		$ext = strtolower($info['extension']);
-		$filename = $info['filename'];
-		
-		$newFilename = $filename;
-		$counter = 1;
-		
-		while (file_exists($directory . $newFilename . '.' . $ext)) {
-		    $newFilename = $filename . '_' . $counter;
-		    $counter++;
-		}
-		
-		return $newFilename . '.' . $ext;
-	}
+// Fuzzy search implementation
+function fuzzySearch($pattern, $str) {
+    $pattern = strtolower($pattern);
+    $str = strtolower($str);
+    $patternLength = strlen($pattern);
+    $strLength = strlen($str);
+    
+    if ($patternLength > $strLength) {
+        return false;
+    }
+    
+    if ($patternLength === $strLength) {
+        return $pattern === $str;
+    }
+    
+    $previousIndex = -1;
+    for ($i = 0; $i < $patternLength; $i++) {
+        $currentChar = $pattern[$i];
+        $index = strpos($str, $currentChar, $previousIndex + 1);
+        
+        if ($index === false) {
+            return false;
+        }
+        
+        $previousIndex = $index;
+    }
+    
+    return true;
+}
 
-	function isAllowedFileType($filename, $allowedExtensions) {
-		$ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
-		return in_array($ext, $allowedExtensions);
-	}
+// Filter images based on search query
+function filterImages($images, $searchQuery) {
+    if (empty($searchQuery)) {
+        return $images;
+    }
+    
+    $filteredImages = [];
+    foreach ($images as $image) {
+        $filename = pathinfo($image['filename'], PATHINFO_FILENAME);
+        if (fuzzySearch($searchQuery, $filename)) {
+            $filteredImages[] = $image;
+        }
+    }
+    
+    return $filteredImages;
+}
 
-	// Generate pagination links
-	function generatePaginationLinks($currentPage, $totalPages, $searchQuery, $currentDirectory) {
-		$links = '';
-		$params = [];
-		if (!empty($searchQuery)) $params['search'] = $searchQuery;
-		if (!empty($currentDirectory)) $params['directory'] = $currentDirectory;
-		$queryString = http_build_query($params);
-		$baseUrl = '?' . ($queryString ? $queryString . '&' : '');
-		
-		// Previous page link
-		if ($currentPage > 1) {
-		    $links .= "<a href=\"" . $baseUrl . "page=" . ($currentPage - 1) . "\" class=\"pagination-link\">&laquo;</a> ";
-		} else {
-		    $links .= "<span class=\"pagination-link disabled\">&laquo;</span> ";
-		}
-		
-		// Page number links
-		$startPage = max(1, $currentPage - 2);
-		$endPage = min($totalPages, $currentPage + 2);
-		
-		if ($startPage > 1) {
-		    $links .= "<a href=\"" . $baseUrl . "page=1\" class=\"pagination-link\">1</a> ";
-		    if ($startPage > 2) {
-		        $links .= "<span class=\"pagination-ellipsis\">...</span> ";
-		    }
-		}
-		
-		for ($i = $startPage; $i <= $endPage; $i++) {
-		    if ($i == $currentPage) {
-		        $links .= "<span class=\"pagination-link current\">{$i}</span> ";
-		    } else {
-		        $links .= "<a href=\"" . $baseUrl . "page={$i}\" class=\"pagination-link\">{$i}</a> ";
-		    }
-		}
-		
-		if ($endPage < $totalPages) {
-		    if ($endPage < $totalPages - 1) {
-		        $links .= "<span class=\"pagination-ellipsis\">...</span> ";
-		    }
-		    $links .= "<a href=\"" . $baseUrl . "page={$totalPages}\" class=\"pagination-link\">{$totalPages}</a> ";
-		}
-		
-		// Next page link
-		if ($currentPage < $totalPages) {
-		    $links .= "<a href=\"" . $baseUrl . "page=" . ($currentPage + 1) . "\" class=\"pagination-link\">&raquo;</a>";
-		} else {
-		    $links .= "<span class=\"pagination-link disabled\">&raquo;</span>";
-		}
-		
-		return $links;
-	}
-	
-	// Handle login
-	if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'login' && 
-		isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
-		header('Content-Type: application/json');
-		
-		if ($_POST['username'] === $auth_config['username'] && $_POST['password'] === $auth_config['password']) {
-		    $_SESSION['logged_in'] = true;
-		    $_SESSION['login_time'] = time();
-		    echo json_encode(['success' => true]);
-		} else {
-		    echo json_encode(['success' => false, 'error' => 'Invalid username or password']);
-		}
-		exit;
-	}
+// Check if user is logged in
+function isLoggedIn() {
+    return isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true;
+}
 
-	// Regular form login (fallback)
-	if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'login') {
-		if ($_POST['username'] === $auth_config['username'] && $_POST['password'] === $auth_config['password']) {
-		    $_SESSION['logged_in'] = true;
-		    $_SESSION['login_time'] = time();
-		    header('Location: ' . $_SERVER['PHP_SELF']);
-		    exit;
-		}
-	}
+// Validate filename for security
+function isValidFilename($filename) {
+    // Check for slashes and backslashes
+    if (strpos($filename, '/') !== false || strpos($filename, '\\') !== false) {
+        return false;
+    }
+    return true;
+}
 
-	// Handle logout
-	if (isset($_GET['action']) && $_GET['action'] === 'logout') {
-		session_destroy();
-		header('Location: ' . $_SERVER['PHP_SELF']);
-		exit;
-	}
+// Format directory name for display
+function formatDirectoryName($dirKey) {
+    $text = str_replace('-', ' ', $dirKey);
+    
+    // Handle TV-related text
+    if (stripos($text, 'tv') === 0) {
+        $text = 'TV ' . ucwords(substr($text, 3));
+    } else {
+        $text = ucwords($text);
+    }
+    
+    return $text;
+}
 
-	// Check session expiration
-	if (isset($_SESSION['login_time']) && (time() - $_SESSION['login_time']) > $auth_config['session_duration']) {
-		session_destroy();
-		header('Location: ' . $_SERVER['PHP_SELF']);
-		exit;
-	}
+// Generate unique filename to avoid overwrites
+function generateUniqueFilename($originalName, $directory) {
+    $info = pathinfo($originalName);
+    $ext = strtolower($info['extension']);
+    $filename = $info['filename'];
+    
+    $newFilename = $filename;
+    $counter = 1;
+    
+    while (file_exists($directory . $newFilename . '.' . $ext)) {
+        $newFilename = $filename . '_' . $counter;
+        $counter++;
+    }
+    
+    return $newFilename . '.' . $ext;
+}
 
-	// Handle file move
-	if (isLoggedIn() && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'move') {
-		header('Content-Type: application/json');
-		
-		$filename = isset($_POST['filename']) ? $_POST['filename'] : '';
-		$sourceDirectory = isset($_POST['source_directory']) ? $_POST['source_directory'] : '';
-		$targetDirectory = isset($_POST['target_directory']) ? $_POST['target_directory'] : '';
-		
-		if (empty($filename) || empty($sourceDirectory) || empty($targetDirectory) || 
-		    !isset($config['directories'][$sourceDirectory]) || !isset($config['directories'][$targetDirectory])) {
-		    echo json_encode(['success' => false, 'error' => 'Invalid request']);
-		    exit;
-		}
-		
-		$sourcePath = $config['directories'][$sourceDirectory] . $filename;
-		$targetPath = $config['directories'][$targetDirectory] . $filename;
-		
-		// Security checks
-		if (!isValidFilename($filename) || !file_exists($sourcePath)) {
-		    echo json_encode(['success' => false, 'error' => 'Invalid file']);
-		    exit;
-		}
-		
-		// Check if a file with the same name exists in target directory
-		if (file_exists($targetPath)) {
-		    echo json_encode(['success' => false, 'error' => 'A file with this name already exists in the target directory']);
-		    exit;
-		}
-		
-		exit;
-	}
+// Check if file has allowed extension
+function isAllowedFileType($filename, $allowedExtensions) {
+    $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+    return in_array($ext, $allowedExtensions);
+}
 
-	// Handle file upload
-	if (isLoggedIn() && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'upload') {
-		header('Content-Type: application/json');
-		
-		// Handle file upload from disk
-		if ($_POST['upload_type'] === 'file' && isset($_FILES['image'])) {
-		    $file = $_FILES['image'];
-		    $directory = isset($_POST['directory']) ? $_POST['directory'] : 'movies';
-		    
-		    // Validate directory exists
-		    if (!isset($config['directories'][$directory])) {
-		        sendJsonResponse(false, 'Invalid directory');
-		    }
-		    
-		    // Check for upload errors
-		    if ($file['error'] !== UPLOAD_ERR_OK) {
-		        $error_message = match($file['error']) {
-		            UPLOAD_ERR_INI_SIZE => 'The uploaded file exceeds the upload_max_filesize directive',
-		            UPLOAD_ERR_FORM_SIZE => 'The uploaded file exceeds the MAX_FILE_SIZE directive',
-		            UPLOAD_ERR_PARTIAL => 'The uploaded file was only partially uploaded',
-		            UPLOAD_ERR_NO_FILE => 'No file was uploaded',
-		            UPLOAD_ERR_NO_TMP_DIR => 'Missing a temporary folder',
-		            UPLOAD_ERR_CANT_WRITE => 'Failed to write file to disk',
-		            UPLOAD_ERR_EXTENSION => 'A PHP extension stopped the file upload',
-		            default => 'Unknown upload error'
-		        };
-		        sendJsonResponse(false, $error_message);
-		    }
-		    
-		    // Validate file size
-		    if ($file['size'] > $config['maxFileSize']) {
-		        sendJsonResponse(false, 'File too large. Maximum size is ' . ($config['maxFileSize'] / 1024 / 1024) . 'MB');
-		    }
-		    
-		    // Validate file type
-		    $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-		    if (!in_array($ext, $config['allowedExtensions'])) {
-		        sendJsonResponse(false, 'Invalid file type. Allowed types: ' . implode(', ', $config['allowedExtensions']));
-		    }
-		    
-		    // Generate unique filename
-		    $filename = generateUniqueFilename($file['name'], $config['directories'][$directory]);
-		    $filepath = $config['directories'][$directory] . $filename;
-		    
-		    // Ensure directory exists and is writable
-		    $targetDir = dirname($filepath);
-		    if (!is_dir($targetDir)) {
-		        if (!mkdir($targetDir, 0755, true)) {
-		            sendJsonResponse(false, 'Failed to create directory structure');
-		        }
-		    }
-		    
-		    if (!is_writable($targetDir)) {
-		        sendJsonResponse(false, 'Directory is not writable');
-		    }
-		    
-		    // Move uploaded file
-		    if (move_uploaded_file($file['tmp_name'], $filepath)) {
-		        // Set proper permissions
-		        chmod($filepath, 0644);
-		        sendJsonResponse(true);
-		    } else {
-		        sendJsonResponse(false, 'Failed to save file. Please check directory permissions.');
-		    }
-		}
-		
-	// Handle URL upload
-	if ($_POST['upload_type'] === 'url' && isset($_POST['image_url'])) {
-		$url = $_POST['image_url'];
-		$directory = isset($_POST['directory']) ? $_POST['directory'] : 'movies';
-		
-		// Validate URL
-		if (!filter_var($url, FILTER_VALIDATE_URL)) {
-		    sendJsonResponse(false, 'Invalid URL format');
-		}
-		
-		// Validate directory exists
-		if (!isset($config['directories'][$directory])) {
-		    sendJsonResponse(false, 'Invalid directory');
-		}
-		
-		// Get file info and decode URL-encoded spaces in the basename
-		$fileInfo = pathinfo(urldecode($url));
-		$decodedBasename = $fileInfo['basename'];
-		$ext = strtolower($fileInfo['extension']);
-		
-		// Validate file type
-		if (!in_array($ext, $config['allowedExtensions'])) {
-		    sendJsonResponse(false, 'Invalid file type. Allowed types: ' . implode(', ', $config['allowedExtensions']));
-		}
-		
-		// Generate unique filename using the decoded basename
-		$filename = generateUniqueFilename($decodedBasename, $config['directories'][$directory]);
-		$filepath = $config['directories'][$directory] . $filename;
-		
-		// Ensure directory exists and is writable
-		$targetDir = dirname($filepath);
-		if (!is_dir($targetDir)) {
-		    if (!mkdir($targetDir, 0755, true)) {
-		        sendJsonResponse(false, 'Failed to create directory structure');
-		    }
-		}
-		
-		if (!is_writable($targetDir)) {
-		    sendJsonResponse(false, 'Directory is not writable');
-		}
-		
-		// Initialize curl
-		$ch = curl_init();
-		curl_setopt_array($ch, [
-		    CURLOPT_URL => $url,
-		    CURLOPT_RETURNTRANSFER => true,
-		    CURLOPT_FOLLOWLOCATION => true,
-		    CURLOPT_SSL_VERIFYPEER => false,
-		    CURLOPT_SSL_VERIFYHOST => false,
-		    CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-		    CURLOPT_TIMEOUT => 30
-		]);
-		
-		$fileContent = curl_exec($ch);
-		$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-		$error = curl_error($ch);
-		$contentLength = curl_getinfo($ch, CURLINFO_CONTENT_LENGTH_DOWNLOAD);
-		curl_close($ch);
+// Generate pagination links
+function generatePaginationLinks($currentPage, $totalPages, $searchQuery, $currentDirectory) {
+    $links = '';
+    $params = [];
+    if (!empty($searchQuery)) $params['search'] = $searchQuery;
+    if (!empty($currentDirectory)) $params['directory'] = $currentDirectory;
+    $queryString = http_build_query($params);
+    $baseUrl = '?' . ($queryString ? $queryString . '&' : '');
+    
+    // Previous page link
+    if ($currentPage > 1) {
+        $links .= "<a href=\"" . $baseUrl . "page=" . ($currentPage - 1) . "\" class=\"pagination-link\">&laquo;</a> ";
+    } else {
+        $links .= "<span class=\"pagination-link disabled\">&laquo;</span> ";
+    }
+    
+    // Page number links
+    $startPage = max(1, $currentPage - 2);
+    $endPage = min($totalPages, $currentPage + 2);
+    
+    if ($startPage > 1) {
+        $links .= "<a href=\"" . $baseUrl . "page=1\" class=\"pagination-link\">1</a> ";
+        if ($startPage > 2) {
+            $links .= "<span class=\"pagination-ellipsis\">...</span> ";
+        }
+    }
+    
+    for ($i = $startPage; $i <= $endPage; $i++) {
+        if ($i == $currentPage) {
+            $links .= "<span class=\"pagination-link current\">{$i}</span> ";
+        } else {
+            $links .= "<a href=\"" . $baseUrl . "page={$i}\" class=\"pagination-link\">{$i}</a> ";
+        }
+    }
+    
+    if ($endPage < $totalPages) {
+        if ($endPage < $totalPages - 1) {
+            $links .= "<span class=\"pagination-ellipsis\">...</span> ";
+        }
+        $links .= "<a href=\"" . $baseUrl . "page={$totalPages}\" class=\"pagination-link\">{$totalPages}</a> ";
+    }
+    
+    // Next page link
+    if ($currentPage < $totalPages) {
+        $links .= "<a href=\"" . $baseUrl . "page=" . ($currentPage + 1) . "\" class=\"pagination-link\">&raquo;</a>";
+    } else {
+        $links .= "<span class=\"pagination-link disabled\">&raquo;</span>";
+    }
+    
+    return $links;
+}
 
-		// Check for curl errors
-		if ($fileContent === false) {
-		    sendJsonResponse(false, 'Download failed: ' . $error);
-		}
+/**
+ * Authentication Handlers
+ */
 
-		// Check HTTP response code
-		if ($httpCode !== 200) {
-		    sendJsonResponse(false, 'HTTP error: ' . $httpCode);
-		}
+// Handle AJAX login
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'login' && 
+    isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+    header('Content-Type: application/json');
+    
+    if ($_POST['username'] === $auth_config['username'] && $_POST['password'] === $auth_config['password']) {
+        $_SESSION['logged_in'] = true;
+        $_SESSION['login_time'] = time();
+        echo json_encode(['success' => true]);
+    } else {
+        echo json_encode(['success' => false, 'error' => 'Invalid username or password']);
+    }
+    exit;
+}
 
-		// Check file size
-		$downloadedSize = strlen($fileContent);
-		if ($downloadedSize > $config['maxFileSize']) {
-		    sendJsonResponse(false, 'File exceeds maximum allowed size of ' . ($config['maxFileSize'] / 1024 / 1024) . 'MB');
-		}
+// Regular form login (fallback)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'login') {
+    if ($_POST['username'] === $auth_config['username'] && $_POST['password'] === $auth_config['password']) {
+        $_SESSION['logged_in'] = true;
+        $_SESSION['login_time'] = time();
+        header('Location: ' . $_SERVER['PHP_SELF']);
+        exit;
+    }
+}
 
-		// Verify the downloaded content is an image
-		$finfo = new finfo(FILEINFO_MIME_TYPE);
-		$mimeType = $finfo->buffer($fileContent);
-		if (!str_starts_with($mimeType, 'image/')) {
-		    sendJsonResponse(false, 'Downloaded content is not an image');
-		}
+// Handle logout
+if (isset($_GET['action']) && $_GET['action'] === 'logout') {
+    session_destroy();
+    header('Location: ' . $_SERVER['PHP_SELF']);
+    exit;
+}
 
-		// Save the file
-		if (file_put_contents($filepath, $fileContent)) {
-		    chmod($filepath, 0644);
-		    sendJsonResponse(true);
-		} else {
-		    sendJsonResponse(false, 'Failed to save file');
-		}
-	}
-	}
+// Check session expiration
+if (isset($_SESSION['login_time']) && (time() - $_SESSION['login_time']) > $auth_config['session_duration']) {
+    session_destroy();
+    header('Location: ' . $_SERVER['PHP_SELF']);
+    exit;
+}
 
-	// Handle file delete
-	if (isLoggedIn() && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'delete') {
-		header('Content-Type: application/json');
-		
-		$filename = isset($_POST['filename']) ? $_POST['filename'] : '';
-		$directory = isset($_POST['directory']) ? $_POST['directory'] : '';
-		
-		if (empty($filename) || empty($directory) || !isset($config['directories'][$directory])) {
-		    echo json_encode(['success' => false, 'error' => 'Invalid request']);
-		    exit;
-		}
-		
-		$filepath = $config['directories'][$directory] . $filename;
-		
-		// Security check: Ensure the file is within allowed directory
-		if (!isValidFilename($filename) || !file_exists($filepath)) {
-		    echo json_encode(['success' => false, 'error' => 'Invalid file']);
-		    exit;
-		}
-		
-		if (unlink($filepath)) {
-		    echo json_encode(['success' => true]);
-		} else {
-		    echo json_encode(['success' => false, 'error' => 'Failed to delete file']);
-		}
-		exit;
-	}
+/**
+ * File Management Handlers
+ */
 
-	// Handle download request
-	if (isset($_GET['download']) && !empty($_GET['download'])) {
-		$requestedFile = $_GET['download'];
-		$directory = isset($_GET['dir']) ? $_GET['dir'] : '';
-		
-		if (!empty($directory) && isset($config['directories'][$directory])) {
-		    $filePath = $config['directories'][$directory] . $requestedFile;
-		    
-		    // Validate the file exists and is allowed
-		    $extension = strtolower(pathinfo($requestedFile, PATHINFO_EXTENSION));
-		    if (file_exists($filePath) && in_array($extension, $config['allowedExtensions'])) {
-		        // Set headers for download
-		        header('Content-Description: File Transfer');
-		        header('Content-Type: application/octet-stream');
-		        header('Content-Disposition: attachment; filename="' . basename($requestedFile) . '"');
-		        header('Expires: 0');
-		        header('Cache-Control: must-revalidate');
-		        header('Pragma: public');
-		        header('Content-Length: ' . filesize($filePath));
-		        
-		        // Output file and exit
-		        readfile($filePath);
-		        exit;
-		    }
-		}
-	}
+// Handle file move
+if (isLoggedIn() && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'move') {
+    header('Content-Type: application/json');
+    
+    $filename = isset($_POST['filename']) ? $_POST['filename'] : '';
+    $sourceDirectory = isset($_POST['source_directory']) ? $_POST['source_directory'] : '';
+    $targetDirectory = isset($_POST['target_directory']) ? $_POST['target_directory'] : '';
+    
+    if (empty($filename) || empty($sourceDirectory) || empty($targetDirectory) || 
+        !isset($config['directories'][$sourceDirectory]) || !isset($config['directories'][$targetDirectory])) {
+        echo json_encode(['success' => false, 'error' => 'Invalid request']);
+        exit;
+    }
+    
+    $sourcePath = $config['directories'][$sourceDirectory] . $filename;
+    $targetPath = $config['directories'][$targetDirectory] . $filename;
+    
+    // Security checks
+    if (!isValidFilename($filename) || !file_exists($sourcePath)) {
+        echo json_encode(['success' => false, 'error' => 'Invalid file']);
+        exit;
+    }
+    
+    // Check if a file with the same name exists in target directory
+    if (file_exists($targetPath)) {
+        echo json_encode(['success' => false, 'error' => 'A file with this name already exists in the target directory']);
+        exit;
+    }
+    
+    exit;
+}
 
-	// Get all image files
-	$allImages = getImageFiles($config, $currentDirectory);
+// Handle file upload
+if (isLoggedIn() && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'upload') {
+    header('Content-Type: application/json');
+    
+    // Handle file upload from disk
+    if ($_POST['upload_type'] === 'file' && isset($_FILES['image'])) {
+        $file = $_FILES['image'];
+        $directory = isset($_POST['directory']) ? $_POST['directory'] : 'movies';
+        
+        // Validate directory exists
+        if (!isset($config['directories'][$directory])) {
+            sendJsonResponse(false, 'Invalid directory');
+        }
+        
+        // Check for upload errors
+        if ($file['error'] !== UPLOAD_ERR_OK) {
+            $error_message = match($file['error']) {
+                UPLOAD_ERR_INI_SIZE => 'The uploaded file exceeds the upload_max_filesize directive',
+                UPLOAD_ERR_FORM_SIZE => 'The uploaded file exceeds the MAX_FILE_SIZE directive',
+                UPLOAD_ERR_PARTIAL => 'The uploaded file was only partially uploaded',
+                UPLOAD_ERR_NO_FILE => 'No file was uploaded',
+                UPLOAD_ERR_NO_TMP_DIR => 'Missing a temporary folder',
+                UPLOAD_ERR_CANT_WRITE => 'Failed to write file to disk',
+                UPLOAD_ERR_EXTENSION => 'A PHP extension stopped the file upload',
+                default => 'Unknown upload error'
+            };
+            sendJsonResponse(false, $error_message);
+        }
+        
+        // Validate file size
+        if ($file['size'] > $config['maxFileSize']) {
+            sendJsonResponse(false, 'File too large. Maximum size is ' . ($config['maxFileSize'] / 1024 / 1024) . 'MB');
+        }
+        
+        // Validate file type
+        $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+        if (!in_array($ext, $config['allowedExtensions'])) {
+            sendJsonResponse(false, 'Invalid file type. Allowed types: ' . implode(', ', $config['allowedExtensions']));
+        }
+        
+        // Generate unique filename
+        $filename = generateUniqueFilename($file['name'], $config['directories'][$directory]);
+        $filepath = $config['directories'][$directory] . $filename;
+        
+        // Ensure directory exists and is writable
+        $targetDir = dirname($filepath);
+        if (!is_dir($targetDir)) {
+            if (!mkdir($targetDir, 0755, true)) {
+                sendJsonResponse(false, 'Failed to create directory structure');
+            }
+        }
+        
+        if (!is_writable($targetDir)) {
+            sendJsonResponse(false, 'Directory is not writable');
+        }
+        
+        // Move uploaded file
+        if (move_uploaded_file($file['tmp_name'], $filepath)) {
+            // Set proper permissions
+            chmod($filepath, 0644);
+            sendJsonResponse(true);
+        } else {
+            sendJsonResponse(false, 'Failed to save file. Please check directory permissions.');
+        }
+    }
+    
+    // Handle URL upload
+    if ($_POST['upload_type'] === 'url' && isset($_POST['image_url'])) {
+        $url = $_POST['image_url'];
+        $directory = isset($_POST['directory']) ? $_POST['directory'] : 'movies';
+        
+        // Validate URL
+        if (!filter_var($url, FILTER_VALIDATE_URL)) {
+            sendJsonResponse(false, 'Invalid URL format');
+        }
+        
+        // Validate directory exists
+        if (!isset($config['directories'][$directory])) {
+            sendJsonResponse(false, 'Invalid directory');
+        }
+        
+        // Get file info and decode URL-encoded spaces in the basename
+        $fileInfo = pathinfo(urldecode($url));
+        $decodedBasename = $fileInfo['basename'];
+        $ext = strtolower($fileInfo['extension']);
+        
+        // Validate file type
+        if (!in_array($ext, $config['allowedExtensions'])) {
+            sendJsonResponse(false, 'Invalid file type. Allowed types: ' . implode(', ', $config['allowedExtensions']));
+        }
+        
+        // Generate unique filename using the decoded basename
+        $filename = generateUniqueFilename($decodedBasename, $config['directories'][$directory]);
+        $filepath = $config['directories'][$directory] . $filename;
+        
+        // Ensure directory exists and is writable
+        $targetDir = dirname($filepath);
+        if (!is_dir($targetDir)) {
+            if (!mkdir($targetDir, 0755, true)) {
+                sendJsonResponse(false, 'Failed to create directory structure');
+            }
+        }
+        
+        if (!is_writable($targetDir)) {
+            sendJsonResponse(false, 'Directory is not writable');
+        }
+        
+        // Initialize curl
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL => $url,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_SSL_VERIFYHOST => false,
+            CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            CURLOPT_TIMEOUT => 30
+        ]);
+        
+        $fileContent = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $error = curl_error($ch);
+        $contentLength = curl_getinfo($ch, CURLINFO_CONTENT_LENGTH_DOWNLOAD);
+        curl_close($ch);
 
-	// Get search query
-	$searchQuery = isset($_GET['search']) ? trim($_GET['search']) : '';
+        // Check for curl errors
+        if ($fileContent === false) {
+            sendJsonResponse(false, 'Download failed: ' . $error);
+        }
 
-	// Filter images based on search query
-	$filteredImages = filterImages($allImages, $searchQuery);
+        // Check HTTP response code
+        if ($httpCode !== 200) {
+            sendJsonResponse(false, 'HTTP error: ' . $httpCode);
+        }
 
-	// Calculate pagination
-	$totalImages = count($filteredImages);
-	$totalPages = ceil($totalImages / $config['imagesPerPage']);
-	$page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
-	$page = max(1, $page); // Ensure page is at least 1
-	$page = min($page, max(1, $totalPages)); // Ensure page doesn't exceed total pages
+        // Check file size
+        $downloadedSize = strlen($fileContent);
+        if ($downloadedSize > $config['maxFileSize']) {
+            sendJsonResponse(false, 'File exceeds maximum allowed size of ' . ($config['maxFileSize'] / 1024 / 1024) . 'MB');
+        }
 
-	// Get images for current page
-	$startIndex = ($page - 1) * $config['imagesPerPage'];
-	$pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']);
+        // Verify the downloaded content is an image
+        $finfo = new finfo(FILEINFO_MIME_TYPE);
+        $mimeType = $finfo->buffer($fileContent);
+        if (!str_starts_with($mimeType, 'image/')) {
+            sendJsonResponse(false, 'Downloaded content is not an image');
+        }
 
+        // Save the file
+        if (file_put_contents($filepath, $fileContent)) {
+            chmod($filepath, 0644);
+            sendJsonResponse(true);
+        } else {
+            sendJsonResponse(false, 'Failed to save file');
+        }
+    }
+}
+
+// Handle file delete
+if (isLoggedIn() && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'delete') {
+    header('Content-Type: application/json');
+    
+    $filename = isset($_POST['filename']) ? $_POST['filename'] : '';
+    $directory = isset($_POST['directory']) ? $_POST['directory'] : '';
+    
+    if (empty($filename) || empty($directory) || !isset($config['directories'][$directory])) {
+        echo json_encode(['success' => false, 'error' => 'Invalid request']);
+        exit;
+    }
+    
+    $filepath = $config['directories'][$directory] . $filename;
+    
+    // Security check: Ensure the file is within allowed directory
+    if (!isValidFilename($filename) || !file_exists($filepath)) {
+        echo json_encode(['success' => false, 'error' => 'Invalid file']);
+        exit;
+    }
+    
+    if (unlink($filepath)) {
+        echo json_encode(['success' => true]);
+    } else {
+        echo json_encode(['success' => false, 'error' => 'Failed to delete file']);
+    }
+    exit;
+}
+
+// Handle download request
+if (isset($_GET['download']) && !empty($_GET['download'])) {
+    $requestedFile = $_GET['download'];
+    $directory = isset($_GET['dir']) ? $_GET['dir'] : '';
+    
+    if (!empty($directory) && isset($config['directories'][$directory])) {
+        $filePath = $config['directories'][$directory] . $requestedFile;
+        
+        // Validate the file exists and is allowed
+        $extension = strtolower(pathinfo($requestedFile, PATHINFO_EXTENSION));
+        if (file_exists($filePath) && in_array($extension, $config['allowedExtensions'])) {
+            // Set headers for download
+            header('Content-Description: File Transfer');
+            header('Content-Type: application/octet-stream');
+            header('Content-Disposition: attachment; filename="' . basename($requestedFile) . '"');
+            header('Expires: 0');
+            header('Cache-Control: must-revalidate');
+            header('Pragma: public');
+            header('Content-Length: ' . filesize($filePath));
+            
+            // Output file and exit
+            readfile($filePath);
+            exit;
+        }
+    }
+}
+
+/**
+ * Image and Pagination Processing
+ */
+
+// Get all image files
+$allImages = getImageFiles($config, $currentDirectory);
+
+// Get search query
+$searchQuery = isset($_GET['search']) ? trim($_GET['search']) : '';
+
+// Filter images based on search query
+$filteredImages = filterImages($allImages, $searchQuery);
+
+// Calculate pagination
+$totalImages = count($filteredImages);
+$totalPages = ceil($totalImages / $config['imagesPerPage']);
+$page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+$page = max(1, $page); // Ensure page is at least 1
+$page = min($page, max(1, $totalPages)); // Ensure page doesn't exceed total pages
+
+// Get images for current page
+$startIndex = ($page - 1) * $config['imagesPerPage'];
+$pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']);
 ?>
 
 <!DOCTYPE html>
@@ -1144,6 +1176,14 @@
 			transition: all 0.2s ease;
 			font-size: 14px;
 			border: none;
+	        background: linear-gradient(45deg, var(--accent-primary), #ff9f43);
+        	color: #1f1f1f;
+		}
+		
+
+		.modal-button:hover {
+			background: linear-gradient(45deg, #f5b025, #ffa953);
+			transform: translateY(-2px);
 		}
 
 		.modal-button.cancel {
@@ -1293,6 +1333,7 @@
 			display: flex;
 			gap: 10px;
 			margin-bottom: 10px;
+			margin-top: 32px;
 			justify-content: right;
 		}
 
@@ -1868,7 +1909,7 @@
                     </div>
                 </div>
                 <div class="upload-input-group">
-                    <button type="submit" class="upload-button" disabled>Replace Poster</button>
+                    <button type="submit" class="modal-button" disabled>Replace Poster</button>
                 </div>
                 <div class="upload-help">
                     Maximum file size: 5MB<br>
@@ -1886,7 +1927,7 @@
                     <input type="url" name="image_url" class="login-input" placeholder="Enter poster URL..." required>
                 </div>
                 <div class="upload-input-group">
-                    <button type="submit" class="upload-button">Replace Poster</button>
+                    <button type="submit" class="modal-button">Replace Poster</button>
                 </div>
                 <div class="upload-help">
                     Maximum file size: 5MB<br>
