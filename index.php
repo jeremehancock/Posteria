@@ -2122,7 +2122,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
             <button type="button" class="modal-close-btn">×</button>
         </div>
         <div class="modal-body">
-            <p>Are you sure you want to send this poster to Plex?</p>
+            <p>Are you sure you want to replace the Plex poster with this one?</p>
             <p id="plexConfirmFilename" style="margin-top: 10px; font-weight: 500; overflow-wrap: break-word;" data-filename="" data-dirname=""></p>
         </div>
         <div class="modal-actions">
@@ -2644,7 +2644,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
                 
                 <!-- Explanation text -->
                 <div style="margin: 20px 0; padding: 15px; background: rgba(255, 159, 67, 0.1); border: 1px solid var(--accent-primary); border-radius: 6px;">
-                    <p style="margin: 0;">This will export all your Plex posters of the selected type to your Plex server. Only posters with "Plex" in the filename will be processed.</p>
+                    <p style="margin: 0;">This will export all your Plex posters of the selected type to your Plex server. This will overwrite your Plex posters with the ones from Posteria.</p>
                 </div>
                 
                 <div class="export-error" style="display: none; color: var(--danger-color); background: rgba(239, 68, 68, 0.1); border: 1px solid var(--danger-color); padding: 12px; border-radius: 6px; margin-top: 16px;"></div>
@@ -2852,7 +2852,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				                </div>
 				            </div>
 							<div class="gallery-caption" data-full-text="<?php echo htmlspecialchars(pathinfo($image['filename'], PATHINFO_FILENAME)); ?>">
-								<?php echo htmlspecialchars(pathinfo($image['filename'], PATHINFO_FILENAME)); ?>
+    							<?php echo htmlspecialchars(preg_replace('/\s*\[.*?\]\s*/', ' ', pathinfo($image['filename'], PATHINFO_FILENAME))); ?>
 							</div>
 				     	</div>
 				    <?php endforeach; ?>
@@ -6412,7 +6412,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		                    <button type="button" class="modal-close-btn">×</button>
 		                </div>
 		                <div class="modal-body">
-		                    <p>Are you sure you want to import this poster from Plex?</p>
+		                    <p>Are you sure you want to replace this poster with the one from Plex?</p>
 		                    <p id="importFromPlexFilename" style="margin-top: 10px; font-weight: 500; overflow-wrap: break-word;" data-filename="" data-dirname=""></p>
 		                </div>
 		                <div class="modal-actions">
