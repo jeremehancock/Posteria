@@ -55,7 +55,7 @@ function getIntEnvWithFallback($key, $default) {
     return $value !== false ? intval($value) : $default;
 }
 
-// Log function for debugging
+// Log function for debugging - log to a separate file for Jellyfin
 function logDebug($message, $data = null) {
     $logMessage = date('Y-m-d H:i:s') . ": " . $message;
     if ($data !== null) {
@@ -124,21 +124,30 @@ try {
     // Refresh session time
     $_SESSION['login_time'] = time();
 
-    // Helper Functions (reused from jellyfin-import.php with modifications)
+    // Helper function to prepare API headers for Jellyfin
     function getJellyfinHeaders($apiKey) {
+        // Try both authentication methods as Jellyfin sometimes requires different formats
         return [
             'Accept' => 'application/json',
-            'Authorization' => 'MediaBrowser Token="' . $apiKey . '"',
-            'Content-Type' => 'application/json'
+            'X-Emby-Token' => $apiKey,
+            'X-MediaBrowser-Token' => $apiKey,
+            'Authorization' => 'MediaBrowser Token="' . $apiKey . '"'
         ];
     }
 
+    // Generic function to make API requests
     function makeApiRequest($url, $headers, $expectJson = true) {
         global $jellyfin_config;
         
+        // Convert headers array to proper format for curl
+        $headerArray = [];
+        foreach ($headers as $key => $value) {
+            $headerArray[] = $key . ': ' . $value;
+        }
+        
         logDebug("Making API request", [
             'url' => $url,
-            'headers' => $headers,
+            'headers' => $headerArray,
             'expectJson' => $expectJson
         ]);
         
@@ -147,7 +156,7 @@ try {
             CURLOPT_URL => $url,
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_HTTPHEADER => $headerArray,
             CURLOPT_SSL_VERIFYPEER => false,
             CURLOPT_SSL_VERIFYHOST => false,
             CURLOPT_CONNECTTIMEOUT => $jellyfin_config['connect_timeout'] ?? 10,
@@ -193,33 +202,125 @@ try {
         return $response;
     }
 
-    // Get image data from Jellyfin
-    function getJellyfinImageData($serverUrl, $apiKey, $itemId, $imageType = 'Primary') {
-        try {
-            // Jellyfin's image API format with additional parameters
-            $url = rtrim($serverUrl, '/') . "/Items/{$itemId}/Images/{$imageType}?format=jpg&quality=90";
+    // Attempt to directly download image using the server URL and item ID
+    function directImageDownload($serverUrl, $apiKey, $itemId) {
+        // Try various image formats and paths
+        $possiblePaths = [
+            "/Items/{$itemId}/Images/Primary",
+            "/Items/{$itemId}/Images/Primary?format=jpg&quality=90",
+            "/Items/{$itemId}/Images/Primary?api_key={$apiKey}",
+            "/emby/Items/{$itemId}/Images/Primary",
+            "/emby/Items/{$itemId}/Images/Primary?api_key={$apiKey}"
+        ];
+        
+        $headers = getJellyfinHeaders($apiKey);
+        
+        // Try each path until one works
+        foreach ($possiblePaths as $path) {
+            $url = rtrim($serverUrl, '/') . $path;
             
-            $headers = [];
-            foreach (getJellyfinHeaders($apiKey) as $key => $value) {
-                $headers[] = $key . ': ' . $value;
+            try {
+                logDebug("Trying direct image download", ['url' => $url]);
+                
+                // Set up curl for image download
+                $ch = curl_init();
+                
+                // Convert headers to array format
+                $headerArray = [];
+                foreach ($headers as $key => $value) {
+                    $headerArray[] = $key . ': ' . $value;
+                }
+                
+                curl_setopt_array($ch, [
+                    CURLOPT_URL => $url,
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_FOLLOWLOCATION => true,
+                    CURLOPT_HTTPHEADER => $headerArray,
+                    CURLOPT_SSL_VERIFYPEER => false,
+                    CURLOPT_SSL_VERIFYHOST => false,
+                    CURLOPT_CONNECTTIMEOUT => 10,
+                    CURLOPT_TIMEOUT => 30
+                ]);
+                
+                $response = curl_exec($ch);
+                $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                $contentType = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+                $error = curl_error($ch);
+                curl_close($ch);
+                
+                logDebug("Direct image download response", [
+                    'url' => $url,
+                    'http_code' => $httpCode,
+                    'content_type' => $contentType,
+                    'content_length' => strlen($response),
+                    'error' => $error
+                ]);
+                
+                // Check if we got an image response
+                if ($httpCode == 200 && $response !== false && 
+                    (str_starts_with($contentType, 'image/') || strlen($response) > 1000)) {
+                    return ['success' => true, 'data' => $response];
+                }
+            } catch (Exception $e) {
+                logDebug("Error in direct image download: " . $e->getMessage());
+                // Continue to the next path
+                continue;
             }
-            
-            // Pass false to indicate we don't expect JSON for image downloads
-            $imageData = makeApiRequest($url, $headers, false);
-            return ['success' => true, 'data' => $imageData];
-        } catch (Exception $e) {
-            return ['success' => false, 'error' => $e->getMessage()];
         }
+        
+        // If we've tried all paths and none worked
+        return ['success' => false, 'error' => 'Failed to download image from any known Jellyfin path'];
+    }
+
+    // Function to get item metadata from Jellyfin
+    function getJellyfinItemMetadata($serverUrl, $apiKey, $itemId) {
+        // Try different metadata paths
+        $possiblePaths = [
+            "/Items/{$itemId}",
+            "/emby/Items/{$itemId}",
+            "/Items/{$itemId}?api_key={$apiKey}",
+            "/emby/Items/{$itemId}?api_key={$apiKey}"
+        ];
+        
+        $headers = getJellyfinHeaders($apiKey);
+        
+        // Try each path until one works
+        foreach ($possiblePaths as $path) {
+            $url = rtrim($serverUrl, '/') . $path;
+            
+            try {
+                $response = makeApiRequest($url, $headers);
+                $metadata = json_decode($response, true);
+                
+                // Check if we got valid metadata
+                if (isset($metadata['Name'])) {
+                    return ['success' => true, 'data' => $metadata];
+                }
+            } catch (Exception $e) {
+                logDebug("Error fetching metadata: " . $e->getMessage());
+                // Continue to the next path
+                continue;
+            }
+        }
+        
+        // If we've tried all paths and none worked
+        return ['success' => false, 'error' => 'Failed to retrieve item metadata from Jellyfin'];
     }
 
     // Single poster import from Jellyfin
     if (isset($_POST['action']) && $_POST['action'] === 'import_from_jellyfin') {
-        if (!isset($_POST['filename'])) {
+        if (!isset($_POST['filename']) || !isset($_POST['directory'])) {
             echo json_encode(['success' => false, 'error' => 'Missing required parameters']);
             exit;
         }
         
         $filename = $_POST['filename'];
+        $directory = $_POST['directory'];
+        
+        logDebug("Processing import request", [
+            'filename' => $filename, 
+            'directory' => $directory
+        ]);
         
         // Extract the itemId from the filename
         // Format is typically "Title [itemId] Jellyfin.jpg"
@@ -230,62 +331,62 @@ try {
         }
         
         $itemId = $matches[1];
-        logDebug("Extracted itemId for import", ['itemId' => $itemId, 'filename' => $filename]);
+        logDebug("Extracted itemId for import", ['itemId' => $itemId]);
         
-        // Determine the media type based on filename or directory
-        $mediaType = isset($_POST['directory']) ? $_POST['directory'] : '';
+        // Define directories based on your existing code
+        $directories = [
+            'movies' => '../posters/movies/',
+            'tv-shows' => '../posters/tv-shows/',
+            'tv-seasons' => '../posters/tv-seasons/',
+            'collections' => '../posters/collections/'
+        ];
         
-        // Jellyfin server URL
-        $jellyfinServerUrl = rtrim($jellyfin_config['server_url'], '/');
-        
-        // Headers for the Jellyfin API request
-        $headers = [];
-        foreach (getJellyfinHeaders($jellyfin_config['api_key']) as $key => $value) {
-            $headers[] = $key . ': ' . $value;
+        // Make sure we have a valid directory
+        if (!isset($directories[$directory])) {
+            echo json_encode(['success' => false, 'error' => 'Invalid directory type']);
+            exit;
         }
         
         try {
-            // Get the item metadata to verify it exists
-            $metadataUrl = "{$jellyfinServerUrl}/Items/{$itemId}";
-            $response = makeApiRequest($metadataUrl, $headers);
-            $metadata = json_decode($response, true);
+            // First try direct image download - simplest approach
+            $imageResult = directImageDownload(
+                $jellyfin_config['server_url'], 
+                $jellyfin_config['api_key'], 
+                $itemId
+            );
             
-            // Check if the item has an image
-            $imageType = 'Primary'; // Default for most items
-            
-            // For collections, we might need to use a different image type
-            if ($mediaType === 'collections' && !isset($metadata['ImageTags']['Primary'])) {
-                if (isset($metadata['ImageTags']['Thumb'])) {
-                    $imageType = 'Thumb';
-                } elseif (isset($metadata['ImageTags']['Backdrop'])) {
-                    $imageType = 'Backdrop';
+            // If direct image download failed, try getting metadata first
+            if (!$imageResult['success']) {
+                logDebug("Direct image download failed, trying metadata approach");
+                
+                $metadataResult = getJellyfinItemMetadata(
+                    $jellyfin_config['server_url'], 
+                    $jellyfin_config['api_key'], 
+                    $itemId
+                );
+                
+                if (!$metadataResult['success']) {
+                    echo json_encode(['success' => false, 'error' => 'Failed to retrieve item information from Jellyfin']);
+                    exit;
+                }
+                
+                // Try again with image endpoint now that we've confirmed the item exists
+                $imageResult = directImageDownload(
+                    $jellyfin_config['server_url'], 
+                    $jellyfin_config['api_key'], 
+                    $itemId
+                );
+                
+                if (!$imageResult['success']) {
+                    echo json_encode(['success' => false, 'error' => 'Failed to download poster from Jellyfin even after confirming item exists']);
+                    exit;
                 }
             }
             
-            // Get the poster image data
-            $imageResult = getJellyfinImageData($jellyfinServerUrl, $jellyfin_config['api_key'], $itemId, $imageType);
-            
-            if (!$imageResult['success']) {
-                echo json_encode(['success' => false, 'error' => 'Failed to download poster from Jellyfin: ' . $imageResult['error']]);
-                exit;
-            }
-            
-            // Define directories based on your existing code
-            $directories = [
-                'movies' => '../posters/movies/',
-                'tv-shows' => '../posters/tv-shows/',
-                'tv-seasons' => '../posters/tv-seasons/',
-                'collections' => '../posters/collections/'
-            ];
-            
-            // Make sure we have a valid directory
-            if (!isset($directories[$mediaType])) {
-                echo json_encode(['success' => false, 'error' => 'Invalid directory type']);
-                exit;
-            }
-            
             // Generate the target path (use the existing filename)
-            $targetPath = $directories[$mediaType] . $filename;
+            $targetPath = $directories[$directory] . $filename;
+            
+            logDebug("Saving image to path", ['targetPath' => $targetPath]);
             
             // Save the image file
             if (file_put_contents($targetPath, $imageResult['data'])) {
@@ -296,6 +397,7 @@ try {
             }
             
         } catch (Exception $e) {
+            logDebug("Error during import", ['error' => $e->getMessage()]);
             echo json_encode(['success' => false, 'error' => 'Error importing from Jellyfin: ' . $e->getMessage()]);
         }
         

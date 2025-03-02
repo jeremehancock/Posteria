@@ -4510,6 +4510,274 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		    });
 		}
 		
+		// =========== JELLYFIN GET FROM ===========
+		
+		// Create Import from Jellyfin Modal if it doesn't exist
+		function createImportFromJellyfinModal() {
+			if (!document.getElementById('importFromJellyfinModal')) {
+				const modalHTML = `
+				<div id="importFromJellyfinModal" class="modal">
+				    <div class="modal-content">
+				        <div class="modal-header">
+				            <h3>Get from Jellyfin</h3>
+				            <button type="button" class="modal-close-btn">×</button>
+				        </div>
+				        <div class="modal-body">
+				            <p>Are you sure you want to replace this poster with the one from Jellyfin?</p>
+				            <p id="importFromJellyfinFilename" style="margin-top: 10px; font-weight: 500; overflow-wrap: break-word; display: none;" data-filename="" data-dirname=""></p>
+				        </div>
+				        <div class="modal-actions">
+				            <button type="button" class="modal-button cancel" id="cancelImportFromJellyfin">Cancel</button>
+				            <button type="button" class="modal-button import-from-jellyfin-confirm">Get</button>
+				        </div>
+				    </div>
+				</div>
+				`;
+				
+				// Append the modal HTML to the body
+				document.body.insertAdjacentHTML('beforeend', modalHTML);
+			}
+		}
+
+		// Initialize Import from Jellyfin feature
+		function initImportFromJellyfinFeature() {
+			const modal = document.getElementById('importFromJellyfinModal');
+			if (!modal) {
+				console.error("Import from Jellyfin modal not found");
+				return;
+			}
+			
+			// Get elements
+			const closeButton = modal.querySelector('.modal-close-btn');
+			const cancelButton = document.getElementById('cancelImportFromJellyfin');
+			const confirmButton = modal.querySelector('.import-from-jellyfin-confirm');
+			
+			// Close button handler
+			if (closeButton) {
+				closeButton.addEventListener('click', function() {
+				    hideModal(modal);
+				});
+			}
+			
+			// Cancel button handler
+			if (cancelButton) {
+				cancelButton.addEventListener('click', function() {
+				    hideModal(modal);
+				});
+			}
+			
+			// Confirm button handler
+			if (confirmButton) {
+				confirmButton.addEventListener('click', function() {
+				    const filenameElement = document.getElementById('importFromJellyfinFilename');
+				    const filename = filenameElement.getAttribute('data-filename');
+				    const directory = filenameElement.getAttribute('data-dirname');
+				    
+				    // Hide the modal
+				    hideModal(modal);
+				    
+				    // Import the poster from Jellyfin
+				    importFromJellyfin(filename, directory);
+				});
+			}
+			
+			// Click outside to close
+			modal.addEventListener('click', function(e) {
+				if (e.target === modal) {
+				    hideModal(modal);
+				}
+			});
+			
+			// Escape key to close
+			document.addEventListener('keydown', function(e) {
+				if (e.key === 'Escape' && modal.classList.contains('show')) {
+				    hideModal(modal);
+				}
+			});
+		}
+
+		// Import from Jellyfin handler function
+		function importFromJellyfinHandler(e) {
+			e.preventDefault();
+			const filename = this.getAttribute('data-filename');
+			const directory = this.getAttribute('data-dirname');
+			
+			// Store the data in the modal
+			const modal = document.getElementById('importFromJellyfinModal');
+			const filenameElement = document.getElementById('importFromJellyfinFilename');
+			
+			filenameElement.textContent = filename;
+			filenameElement.setAttribute('data-filename', filename);
+			filenameElement.setAttribute('data-dirname', directory);
+			
+			// Show the modal
+			showModal(modal);
+		}
+
+		// Function to send the import request to the server
+		async function importFromJellyfin(filename, directory) {
+			// Show a loading notification
+			const notification = showImportingJellyfinNotification();
+			
+			try {
+				const formData = new FormData();
+				formData.append('action', 'import_from_jellyfin');
+				formData.append('filename', filename);
+				formData.append('directory', directory);
+				
+				const response = await fetch('./include/get-from-jellyfin.php', {
+				    method: 'POST',
+				    body: formData
+				});
+				
+				const data = await response.json();
+				
+				if (data.success) {
+				    // Show success notification
+				    showImportJellyfinSuccessNotification();
+				    
+				    // Refresh the image to show the updated version
+				    refreshImage(filename, directory);
+				} else {
+				    // Show error notification
+				    showImportJellyfinErrorNotification(data.error || 'Failed to import poster from Jellyfin');
+				}
+			} catch (error) {
+				// Show error notification
+				showImportJellyfinErrorNotification('Error importing poster from Jellyfin: ' + error.message);
+			} finally {
+				// Hide the sending notification
+				notification.remove();
+			}
+		}
+
+		// Function to show importing notification for Jellyfin
+		function showImportingJellyfinNotification() {
+			const notification = document.createElement('div');
+			notification.className = 'plex-notification plex-sending';
+			notification.innerHTML = `
+				<div class="plex-notification-content">
+				    <div class="plex-spinner"></div>
+				    <span>Importing from Jellyfin...</span>
+				</div>
+			`;
+			document.body.appendChild(notification);
+			
+			// Force reflow to trigger animation
+			notification.offsetHeight;
+			notification.classList.add('show');
+			
+			return notification;
+		}
+
+		// Function to show success notification for Jellyfin imports
+		function showImportJellyfinSuccessNotification() {
+			const notification = document.createElement('div');
+			notification.className = 'plex-notification plex-success';
+			notification.innerHTML = `
+				<div class="plex-notification-content">
+				    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+				        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+				        <polyline points="22 4 12 14.01 9 11.01"></polyline>
+				    </svg>
+				    <span>Imported from Jellyfin successfully!</span>
+				</div>
+			`;
+			document.body.appendChild(notification);
+			
+			// Force reflow to trigger animation
+			notification.offsetHeight;
+			notification.classList.add('show');
+			
+			// Auto-remove after 3 seconds
+			setTimeout(() => {
+				notification.classList.remove('show');
+				setTimeout(() => {
+				    notification.remove();
+				}, 300); // Match transition duration
+			}, 3000);
+		}
+
+		// Function to show error notification for Jellyfin imports
+		function showImportJellyfinErrorNotification(message) {
+			const notification = document.createElement('div');
+			notification.className = 'plex-notification plex-error';
+			notification.innerHTML = `
+				<div class="plex-notification-content">
+				    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+				        <circle cx="12" cy="12" r="10"></circle>
+				        <line x1="12" y1="8" x2="12" y2="12"></line>
+				        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+				    </svg>
+				    <span>${message}</span>
+				</div>
+			`;
+			document.body.appendChild(notification);
+			
+			// Force reflow to trigger animation
+			notification.offsetHeight;
+			notification.classList.add('show');
+			
+			// Auto-remove after 5 seconds
+			setTimeout(() => {
+				notification.classList.remove('show');
+				setTimeout(() => {
+				    notification.remove();
+				}, 300); // Match transition duration
+			}, 5000);
+		}
+
+		// Initialize Jellyfin Import buttons
+		function initializeImportFromJellyfinButtons() {
+			// Add Import from Jellyfin button to appropriate gallery items
+			document.querySelectorAll('.gallery-item').forEach(item => {
+				const filenameElement = item.querySelector('.gallery-caption');
+				const overlayActions = item.querySelector('.image-overlay-actions');
+				
+				if (filenameElement && overlayActions) {
+				    const filename = filenameElement.getAttribute('data-full-text');
+				    
+				    // Only show the Import from Jellyfin button for files with "Jellyfin" in the name
+				    if (isJellyfinFile(filename)) {
+				        // Check if button already exists to avoid duplicates
+				        if (!overlayActions.querySelector('.import-from-jellyfin-btn')) {
+				            // Get the delete button as reference
+				            const deleteButton = overlayActions.querySelector('.delete-btn');
+				            
+				            if (deleteButton) {
+				                const directoryValue = deleteButton.getAttribute('data-dirname');
+				                const filenameValue = deleteButton.getAttribute('data-filename');
+				                
+				                const importFromJellyfinButton = document.createElement('button');
+				                importFromJellyfinButton.className = 'overlay-action-button import-from-jellyfin-btn';
+				                importFromJellyfinButton.setAttribute('data-filename', filenameValue);
+				                importFromJellyfinButton.setAttribute('data-dirname', directoryValue);
+				                importFromJellyfinButton.innerHTML = `
+				                    <svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+				                        <path d="M15 3h-4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4"></path>
+				                        <polyline points="8 7 3 12 8 17"></polyline>
+				                        <line x1="3" y1="12" x2="15" y2="12"></line>
+				                    </svg>
+				                    Get from Jellyfin
+				                `;
+				                
+				                // Add event listener
+				                importFromJellyfinButton.addEventListener('click', importFromJellyfinHandler);
+				                
+				                // Insert the button before the delete button
+				                deleteButton.parentNode.insertBefore(importFromJellyfinButton, deleteButton);
+				            }
+				        }
+				    }
+				}
+			});
+		}
+
+		// Function to check if a filename has "Jellyfin" in it
+		function isJellyfinFile(filename) {
+			return filename.toLowerCase().includes('**jellyfin**');
+		}
+		
 		// =========== JELLYFIN IMPORT MODAL ===========
 		
 		// Check if Jellyfin Import Modal exists
@@ -6702,6 +6970,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		    initChangePosters();
 		    initializeSendToPlexButtons();
 		    initializeImportFromPlexButtons();
+		    initializeImportFromJellyfinButtons();
 		}
 		
 		// Debounce function for resize handling
@@ -7277,7 +7546,10 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		initPlexConfirmModal();
 		createImportFromPlexModal();
 		initImportFromPlexFeature();
+		createImportFromJellyfinModal();
+		initImportFromJellyfinFeature();
 		hideNonOrphanedDeleteButtons();
+		
 		
 		// Call truncation after images load and on resize
 		document.querySelectorAll('.gallery-image').forEach(img => {
