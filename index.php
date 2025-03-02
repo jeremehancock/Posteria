@@ -2393,7 +2393,9 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		                    </select>
 		                </div>
 		            </div>
-		            
+					<div style="margin: 20px 0; padding: 15px; background: rgba(255, 159, 67, 0.1); border: 1px solid var(--accent-primary); border-radius: 6px;">
+						<p style="margin: 0;">This will replace all posters in your selection with the ones from Plex.</p>
+					</div>
 		            <div class="import-error" style="display: none; color: var(--danger-color); background: rgba(239, 68, 68, 0.1); border: 1px solid var(--danger-color); padding: 12px; border-radius: 6px; margin-top: 16px;"></div>
 		            
 		            <div class="modal-actions" style="margin-top: 32px; justify-content: end;">
@@ -2544,7 +2546,9 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			                </select>
 			            </div>
 			        </div>
-			        
+					<div style="margin: 20px 0; padding: 15px; background: rgba(255, 159, 67, 0.1); border: 1px solid var(--accent-primary); border-radius: 6px;">
+						<p style="margin: 0;">This will replace all posters in your selection with the ones from Jellyfin.</p>
+					</div>
 			        <div class="jellyfin-import-error" style="display: none; color: var(--danger-color); background: rgba(239, 68, 68, 0.1); border: 1px solid var(--danger-color); padding: 12px; border-radius: 6px; margin-top: 16px;"></div>
 			        
 			        <div class="modal-actions" style="margin-top: 32px; justify-content: end;">
@@ -3980,7 +3984,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		            }
 		            
 		            // Show file handling step
-		            fileHandlingStep.style.display = 'block';
+		            fileHandlingStep.style.display = 'none';
 		        } else {
 		            // If user clears the selection, reset the form
 		            librarySelect.innerHTML = '<option value="">Select a content type first...</option>';
@@ -4926,7 +4930,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		            }
 		            
 		            // Show file handling step
-		            jellyfinFileHandlingStep.style.display = 'block';
+		            jellyfinFileHandlingStep.style.display = 'none';
 		        } else {
 		            // If user clears the selection, reset the form
 		            jellyfinLibrary.innerHTML = '<option value="">Select a content type first...</option>';
