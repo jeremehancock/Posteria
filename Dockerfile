@@ -36,6 +36,7 @@ RUN mkdir -p /var/www/html/posters/movies \
 # Copy the application files
 COPY index.php /var/www/html/
 COPY include/plex-import.php /var/www/html/include/
+COPY include/plex-export.php /var/www/html/include/
 COPY include/send-to-plex.php /var/www/html/include/
 COPY include/get-from-plex.php /var/www/html/include/
 COPY include/change-poster.php /var/www/html/include/
