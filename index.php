@@ -629,8 +629,11 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 	<meta name="apple-mobile-web-app-title" content="Posteria" />
 	<link rel="manifest" href="./assets/site.webmanifest" />
     <style>
-		/* Theme Variables */
+		/* ==========================================================================
+		   1. Theme Variables
+		   ========================================================================== */
 		:root {
+			/* Colors */
 			--bg-primary: #1f1f1f;
 			--bg-secondary: #282828;
 			--bg-tertiary: #333333;
@@ -644,11 +647,15 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			--success-color: #2ed573;
 			--danger-color: #ff4757;
 			--action-bg: rgba(0, 0, 0, 0.85);
+			
+			/* Shadows */
 			--shadow-sm: 0 4px 6px rgba(0, 0, 0, 0.4);
 			--shadow-md: 0 6px 12px rgba(0, 0, 0, 0.5);
 		}
 
-		/* Base Styles */
+		/* ==========================================================================
+		   2. Base & Reset Styles
+		   ========================================================================== */
 		* {
 			margin: 0;
 			padding: 0;
@@ -662,7 +669,40 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			scrollbar-width: thin;
 		}
 
-		/* Custom Scrollbar */
+		body {
+			font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+			line-height: 1.6;
+			color: var(--text-primary);
+			background-color: var(--bg-primary);
+			padding: 20px;
+			background-image: linear-gradient(to bottom, #1a1a1a, #1f1f1f);
+			min-height: 100vh;
+		}
+
+		/* ==========================================================================
+		   3. Layout & Container
+		   ========================================================================== */
+		.container {
+			max-width: 1200px;
+			margin: 0 auto;
+			padding-bottom: 10px;
+			height: 100%;
+		}
+
+		/* ==========================================================================
+		   4. Typography
+		   ========================================================================== */
+		h1 {
+			font-weight: 600;
+			letter-spacing: -0.025em;
+			color: var(--text-primary);
+			font-size: 3rem;
+			margin-bottom: 15px;
+		}
+
+		/* ==========================================================================
+		   5. Custom Scrollbar
+		   ========================================================================== */
 		::-webkit-scrollbar {
 			width: 12px;
 			height: 12px;
@@ -691,64 +731,10 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			background: var(--bg-primary);
 		}
 
-		body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-			line-height: 1.6;
-			color: var(--text-primary);
-			background-color: var(--bg-primary);
-			padding: 20px;
-			background-image: linear-gradient(to bottom, #1a1a1a, #1f1f1f);
-			min-height: 100vh;
-
-		.container {
-			max-width: 1200px;
-			margin: 0 auto;
-			padding-bottom: 10px;
-			height: 100%;
-		}
-
-		/* Header Styles */
-		header {
-			text-align: center;
-			margin-bottom: 40px;
-		}
-
-		.header-content {
-			display: flex;
-			justify-content: space-between;
-			align-items: center;
-		}
-
-		h1 {
-			font-weight: 600;
-			letter-spacing: -0.025em;
-			color: var(--text-primary);
-			font-size: 3rem;
-			margin-bottom: 15px;
-		}
-
-		.site-name {
-			background: linear-gradient(45deg, var(--accent-primary), #ff9f43);
-			-webkit-background-clip: text;
-			-webkit-text-fill-color: transparent;
-			display: flex;
-			align-items: center;
-
-		}
-
-		.site-name svg {
-			flex-shrink: 0; /* Prevents SVG from shrinking */
-			height: 80px;
-		}
-
-		/* Auth Actions */
-		.auth-actions {
-			display: flex;
-			gap: 12px;
-			align-items: center;
-		}
-
-		/* Button Styles */
+		/* ==========================================================================
+		   6. Buttons
+		   ========================================================================== */
+		/* General Button Styles */
 		.login-trigger-button,
 		.upload-trigger-button,
 		.logout-button {
@@ -777,28 +763,214 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		}
 
 		.logout-button {
-			background: var(--bg-tertiary);  /* #333333 */
-			color: var(--text-secondary);    /* #999999 */
+			background: var(--bg-tertiary);
+			color: var(--text-secondary);
 			height: 44px;
-			border: 1px solid var(--border-color);  /* #3b3b3b */
+			border: 1px solid var(--border-color);
 		}
 
 		.logout-button:hover {
 			background: #3d3d3d;
-			color: var(--text-primary);     /* #ffffff */
-			border-color: var(--text-secondary);  /* #999999 */
+			color: var(--text-primary);
+			border-color: var(--text-secondary);
 			transform: translateY(-2px);
+		}
+
+		/* Filter Buttons */
+		.filter-button {
+			padding: 8px 16px;
+			border: none;
+			border-radius: 6px;
+			background: transparent;
+			color: var(--text-primary);
+			cursor: pointer;
+			transition: all 0.2s;
+			font-weight: 500;
+			text-decoration: none;
+		}
+
+		.filter-button:hover {
+			background: var(--bg-tertiary);
+		}
+
+		.filter-button.active {
+			background: linear-gradient(45deg, var(--accent-primary), #ff9f43);
+			color: #1f1f1f;
+			font-weight: 600;
+		}
+
+		/* Overlay Action Buttons */
+		.overlay-action-button {
+			background: linear-gradient(45deg, var(--accent-primary), #ff9f43);
+			color: #1f1f1f;
+			padding: 10px 16px;
+			border-radius: 6px;
+			cursor: pointer;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			font-size: 14px;
+			font-weight: 600;
+			transition: all 0.2s;
+			box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+			text-decoration: none;
+			width: 70%;
+			margin: 0 auto;
+			border: none;
+		}
+
+		.overlay-action-button:hover {
+			background: linear-gradient(45deg, #f5b025, #ffa953);
+			transform: translateY(-2px);
+		}
+
+		/* Modal Buttons */
+		.modal-button {
+			padding: 12px 24px;
+			border-radius: 6px;
+			font-weight: 600;
+			cursor: pointer;
+			transition: all 0.2s ease;
+			font-size: 14px;
+			border: none;
+			background: linear-gradient(45deg, var(--accent-primary), #ff9f43);
+			color: #1f1f1f;
+		}
+
+		.modal-button:hover {
+			background: linear-gradient(45deg, #f5b025, #ffa953);
+			transform: translateY(-2px);
+		}
+
+		.modal-button.cancel {
+			background: var(--bg-secondary);
+			color: var(--text-primary);
+			border: 1px solid var(--border-color);
+		}
+
+		.modal-button.cancel:hover {
+			background: var(--bg-tertiary);
+			border-color: var(--accent-primary);
+			transform: translateY(-1px);
+		}
+
+		.modal-button.delete,
+		.delete-btn {
+			background: #8B0000;
+			color: var(--text-primary);
+			border: 1px solid #a83232;
+		}
+
+		.modal-button.delete:hover,
+		.delete-btn:hover {
+			background: #a31c1c;
+			transform: translateY(-1px);
+			box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+			border-color: #c73e3e;
+		}
+
+		/* Login Button */
+		.login-button {
+			width: 100%;
+			padding: 12px 20px;
+			background: linear-gradient(45deg, var(--accent-primary), #ff9f43);
+			color: #1f1f1f;
+			border: none;
+			border-radius: 6px;
+			cursor: pointer;
+			font-weight: 600;
+			transition: all 0.2s ease;
+			margin-top: 8px;
+		}
+
+		.login-button:hover {
+			background: linear-gradient(45deg, #f5b025, #ffa953);
+			transform: translateY(-1px);
+			box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+		}
+
+		/* Upload Button */
+		.upload-button {
+			padding: 10px 20px;
+			background: linear-gradient(45deg, var(--accent-primary), #ff9f43);
+			color: #1f1f1f;
+			border: none;
+			border-radius: 6px;
+			cursor: pointer;
+			transition: all 0.2s ease;
+			white-space: nowrap;
+			min-width: 120px;
+			font-weight: 600;
+			margin-top: 20px;
+		}
+
+		.upload-button:hover {
+			background: linear-gradient(45deg, #f5b025, #ffa953);
+			transform: translateY(-1px);
 		}
 
 		/* Icon Styles */
 		.login-icon,
 		.upload-icon,
-		.logout-icon {
+		.logout-icon,
+		.image-action-icon {
 			width: 20px;
 			height: 20px;
 		}
 
-		/* Search Styles */
+		.image-action-icon {
+			margin-right: 8px;
+		}
+
+		/* Plex Buttons */
+		.send-to-plex-confirm,
+		.import-from-plex-confirm {
+			background: linear-gradient(45deg, var(--accent-primary), #ff9f43);
+			color: #1f1f1f;
+		}
+
+		.send-to-plex-confirm:hover,
+		.import-from-plex-confirm:hover {
+			background: linear-gradient(45deg, #f5b025, #ffa953);
+			transform: translateY(-2px);
+		}
+
+		/* ==========================================================================
+		   7. Header
+		   ========================================================================== */
+		header {
+			text-align: center;
+			margin-bottom: 40px;
+		}
+
+		.header-content {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+		}
+
+		.site-name {
+			background: linear-gradient(45deg, var(--accent-primary), #ff9f43);
+			-webkit-background-clip: text;
+			-webkit-text-fill-color: transparent;
+			display: flex;
+			align-items: center;
+		}
+
+		.site-name svg {
+			flex-shrink: 0;
+			height: 80px;
+		}
+
+		.auth-actions {
+			display: flex;
+			gap: 12px;
+			align-items: center;
+		}
+
+		/* ==========================================================================
+		   8. Search
+		   ========================================================================== */
 		.search-container {
 			margin-bottom: 40px;
 			text-align: center;
@@ -843,7 +1015,9 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			background: linear-gradient(45deg, #f5b025, #ffa953);
 		}
 
-		/* Filter Styles */
+		/* ==========================================================================
+		   9. Filter & Gallery Stats
+		   ========================================================================== */
 		.filter-container {
 			margin: 20px 0 30px;
 			text-align: center;
@@ -858,29 +1032,6 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			border: 1px solid var(--border-color);
 		}
 
-		.filter-button {
-			padding: 8px 16px;
-			border: none;
-			border-radius: 6px;
-			background: transparent;
-			color: var(--text-primary);
-			cursor: pointer;
-			transition: all 0.2s;
-			font-weight: 500;
-			text-decoration: none;
-		}
-
-		.filter-button:hover {
-			background: var(--bg-tertiary);
-		}
-
-		.filter-button.active {
-			background: linear-gradient(45deg, var(--accent-primary), #ff9f43);
-			color: #1f1f1f;
-			font-weight: 600;
-		}
-
-		/* Gallery Stats */
 		.gallery-stats {
 			text-align: center;
 			margin-bottom: 30px;
@@ -900,7 +1051,9 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			text-decoration: underline;
 		}
 
-		/* Gallery Grid */
+		/* ==========================================================================
+		   10. Gallery Grid
+		   ========================================================================== */
 		.gallery {
 			display: grid;
 			grid-template-columns: repeat(4, minmax(200px, 1fr));
@@ -925,23 +1078,6 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			border-color: var(--accent-primary);
 		}
 
-		@media (hover: none) {
-			.gallery-item:hover {
-				transform: none;
-				box-shadow: none;
-				border: none;
-				border-color: unset;
-			}
-			
-			.gallery-image-container:hover .gallery-image {
-				transform: none;
-			}
-			.overlay-action-button:hover {
-				background: linear-gradient(45deg, #f5b025, #ffa953);
-				transform: none;
-			}
-		}
-
 		/* Gallery Image Styles */
 		.gallery-image-container {
 			position: relative;
@@ -950,7 +1086,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			display: flex;
 			align-items: center;
 			justify-content: center;
-			aspect-ratio: 2/3;  /* Standard movie poster ratio */
+			aspect-ratio: 2/3;
 			width: 100%;
 			background: var(--bg-tertiary);
 		}
@@ -958,7 +1094,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		.gallery-image {
 			width: 100%;
 			height: 100%;
-			object-fit: cover; /* Changed from cover to contain */
+			object-fit: cover;
 			display: block;
 			transition: transform 0.5s ease, opacity 0.3s ease;
 			opacity: 0;
@@ -990,21 +1126,6 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 
 		.gallery-image-placeholder.hidden {
 			opacity: 0;
-		}
-
-		/* Loading Spinner */
-		.loading-spinner {
-			width: 40px;
-			height: 40px;
-			border-radius: 50%;
-			border: 4px solid var(--text-secondary);
-			border-top-color: var(--accent-primary);
-			animation: spin 1s infinite linear;
-		}
-
-		@keyframes spin {
-			0% { transform: rotate(0deg); }
-			100% { transform: rotate(360deg); }
 		}
 
 		/* Image Caption */
@@ -1043,7 +1164,6 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			right: 0;
 			bottom: 0;
 			display: flex;
-
 			justify-content: center;
 			align-items: center;
 			background: var(--action-bg);
@@ -1065,37 +1185,43 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			opacity: 1;
 		}
 
-		.overlay-action-button {
-			background: linear-gradient(45deg, var(--accent-primary), #ff9f43);
-			color: #1f1f1f;
-			padding: 10px 16px;
-			border-radius: 6px;
-			cursor: pointer;
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			font-size: 14px;
+		/* No Results */
+		.no-results {
+			text-align: center;
+			padding: 40px 20px;
+			background: var(--bg-secondary);
+			border-radius: 12px;
+			margin: 20px 0;
+			width: 100%;
+			border: 1px solid var(--border-color);
+		}
+
+		.no-results h2 {
+			color: var(--text-primary);
+			font-size: 1.5rem;
+			margin-bottom: 16px;
 			font-weight: 600;
-			transition: all 0.2s;
-			box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+		}
+
+		.no-results p {
+			color: var(--text-secondary);
+			margin-bottom: 12px;
+		}
+
+		.no-results a {
+			color: var(--accent-primary);
 			text-decoration: none;
-			width: 70%;
-			margin: 0 auto;
-			border: none;
+			font-weight: 500;
 		}
 
-		.overlay-action-button:hover {
-			background: linear-gradient(45deg, #f5b025, #ffa953);
-			transform: translateY(-2px);
+		.no-results a:hover {
+			color: var(--accent-hover);
+			text-decoration: underline;
 		}
 
-		.image-action-icon {
-			margin-right: 8px;
-			width: 16px;
-			height: 16px;
-		}
-
-		/* Modal Styles */
+		/* ==========================================================================
+		   11. Modal Components
+		   ========================================================================== */
 		.modal {
 			display: none;
 			position: fixed;
@@ -1168,121 +1294,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			margin-top: 20px;
 		}
 
-		.modal-button {
-			padding: 12px 24px;
-			border-radius: 6px;
-			font-weight: 600;
-			cursor: pointer;
-			transition: all 0.2s ease;
-			font-size: 14px;
-			border: none;
-	        background: linear-gradient(45deg, var(--accent-primary), #ff9f43);
-        	color: #1f1f1f;
-		}
-		
-
-		.modal-button:hover {
-			background: linear-gradient(45deg, #f5b025, #ffa953);
-			transform: translateY(-2px);
-		}
-
-		.modal-button.cancel {
-			background: var(--bg-secondary);
-			color: var(--text-primary);
-			border: 1px solid var(--border-color);
-		}
-
-		.modal-button.cancel:hover {
-			background: var(--bg-tertiary);
-			border-color: var(--accent-primary);
-			transform: translateY(-1px);
-		}
-
-		.modal-button.delete {
-			background: #8B0000;
-			color: var(--text-primary);         /* #ffffff */
-			border: 1px solid #a83232;
-		}
-
-		.modal-button.delete:hover {
-			background: #a31c1c;
-			transform: translateY(-1px);
-			box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-			border-color: #c73e3e;
-		}
-
-		.delete-btn {
-			background: #8B0000;
-			color: var(--text-primary);         /* #ffffff */
-			border: 1px solid #a83232;
-		}
-
-		.delete-btn:hover {
-			background: #a31c1c;
-			transform: translateY(-1px);
-			box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-			border-color: #c73e3e;
-		}
-
-		/* Login Form Styles */
-		.login-container {
-			max-width: 400px;
-			margin: 40px auto;
-			padding: 24px;
-			background: var(--card-bg);
-			border-radius: 12px;
-			box-shadow: var(--shadow-md);
-		}
-
-		.login-form {
-			display: flex;
-			flex-direction: column;
-			gap: 16px;
-		}
-
-		.login-input {
-			padding: 12px 16px;
-			background: var(--bg-secondary);
-			border: 1px solid var(--border-color);
-			border-radius: 6px;
-			color: var(--text-primary);
-			width: 100%;
-		}
-
-		/* Style for select elements using login-input class */
-		select.login-input {
-			padding-right: 36px; /* More space for the arrow */
-			appearance: none; /* Remove default arrow */
-			background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23999999' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
-			background-repeat: no-repeat;
-			background-position: right 8px center;
-			background-size: 16px;
-			cursor: pointer;
-		}
-
-		.login-button {
-			width: 100%;
-			padding: 12px 20px;
-			background: linear-gradient(45deg, var(--accent-primary), #ff9f43);
-			color: #1f1f1f;
-			border: none;
-			border-radius: 6px;
-			cursor: pointer;
-			font-weight: 600;
-			transition: all 0.2s ease;
-			margin-top: 8px;
-		}
-
-		.login-button:hover {
-			background: linear-gradient(45deg, #f5b025, #ffa953);
-			transform: translateY(-1px);
-			box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-		}
-
-		/* Error Messages */
-		.login-error,
-
-		/* Upload Form Styles */
+		/* Upload Modal */
 		.upload-modal .modal-content {
 			max-width: 600px;
 			padding: 0;
@@ -1320,6 +1332,52 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			font-weight: 600;
 		}
 
+		/* Jellyfin Import Modal */
+		#jellyfinImportModal .modal-content,
+		#jellyfinErrorModal .modal-content {
+			max-width: 600px;
+		}
+
+		/* ==========================================================================
+		   12. Form Components
+		   ========================================================================== */
+		/* Login Form Styles */
+		.login-container {
+			max-width: 400px;
+			margin: 40px auto;
+			padding: 24px;
+			background: var(--card-bg);
+			border-radius: 12px;
+			box-shadow: var(--shadow-md);
+		}
+
+		.login-form {
+			display: flex;
+			flex-direction: column;
+			gap: 16px;
+		}
+
+		.login-input {
+			padding: 12px 16px;
+			background: var(--bg-secondary);
+			border: 1px solid var(--border-color);
+			border-radius: 6px;
+			color: var(--text-primary);
+			width: 100%;
+		}
+
+		/* Style for select elements using login-input class */
+		select.login-input {
+			padding-right: 36px;
+			appearance: none;
+			background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23999999' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+			background-repeat: no-repeat;
+			background-position: right 8px center;
+			background-size: 16px;
+			cursor: pointer;
+		}
+
+		/* Upload Form */
 		.upload-form {
 			display: none;
 			margin-bottom: 0;
@@ -1384,26 +1442,6 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			text-overflow: ellipsis;
 		}
 
-		/* Upload Button */
-		.upload-button {
-			padding: 10px 20px;
-			background: linear-gradient(45deg, var(--accent-primary), #ff9f43);
-			color: #1f1f1f;
-			border: none;
-			border-radius: 6px;
-			cursor: pointer;
-			transition: all 0.2s ease;
-			white-space: nowrap;
-			min-width: 120px;
-			font-weight: 600;
-			margin-top: 20px;
-		}
-
-		.upload-button:hover {
-			background: linear-gradient(45deg, #f5b025, #ffa953);
-			transform: translateY(-1px);
-		}
-
 		/* Upload Messages */
 		.upload-message {
 			margin: 20px 24px 0;
@@ -1424,53 +1462,9 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			color: var(--danger-color);
 		}
 
-		/* Tooltip Styles */
-		.gallery-caption.has-tooltip {
-			cursor: help;
-		}
-
-		.gallery-caption.has-tooltip::after {
-			content: attr(data-tooltip);
-			visibility: hidden;
-			opacity: 0;
-			position: absolute;
-			bottom: 125%;
-			left: 50%;
-			transform: translateX(-50%);
-			background: var(--bg-tertiary);
-			color: var(--text-primary);
-			padding: 8px 12px;
-			border-radius: 6px;
-			font-size: 14px;
-			white-space: nowrap;
-			z-index: 1000;
-			box-shadow: var(--shadow-md);
-			border: 1px solid var(--border-color);
-			transition: opacity 0.2s ease-in-out;
-			pointer-events: none;
-		}
-
-		.gallery-caption.has-tooltip::before {
-			content: '';
-			visibility: hidden;
-			opacity: 0;
-			position: absolute;
-			bottom: 125%;
-			left: 50%;
-			transform: translateX(-50%);
-			border: 6px solid transparent;
-			border-top-color: var(--bg-tertiary);
-			z-index: 1000;
-			transition: opacity 0.2s ease-in-out;
-			pointer-events: none;
-		}
-
-		.gallery-caption.has-tooltip:hover::after,
-		.gallery-caption.has-tooltip:hover::before {
-			visibility: visible;
-			opacity: 1;
-		}
-
+		/* ==========================================================================
+		   13. Notifications
+		   ========================================================================== */
 		.copy-notification {
 			position: fixed;
 			bottom: 25px;
@@ -1493,41 +1487,58 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			transform: translateY(0);
 		}
 
-		/* No Results */
-		.no-results {
-			text-align: center;
-			padding: 40px 20px;
-			background: var(--bg-secondary);
-			border-radius: 12px;
-			margin: 20px 0;
-			width: 100%;
-			border: 1px solid var(--border-color);
-		}
-
-		.no-results h2 {
-			color: var(--text-primary);
-			font-size: 1.5rem;
-			margin-bottom: 16px;
+		/* Plex Notification */
+		.plex-notification {
+			position: fixed;
+			bottom: 25px;
+			right: 25px;
+			padding: 0;
+			border-radius: 8px;
+			box-shadow: var(--shadow-md);
+			z-index: 1000;
 			font-weight: 600;
+			opacity: 0;
+			transform: translateY(20px);
+			transition: opacity 0.3s ease, transform 0.3s ease;
 		}
 
-		.no-results p {
-			color: var(--text-secondary);
-			margin-bottom: 12px;
+		.plex-notification.show {
+			opacity: 1;
+			transform: translateY(0);
 		}
 
-		.no-results a {
-			color: var(--accent-primary);
-			text-decoration: none;
-			font-weight: 500;
+		.plex-notification-content {
+			display: flex;
+			align-items: center;
+			padding: 12px 24px;
 		}
 
-		.no-results a:hover {
-			color: var(--accent-hover);
-			text-decoration: underline;
+		.plex-notification.plex-success {
+			background: linear-gradient(45deg, #2ed573, #7bed9f);
+			color: #1e1e1e;
 		}
 
-		/* Pagination */
+		.plex-notification.plex-success svg {
+			margin-right: 10px;
+		}
+
+		.plex-notification.plex-error {
+			background: linear-gradient(45deg, #ff4757, #ff6b81);
+			color: #ffffff;
+		}
+
+		.plex-notification.plex-error svg {
+			margin-right: 10px;
+		}
+
+		.plex-notification.plex-sending {
+			background: linear-gradient(45deg, var(--accent-primary), #ff9f43);
+			color: #1e1e1e;
+		}
+
+		/* ==========================================================================
+		   14. Pagination
+		   ========================================================================== */
 		.pagination {
 			text-align: center;
 			margin: 40px 0 20px;
@@ -1578,8 +1589,10 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			padding: 8px;
 			color: var(--text-secondary);
 		}
-		
-		/* Dropdown Styles */
+
+		/* ==========================================================================
+		   15. Dropdown
+		   ========================================================================== */
 		.dropdown {
 			position: relative;
 			display: inline-block;
@@ -1624,13 +1637,115 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			display: block;
 		}
 
-		/* Jellyfin Import Modal styles - mostly reusing Plex styles */
-		#jellyfinImportModal .modal-content,
-		#jellyfinErrorModal .modal-content {
-			max-width: 600px;
+		/* ==========================================================================
+		   16. Tooltips
+		   ========================================================================== */
+		.gallery-caption.has-tooltip {
+			cursor: help;
 		}
 
-		/* Responsive Styles */
+		.gallery-caption.has-tooltip::after {
+			content: attr(data-tooltip);
+			visibility: hidden;
+			opacity: 0;
+			position: absolute;
+			bottom: 125%;
+			left: 50%;
+			transform: translateX(-50%);
+			background: var(--bg-tertiary);
+			color: var(--text-primary);
+			padding: 8px 12px;
+			border-radius: 6px;
+			font-size: 14px;
+			white-space: nowrap;
+			z-index: 1000;
+			box-shadow: var(--shadow-md);
+			border: 1px solid var(--border-color);
+			transition: opacity 0.2s ease-in-out;
+			pointer-events: none;
+		}
+
+		.gallery-caption.has-tooltip::before {
+			content: '';
+			visibility: hidden;
+			opacity: 0;
+			position: absolute;
+			bottom: 125%;
+			left: 50%;
+			transform: translateX(-50%);
+			border: 6px solid transparent;
+			border-top-color: var(--bg-tertiary);
+			z-index: 1000;
+			transition: opacity 0.2s ease-in-out;
+			pointer-events: none;
+		}
+
+		.gallery-caption.has-tooltip:hover::after,
+		.gallery-caption.has-tooltip:hover::before {
+			visibility: visible;
+			opacity: 1;
+		}
+
+		/* ==========================================================================
+		   17. Animations
+		   ========================================================================== */
+		/* Loading Spinner */
+		.loading-spinner {
+			width: 40px;
+			height: 40px;
+			border-radius: 50%;
+			border: 4px solid var(--text-secondary);
+			border-top-color: var(--accent-primary);
+			animation: spin 1s infinite linear;
+		}
+
+		@keyframes spin {
+			0% { transform: rotate(0deg); }
+			100% { transform: rotate(360deg); }
+		}
+
+		/* Plex Spinner */
+		.plex-spinner {
+			width: 20px;
+			height: 20px;
+			border-radius: 50%;
+			border: 3px solid rgba(255, 255, 255, 0.3);
+			border-top-color: #ffffff;
+			animation: plex-spin 1s infinite linear;
+			margin-right: 10px;
+		}
+
+		@keyframes plex-spin {
+			0% { transform: rotate(0deg); }
+			100% { transform: rotate(360deg); }
+		}
+
+		/* ==========================================================================
+		   18. Plex Integration
+		   ========================================================================== */
+		/* Handled in other sections for better organization */
+
+		/* ==========================================================================
+		   19. Media Queries
+		   ========================================================================== */
+		@media (hover: none) {
+			.gallery-item:hover {
+				transform: none;
+				box-shadow: none;
+				border: none;
+				border-color: unset;
+			}
+			
+			.gallery-image-container:hover .gallery-image {
+				transform: none;
+			}
+			
+			.overlay-action-button:hover {
+				background: linear-gradient(45deg, #f5b025, #ffa953);
+				transform: none;
+			}
+		}
+
 		@media (max-width: 1024px) {
 			.gallery {
 				grid-template-columns: repeat(3, 1fr);
@@ -1639,13 +1754,12 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		}
 
 		@media (max-width: 768px) {
-		
-		    .site-title {
-		    	display: none;
-		    }
+			.site-title {
+				display: none;
+			}
 
 			.filter-button {
-			padding: 3px 10px;
+				padding: 3px 10px;
 			}
 
 			.filter-buttons {
@@ -1653,6 +1767,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				flex-wrap: nowrap;
 				gap: 0;
 			}
+			
 			body {
 				padding: 15px;
 			}
@@ -1696,13 +1811,12 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		}
 
 		@media (max-width: 480px) {
-		
 			.site-title {
-		    	display: none;
-		    }
+				display: none;
+			}
 
 			.filter-button {
-			padding: 3px 10px;
+				padding: 3px 10px;
 			}
 
 			.filter-buttons {
@@ -1728,12 +1842,10 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			}
 
 			.header-content {
-
 				gap: 15px;
 			}
 
 			.auth-actions {
-
 				justify-content: center;
 			}
 			
@@ -1755,95 +1867,6 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				font-size: 14px;
 			}
 		}
-/* Send to Plex Styles */
-
-/* Notification containers */
-.plex-notification {
-    position: fixed;
-    bottom: 25px;
-    right: 25px;
-    padding: 0;
-    border-radius: 8px;
-    box-shadow: var(--shadow-md);
-    z-index: 1000;
-    font-weight: 600;
-    opacity: 0;
-    transform: translateY(20px);
-    transition: opacity 0.3s ease, transform 0.3s ease;
-}
-
-.plex-notification.show {
-    opacity: 1;
-    transform: translateY(0);
-}
-
-.plex-notification-content {
-    display: flex;
-    align-items: center;
-    padding: 12px 24px;
-}
-
-/* Success notification */
-.plex-notification.plex-success {
-    background: linear-gradient(45deg, #2ed573, #7bed9f);
-    color: #1e1e1e;
-}
-
-.plex-notification.plex-success svg {
-    margin-right: 10px;
-}
-
-/* Error notification */
-.plex-notification.plex-error {
-    background: linear-gradient(45deg, #ff4757, #ff6b81);
-    color: #ffffff;
-}
-
-.plex-notification.plex-error svg {
-    margin-right: 10px;
-}
-
-/* Sending notification and spinner */
-.plex-notification.plex-sending {
-    background: linear-gradient(45deg, var(--accent-primary), #ff9f43);
-    color: #1e1e1e;
-}
-
-.plex-spinner {
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    border: 3px solid rgba(255, 255, 255, 0.3);
-    border-top-color: #ffffff;
-    animation: plex-spin 1s infinite linear;
-    margin-right: 10px;
-}
-
-@keyframes plex-spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-}
-
-/* Send to Plex confirmation button */
-.send-to-plex-confirm {
-        background: linear-gradient(45deg, var(--accent-primary), #ff9f43);
-        color: #1f1f1f;
-}
-
-.send-to-plex-confirm:hover {
-        background: linear-gradient(45deg, #f5b025, #ffa953);
-        transform: translateY(-2px);
-}
-
- .import-from-plex-confirm {
-        background: linear-gradient(45deg, var(--accent-primary), #ff9f43);
-        color: #1f1f1f;
-}
-
-.import-from-plex-confirm:hover {
-        background: linear-gradient(45deg, #f5b025, #ffa953);
-        transform: translateY(-2px);
- }
     </style>
 </head>
 
