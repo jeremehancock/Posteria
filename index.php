@@ -2078,7 +2078,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
                     </div>
                 </div>
                 <div class="upload-input-group">
-                    <button type="submit" class="modal-button" disabled>Replace Poster</button>
+                    <button type="submit" class="modal-button" disabled>Poster</button>
                 </div>
                 <div class="upload-help">
                     Maximum file size: 5MB<br>
@@ -2096,7 +2096,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
                     <input type="url" name="image_url" class="login-input" placeholder="Enter poster URL..." required>
                 </div>
                 <div class="upload-input-group">
-                    <button type="submit" class="modal-button">Replace Poster</button>
+                    <button type="submit" class="modal-button">Change</button>
                 </div>
                 <div class="upload-help">
                     Maximum file size: 5MB<br>
@@ -3318,7 +3318,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         refreshImage(filename, directory);
                     } else {
                         // Show error in modal
-                        showChangeError(data.error || 'Failed to replace poster from URL');
+                        showChangeError(data.error || 'Failed to change poster from URL');
                         notification.remove();
                     }
                 } catch (error) {
@@ -3363,7 +3363,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         refreshImage(filename, directory);
                     } else {
                         // Show error in modal
-                        showChangeError(data.error || 'Failed to replace poster from URL');
+                        showChangeError(data.error || 'Failed to change poster from URL');
                         notification.remove();
                     }
                 } catch (error) {
