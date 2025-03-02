@@ -1277,6 +1277,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			opacity: 0;
 			transition: opacity 0.3s ease;
 			flex-direction: column;
+			padding-top: 5px;
 		}
 
 		/* Desktop hover behavior */
@@ -1998,10 +1999,13 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			.upload-button,
 			.custom-file-input label,
 			.pagination-link,
-			.overlay-action-button,
 			.send-to-plex-confirm,
 			.import-from-plex-confirm {
 				height: 38px;
+			}
+			
+			.overlay-action-button {
+				height: 35px;
 			}
 			
 			.search-button {
