@@ -159,12 +159,17 @@ try {
             $basename .= " [{$id}]";
         }
         
-        // Add "Collection" before "Jellyfin" for collection posters
-        if ($mediaType === 'collections') {
-            $basename .= " Collection Jellyfin";
-        } else {
-            $basename .= " Jellyfin";
-        }
+		// Add "Collection" before "Jellyfin" for collection posters
+		if ($mediaType === 'collections') {
+			// Check if "Collection" is not already in the basename
+			if (!stripos($basename, 'Collection')) {
+				$basename .= " Collection Jellyfin";
+			} else {
+				$basename .= " Jellyfin";
+			}
+		} else {
+			$basename .= " Jellyfin";
+		}
         
         return $basename . '.' . $extension;
     }
