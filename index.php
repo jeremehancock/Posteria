@@ -2052,11 +2052,6 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
         <p id="changePosterFilename" style="margin: 10px 24px; font-weight: 500; overflow-wrap: break-word;" data-filename="" data-dirname=""></p>
         
         <div class="plex-info" style="margin: 0 24px 10px; padding: 10px; background: rgba(46, 213, 115, 0.1); border: 1px solid var(--accent-primary); border-radius: 6px;">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 6px;">
-                <circle cx="12" cy="12" r="10"></circle>
-                <line x1="12" y1="16" x2="12" y2="12"></line>
-                <line x1="12" y1="8" x2="12" y2="8"></line>
-            </svg>
             <span>Updated poster will be automatically synced with Plex after upload</span>
         </div>
         
