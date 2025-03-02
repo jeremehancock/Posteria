@@ -2006,6 +2006,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			
 			.overlay-action-button {
 				height: 35px;
+				width: 95%;
 			}
 			
 			.search-button {
@@ -4753,11 +4754,11 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				                importFromJellyfinButton.setAttribute('data-filename', filenameValue);
 				                importFromJellyfinButton.setAttribute('data-dirname', directoryValue);
 				                importFromJellyfinButton.innerHTML = `
-				                    <svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-				                        <path d="M15 3h-4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4"></path>
-				                        <polyline points="8 7 3 12 8 17"></polyline>
-				                        <line x1="3" y1="12" x2="15" y2="12"></line>
-				                    </svg>
+									<svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+										<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
+										<polyline points="8 7 3 12 8 17"></polyline>
+										<line x1="3" y1="12" x2="15" y2="12"></line>
+									</svg>
 				                    Get from Jellyfin
 				                `;
 				                
