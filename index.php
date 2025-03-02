@@ -748,6 +748,8 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			transition: all 0.2s;
 			text-decoration: none;
 			border: none;
+			height: 44px;
+			box-sizing: border-box;
 		}
 
 		.login-trigger-button,
@@ -765,7 +767,6 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		.logout-button {
 			background: var(--bg-tertiary);
 			color: var(--text-secondary);
-			height: 44px;
 			border: 1px solid var(--border-color);
 		}
 
@@ -787,6 +788,11 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			transition: all 0.2s;
 			font-weight: 500;
 			text-decoration: none;
+			height: 36px;
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			box-sizing: border-box;
 		}
 
 		.filter-button:hover {
@@ -815,8 +821,10 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			box-shadow: 0 2px 5px rgba(0,0,0,0.2);
 			text-decoration: none;
 			width: 70%;
-			margin: 0 auto;
+			margin: 0 auto 8px auto;
 			border: none;
+			height: 44px;
+			box-sizing: border-box;
 		}
 
 		.overlay-action-button:hover {
@@ -835,6 +843,11 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			border: none;
 			background: linear-gradient(45deg, var(--accent-primary), #ff9f43);
 			color: #1f1f1f;
+			height: 44px;
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			box-sizing: border-box;
 		}
 
 		.modal-button:hover {
@@ -881,6 +894,11 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			font-weight: 600;
 			transition: all 0.2s ease;
 			margin-top: 8px;
+			height: 44px;
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			box-sizing: border-box;
 		}
 
 		.login-button:hover {
@@ -902,6 +920,11 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			min-width: 120px;
 			font-weight: 600;
 			margin-top: 20px;
+			height: 44px;
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			box-sizing: border-box;
 		}
 
 		.upload-button:hover {
@@ -927,12 +950,96 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		.import-from-plex-confirm {
 			background: linear-gradient(45deg, var(--accent-primary), #ff9f43);
 			color: #1f1f1f;
+			height: 44px;
+			box-sizing: border-box;
 		}
 
 		.send-to-plex-confirm:hover,
 		.import-from-plex-confirm:hover {
 			background: linear-gradient(45deg, #f5b025, #ffa953);
 			transform: translateY(-2px);
+		}
+
+		/* Search button */
+		.search-button {
+			padding: 14px 24px;
+			background: linear-gradient(45deg, var(--accent-primary), #ff9f43);
+			color: #1f1f1f;
+			border: none;
+			cursor: pointer;
+			font-size: 16px;
+			font-weight: 600;
+			height: 52px;
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			box-sizing: border-box;
+		}
+
+		.search-button:hover {
+			background: linear-gradient(45deg, #f5b025, #ffa953);
+		}
+
+		/* Custom File Input */
+		.custom-file-input label {
+			display: flex;
+			align-items: center;
+			gap: 8px;
+			padding: 12px 16px;
+			background: var(--bg-secondary);
+			border: 1px solid var(--border-color);
+			border-radius: 6px;
+			color: var(--text-primary);
+			font-weight: 500;
+			cursor: pointer;
+			transition: all 0.2s ease;
+			white-space: nowrap;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			height: 44px;
+			box-sizing: border-box;
+		}
+
+		.custom-file-input label:hover {
+			background: var(--bg-tertiary);
+			border-color: var(--accent-primary);
+		}
+
+		/* Pagination links */
+		.pagination-link {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			padding: 10px 16px;
+			background-color: var(--bg-secondary);
+			border: 1px solid var(--border-color);
+			border-radius: 6px;
+			color: var(--text-primary);
+			text-decoration: none;
+			font-weight: 500;
+			min-width: 40px;
+			transition: all 0.2s;
+			height: 44px;
+			box-sizing: border-box;
+		}
+
+		.pagination-link.current {
+			background: linear-gradient(45deg, var(--accent-primary), #ff9f43);
+			color: #1f1f1f;
+			border-color: transparent;
+			font-weight: 600;
+		}
+
+		.pagination-link:hover:not(.current):not(.disabled) {
+			background-color: var(--bg-tertiary);
+			border-color: var(--accent-primary);
+			transform: translateY(-1px);
+		}
+
+		.pagination-link.disabled {
+			color: var(--text-secondary);
+			cursor: not-allowed;
+			opacity: 0.5;
 		}
 
 		/* ==========================================================================
@@ -1169,7 +1276,6 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			background: var(--action-bg);
 			opacity: 0;
 			transition: opacity 0.3s ease;
-			gap: 15px;
 			flex-direction: column;
 		}
 
@@ -1800,13 +1906,31 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				padding: 20px;
 			}
 			
-			.image-overlay-actions {
-				gap: 10px;
-			}
-			
 			.overlay-action-button {
 				width: 85%;
 				font-size: 13px;
+			}
+			
+			.login-trigger-button,
+			.upload-trigger-button,
+			.logout-button,
+			.modal-button,
+			.login-button,
+			.upload-button,
+			.custom-file-input label,
+			.pagination-link,
+			.overlay-action-button,
+			.send-to-plex-confirm,
+			.import-from-plex-confirm {
+				height: 40px;
+			}
+			
+			.search-button {
+				height: 48px;
+			}
+			
+			.filter-button {
+				height: 32px;
 			}
 		}
 
@@ -1865,6 +1989,28 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				padding: 8px 12px;
 				min-width: 36px;
 				font-size: 14px;
+			}
+
+			.login-trigger-button,
+			.upload-trigger-button,
+			.logout-button,
+			.modal-button,
+			.login-button,
+			.upload-button,
+			.custom-file-input label,
+			.pagination-link,
+			.overlay-action-button,
+			.send-to-plex-confirm,
+			.import-from-plex-confirm {
+				height: 38px;
+			}
+			
+			.search-button {
+				height: 44px;
+			}
+			
+			.filter-button {
+				height: 30px;
 			}
 		}
     </style>
@@ -2531,11 +2677,11 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
     <button class="overlay-action-button send-to-plex-btn" 
             data-filename="<?php echo htmlspecialchars($image['filename']); ?>"
             data-dirname="<?php echo htmlspecialchars($image['directory']); ?>">
-        <svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
-            <polyline points="16 6 12 2 8 6"></polyline>
-            <line x1="12" y1="2" x2="12" y2="15"></line>
-        </svg>
+            <svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
         Send to Plex
     </button>
     
