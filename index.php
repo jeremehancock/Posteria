@@ -2538,10 +2538,36 @@
 	</div>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // =========== GLOBAL VARIABLES & STATE ===========
+    
     // Check authentication status
     const isLoggedIn = <?php echo isLoggedIn() ? 'true' : 'false'; ?>;
     
-    // =========== MODAL FUNCTIONALITY ===========
+    // State variables used for import functionality
+    let plexLibraries = [];
+    let plexShows = [];
+    let jellyfinLibraries = [];
+    let jellyfinShows = [];
+    let importCancelled = false;
+    
+    // Global results accumulators
+    let allImportResults = {
+        successful: 0,
+        skipped: 0,
+        failed: 0,
+        errors: [],
+        items: []
+    };
+    
+    let allJellyfinImportResults = {
+        successful: 0,
+        skipped: 0,
+        failed: 0,
+        errors: [],
+        items: []
+    };
+    
+    // =========== ELEMENT REFERENCES ===========
     
     // Modal elements
     const loginModal = document.getElementById('loginModal');
@@ -2549,6 +2575,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const deleteModal = document.getElementById('deleteModal');
     const plexImportModal = document.getElementById('plexImportModal');
     const plexErrorModal = document.getElementById('plexErrorModal');
+    const changePosterModal = document.getElementById('changePosterModal');
     
     // Button elements
     const showLoginButton = document.getElementById('showLoginModal');
@@ -2561,60 +2588,34 @@ document.addEventListener('DOMContentLoaded', function() {
     const closeDeleteButton = deleteModal?.querySelector('.modal-close-btn');
     const closePlexImportButton = plexImportModal?.querySelector('.modal-close-btn');
     const closeErrorModalButton = plexErrorModal?.querySelector('.modal-close-btn');
+    const closeChangePosterButton = changePosterModal?.querySelector('.modal-close-btn');
     
     // Form elements
     const loginForm = document.querySelector('.login-form');
     const deleteForm = document.getElementById('deleteForm');
+    const fileChangePosterForm = document.getElementById('fileChangePosterForm');
+    const urlChangePosterForm = document.getElementById('urlChangePosterForm');
     
     // Input elements
     const deleteFilenameInput = document.getElementById('deleteFilename');
     const deleteDirectoryInput = document.getElementById('deleteDirectory');
     const oldFilenameInput = document.getElementById('oldFilename');
     const newFilenameInput = document.getElementById('newFilename');
+    const fileChangePosterInput = document.getElementById('fileChangePosterInput');
     
     // Error elements
     const loginError = document.querySelector('.login-error');
+    const changeError = document.querySelector('.change-poster-error');
     
     // Notification elements
     const copyNotification = document.getElementById('copyNotification');
-
-
-  // For regular close buttons
-  const closeButtons = document.querySelectorAll('.plex-import-modal-close, #closeImportModal, .close-button');
-  closeButtons.forEach(button => {
-    button.addEventListener('click', function() {
-      setTimeout(function() {
-        window.location.reload();
-      }, 300);
-    });
-  });
-  
-  // For modals with custom events, you may need to use a MutationObserver
-  // to detect when the modal is removed from the DOM or gets a 'hidden' class
-  const modalElement = document.getElementById('plexImportModal');
-  if (modalElement) {
-    const observer = new MutationObserver(function(mutations) {
-      mutations.forEach(function(mutation) {
-        if (mutation.type === 'attributes' && 
-            (mutation.attributeName === 'class' || mutation.attributeName === 'style')) {
-          // Check if modal is now hidden
-          const isHidden = modalElement.classList.contains('hidden') || 
-                          modalElement.style.display === 'none' ||
-                          modalElement.classList.contains('d-none');
-          if (isHidden) {
-            setTimeout(function() {
-              window.location.reload();
-            }, 300);
-            observer.disconnect();
-          }
-        }
-      });
-    });
     
-    observer.observe(modalElement, { attributes: true });
-  }
-  
-    // Generic modal functions
+    // Search elements
+    const searchForm = document.querySelector('.search-form');
+    const searchInput = document.querySelector('.search-input');
+    
+    // =========== GENERIC MODAL FUNCTIONS ===========
+    
     function showModal(modal) {
         if (modal) {
             modal.style.display = 'block';
@@ -2635,18 +2636,105 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
+    // Handle escape key for modals
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            if (loginModal?.classList.contains('show')) hideModal(loginModal, loginForm);
+            if (uploadModal?.classList.contains('show')) hideModal(uploadModal);
+            
+            // Don't close import modals if import is in progress
+            if (plexImportModal?.classList.contains('show') && 
+                document.getElementById('importProgressContainer')?.style.display !== 'block') {
+                hideModal(plexImportModal);
+            }
+            
+            if (jellyfinImportModal?.classList.contains('show') && 
+                document.getElementById('jellyfinImportProgressContainer')?.style.display !== 'block') {
+                hideModal(jellyfinImportModal);
+            }
+            
+            if (deleteModal?.classList.contains('show')) hideModal(deleteModal, deleteForm);
+            if (plexErrorModal?.classList.contains('show')) hideModal(plexErrorModal);
+            if (jellyfinErrorModal?.classList.contains('show')) hideModal(jellyfinErrorModal);
+            if (changePosterModal?.classList.contains('show')) hideModal(changePosterModal);
+        }
+    });
+    
+    // =========== NOTIFICATION SYSTEM ===========
+    
+    // Generic notification function
+    function showNotification(message, type) {
+        const notification = document.createElement('div');
+        notification.className = `plex-notification plex-${type}`;
+        
+        let iconHtml = '';
+        if (type === 'success') {
+            iconHtml = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                <polyline points="22 4 12 14.01 9 11.01"></polyline>
+            </svg>`;
+        } else if (type === 'error') {
+            iconHtml = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>`;
+        } else if (type === 'loading') {
+            iconHtml = `<div class="plex-spinner"></div>`;
+        }
+        
+        notification.innerHTML = `
+            <div class="plex-notification-content">
+                ${iconHtml}
+                <span>${message}</span>
+            </div>
+        `;
+        
+        document.body.appendChild(notification);
+        
+        // Force reflow to trigger animation
+        notification.offsetHeight;
+        notification.classList.add('show');
+        
+        // Auto-remove after 3 seconds for success/error notifications
+        if (type !== 'loading') {
+            setTimeout(() => {
+                notification.classList.remove('show');
+                setTimeout(() => {
+                    notification.remove();
+                }, 300); // Match transition duration
+            }, 3000);
+        }
+        
+        return notification;
+    }
+    
+    // Show copy notification
+    function showCopyNotification() {
+        copyNotification.style.display = 'block';
+        copyNotification.classList.add('show');
+        
+        setTimeout(() => {
+            copyNotification.classList.remove('show');
+            setTimeout(() => {
+                copyNotification.style.display = 'none';
+            }, 300);
+        }, 2000);
+    }
+    
     // =========== LOGIN MODAL ===========
+    
     if (showLoginButton && loginModal) {
-		function showLoginModal() {
-			showModal(loginModal);
-			if (loginError) loginError.style.display = 'none';
-			
-			// Focus on username input
-			setTimeout(() => {
-				const usernameInput = loginModal.querySelector('input[name="username"]');
-				if (usernameInput) usernameInput.focus();
-			}, 100); // Short delay to ensure modal is fully visible
-		}
+        function showLoginModal() {
+            showModal(loginModal);
+            if (loginError) loginError.style.display = 'none';
+            
+            // Focus on username input
+            setTimeout(() => {
+                const usernameInput = loginModal.querySelector('input[name="username"]');
+                if (usernameInput) usernameInput.focus();
+            }, 100); // Short delay to ensure modal is fully visible
+        }
 
         function hideLoginModal() {
             hideModal(loginModal, loginForm);
@@ -2692,6 +2780,36 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // =========== UPLOAD MODAL ===========
+    
+    // Upload error handling
+    const uploadError = document.querySelector('.upload-error');
+    
+    function showUploadError(message) {
+        if (uploadError) {
+            uploadError.textContent = message;
+            uploadError.style.display = 'block';
+        }
+    }
+    
+    function hideUploadError() {
+        if (uploadError) {
+            uploadError.style.display = 'none';
+            uploadError.textContent = '';
+        }
+    }
+    
+    // File input handling
+    const fileInput = document.getElementById('fileInput');
+    if (fileInput) {
+        fileInput.addEventListener('change', function(e) {
+            const fileName = e.target.files[0]?.name || 'No file chosen';
+            const fileNameElement = this.parentElement.querySelector('.file-name');
+            if (fileNameElement) {
+                fileNameElement.textContent = fileName;
+            }
+        });
+    }
+    
     if (showUploadButton && uploadModal && isLoggedIn) {
         function showUploadModal() {
             showModal(uploadModal);
@@ -2730,6 +2848,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
                 
                 // Clear any errors when switching tabs
+                hideUploadError();
+            });
+        });
+        
+        // Clear error when switching tabs in upload modal
+        document.querySelectorAll('.upload-tab-btn').forEach(button => {
+            button.addEventListener('click', () => {
                 hideUploadError();
             });
         });
@@ -2845,11 +2970,1174 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
+    // =========== DELETE MODAL ===========
+    
+    if (deleteModal) {
+        // Fix close button
+        const cancelDeleteBtn = document.getElementById('cancelDelete');
+        if (cancelDeleteBtn) {
+            cancelDeleteBtn.addEventListener('click', () => {
+                hideModal(deleteModal, deleteForm);
+            });
+        }
+
+        // Close when clicking outside the modal
+        deleteModal.addEventListener('click', (e) => {
+            if (e.target === deleteModal) {
+                hideModal(deleteModal, deleteForm);
+            }
+        });
+        
+        // Fix close button
+        if (closeDeleteButton) {
+            closeDeleteButton.addEventListener('click', () => {
+                hideModal(deleteModal, deleteForm);
+            });
+        }
+        
+        // Handle form submission
+        if (deleteForm) {
+            deleteForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                const formData = new FormData(deleteForm);
+                
+                try {
+                    const response = await fetch(window.location.href, {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        hideModal(deleteModal);
+                        window.location.reload();
+                    } else {
+                        alert(data.error || 'Failed to delete file');
+                    }
+                } catch (error) {
+                    alert('An error occurred while deleting the file');
+                }
+            });
+        }
+    }
+    
+    // =========== CHANGE POSTER MODAL ===========
+
+    // Change Poster error handling functions
+    function showChangeError(message) {
+        if (changeError) {
+            changeError.textContent = message;
+            changeError.style.display = 'block';
+        }
+    }
+    
+    function hideChangeError() {
+        if (changeError) {
+            changeError.textContent = '';
+            changeError.style.display = 'none';
+        }
+    }
+    
+    // File input change handler
+    if (fileChangePosterInput) {
+        fileChangePosterInput.addEventListener('change', function(e) {
+            const fileName = e.target.files[0]?.name || '';
+            const fileNameElement = this.parentElement.querySelector('.file-name');
+            if (fileNameElement) {
+                fileNameElement.textContent = fileName;
+            }
+            
+            // Enable/disable submit button based on file selection
+            const submitButton = fileChangePosterForm.querySelector('button[type="submit"]');
+            if (submitButton) {
+                submitButton.disabled = !fileName;
+            }
+        });
+    }
+    
+    // Tab functionality for the Change Poster modal
+    if (changePosterModal) {
+        const changePosterTabs = changePosterModal.querySelectorAll('.upload-tab-btn');
+        const changePosterForms = changePosterModal.querySelectorAll('.upload-form');
+        
+        changePosterTabs.forEach(tab => {
+            tab.addEventListener('click', function() {
+                const tabName = this.getAttribute('data-tab');
+                
+                // Update active tab
+                changePosterTabs.forEach(t => t.classList.remove('active'));
+                this.classList.add('active');
+                
+                // Show active form
+                changePosterForms.forEach(form => {
+                    if (form.id === tabName + 'ChangePosterForm') {
+                        form.classList.add('active');
+                    } else {
+                        form.classList.remove('active');
+                    }
+                });
+                
+                // Clear any error messages
+                hideChangeError();
+            });
+        });
+        
+        // Form submission handler - File upload
+        if (fileChangePosterForm) {
+            fileChangePosterForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
+                // Show a loading notification
+                const notification = showNotification('Replacing poster...', 'loading');
+                
+                try {
+                    const formData = new FormData(this);
+                    
+                    const response = await fetch('./include/change-poster.php', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        // Remove the loading notification first
+                        notification.remove();
+                        
+                        // Hide the modal
+                        hideModal(changePosterModal);
+                        
+                        // Show success notification
+                        showNotification('Poster successfully replaced!', 'success');
+                        
+                        // Refresh the image to show the updated version
+                        const filename = formData.get('original_filename');
+                        const directory = formData.get('directory');
+                        refreshImage(filename, directory);
+                    } else {
+                        // Show error in modal
+                        showChangeError(data.error || 'Failed to replace poster from URL');
+                        notification.remove();
+                    }
+                } catch (error) {
+                    // Show error in modal
+                    showChangeError('Error replacing poster: ' + error.message);
+                    notification.remove();
+                }
+            });
+        }
+        
+        // Form submission handler - URL upload
+        if (urlChangePosterForm) {
+            urlChangePosterForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
+                // Show a loading notification
+                const notification = showNotification('Replacing poster from URL...', 'loading');
+                
+                try {
+                    const formData = new FormData(this);
+                    
+                    const response = await fetch('./include/change-poster.php', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        // Remove the loading notification first
+                        notification.remove();
+                        
+                        // Hide the modal
+                        hideModal(changePosterModal);
+                        
+                        // Show success notification
+                        showNotification('Poster successfully replaced!', 'success');
+                        
+                        // Refresh the image to show the updated version
+                        const filename = formData.get('original_filename');
+                        const directory = formData.get('directory');
+                        refreshImage(filename, directory);
+                    } else {
+                        // Show error in modal
+                        showChangeError(data.error || 'Failed to replace poster from URL');
+                        notification.remove();
+                    }
+                } catch (error) {
+                    // Show error in modal
+                    showChangeError('Error replacing poster: ' + error.message);
+                    notification.remove();
+                }
+            });
+        }
+        
+        // Modal close handlers
+        if (closeChangePosterButton) {
+            closeChangePosterButton.addEventListener('click', function() {
+                hideModal(changePosterModal);
+            });
+        }
+        
+        // Click outside to close
+        changePosterModal.addEventListener('click', function(e) {
+            if (e.target === changePosterModal) {
+                hideModal(changePosterModal);
+            }
+        });
+    }
+    
+    // =========== PLEX IMPORT MODAL ===========
+    
+    // Only initialize if user is logged in and elements exist
+    if (isLoggedIn && showPlexImportButton && plexImportModal) {
+        // Plex-specific elements
+        const startPlexImportButton = document.getElementById('startPlexImport');
+        const importTypeSelect = document.getElementById('plexImportType');
+        const librarySelect = document.getElementById('plexLibrary');
+        const showSelect = document.getElementById('plexShow');
+        const targetDirectorySelect = document.getElementById('targetDirectory');
+        const fileHandlingSelect = document.getElementById('fileHandling');
+        
+        // Step containers
+        const importTypeStep = document.getElementById('importTypeStep');
+        const librarySelectionStep = document.getElementById('librarySelectionStep');
+        const showSelectionStep = document.getElementById('showSelectionStep');
+        const seasonsOptionsStep = document.getElementById('seasonsOptionsStep');
+        const targetDirectoryStep = document.getElementById('targetDirectoryStep');
+        const fileHandlingStep = document.getElementById('fileHandlingStep');
+        
+        // Progress and results elements
+        const importProgressContainer = document.getElementById('importProgressContainer');
+        const importProgressBar = document.getElementById('importProgressBar')?.querySelector('div');
+        const importProgressDetails = document.getElementById('importProgressDetails');
+        const importResultsContainer = document.getElementById('importResultsContainer');
+        const importOptionsContainer = document.getElementById('plexImportOptions');
+        
+        // Error handling
+        const importErrorContainer = document.querySelector('.import-error');
+        const plexErrorMessage = document.getElementById('plexErrorMessage');
+        const plexErrorCloseButtons = document.querySelectorAll('.plexErrorClose');
+        
+        // Results elements
+        const closeResultsButton = document.getElementById('closeImportResults');
+        const importErrors = document.getElementById('importErrors');
+        
+        // Connection status
+        const connectionStatus = document.getElementById('plexConnectionStatus');
+        
+        // Show/hide Plex Import Modal functions
+        function showPlexModal() {
+            showModal(plexImportModal);
+            
+            // Reset the form to a clean state
+            resetPlexImport();
+            
+            // Just test the connection
+            testPlexConnection();
+        }
+
+        function hidePlexModal() {
+            hideModal(plexImportModal);
+            resetPlexImport();
+        }
+        
+        function showErrorModal(message) {
+            plexErrorMessage.textContent = message;
+            showModal(plexErrorModal);
+        }
+        
+        function hideErrorModal() {
+            hideModal(plexErrorModal);
+        }
+        
+        // Reset the import form
+        function resetPlexImport() {
+            // Show the close button again when results are shown
+            const closeButton = plexImportModal.querySelector('.modal-close-btn');
+            if (closeButton) {
+                closeButton.style.display = 'block';
+                
+                // Ensure close button has proper event handler
+                closeButton.addEventListener('click', function() {
+                    hideModal(plexImportModal);
+                    // Force a page refresh to ensure a clean state
+                    setTimeout(function() {
+                        window.location.reload();
+                    }, 300);
+                });
+            }
+                
+            // Reset form selections
+            importTypeSelect.value = '';
+            librarySelect.innerHTML = '<option value="">Select a content type first...</option>';
+            showSelect.innerHTML = '<option value="">Select a library first...</option>';
+            targetDirectorySelect.value = 'movies';
+            fileHandlingSelect.value = 'overwrite';
+            
+            // Hide all steps except type
+            importTypeStep.style.display = 'block';
+            librarySelectionStep.style.display = 'none';
+            showSelectionStep.style.display = 'none';
+            seasonsOptionsStep.style.display = 'none';
+            targetDirectoryStep.style.display = 'none';
+            fileHandlingStep.style.display = 'none';
+            
+            // Reset containers
+            importProgressContainer.style.display = 'none';
+            importResultsContainer.style.display = 'none';
+            importOptionsContainer.style.display = 'block';
+            
+            // Hide error container instead of just clearing it
+            importErrorContainer.style.display = 'none';
+            importErrorContainer.textContent = '';
+            
+            // Disable start button
+            startPlexImportButton.disabled = true;
+            
+            // Reset progress
+            if (importProgressBar) {
+                importProgressBar.style.width = '0%';
+            }
+            importProgressDetails.textContent = 'Processing 0 of 0 items (0%)';
+            
+            // Reset import cancelled flag
+            importCancelled = false;
+        }
+        
+        // Test Plex connection and display status
+        async function testPlexConnection() {
+            connectionStatus.style.display = 'block';
+            connectionStatus.innerHTML = `
+                <div style="padding: 10px; border-radius: 4px; background: rgba(255, 159, 67, 0.1); border: 1px solid var(--accent-primary);">
+                    <span style="display: inline-block; margin-right: 8px;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <polyline points="12 6 12 12 16 14"></polyline>
+                        </svg>
+                    </span>
+                    Testing connection to Plex server...
+                </div>
+            `;
+            
+            try {
+                const response = await fetch('./include/plex-import.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: new URLSearchParams({
+                        'action': 'test_plex_connection'
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    connectionStatus.innerHTML = `
+                        <div style="padding: 10px; border-radius: 4px; background: rgba(46, 213, 115, 0.1); border: 1px solid var(--success-color);">
+                            <span style="display: inline-block; margin-right: 8px; color: var(--success-color);">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                                </svg>
+                            </span>
+                            Connected to Plex server
+                        </div>
+                    `;
+                    
+                    // Load libraries if connection successful
+                    loadPlexLibraries();
+                } else {
+                    connectionStatus.innerHTML = `
+                        <div style="padding: 10px; border-radius: 4px; background: rgba(239, 68, 68, 0.1); border: 1px solid var(--danger-color);">
+                            <span style="display: inline-block; margin-right: 8px; color: var(--danger-color);">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                                </svg>
+                            </span>
+                            Failed to connect to Plex server: ${data.error}
+                        </div>
+                    `;
+                    
+                    // Disable the form if connection failed
+                    startPlexImportButton.disabled = true;
+                }
+            } catch (error) {
+                connectionStatus.innerHTML = `
+                    <div style="padding: 10px; border-radius: 4px; background: rgba(239, 68, 68, 0.1); border: 1px solid var(--danger-color);">
+                        <span style="display: inline-block; margin-right: 8px; color: var(--danger-color);">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="12" y1="8" x2="12" y2="12"></line>
+                                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                            </svg>
+                        </span>
+                        Error connecting to Plex server: ${error.message}
+                    </div>
+                `;
+                
+                // Disable the form if connection error
+                startPlexImportButton.disabled = true;
+            }
+        }
+        
+        // Load Plex libraries based on import type
+        async function loadPlexLibraries() {
+            // Get the currently selected import type
+            const importType = importTypeSelect.value;
+            
+            // If no import type is selected, don't try to load libraries
+            if (!importType) {
+                librarySelect.innerHTML = '<option value="">Select a content type first...</option>';
+                return;
+            }
+            
+            librarySelect.innerHTML = '<option value="">Loading libraries...</option>';
+            
+            try {
+                const response = await fetch('./include/plex-import.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: new URLSearchParams({
+                        'action': 'get_plex_libraries'
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success && data.data.length > 0) {
+                    plexLibraries = data.data;
+                    librarySelect.innerHTML = '<option value="">Select library...</option>';
+                    
+                    let matchingLibrariesCount = 0;
+                    
+                    plexLibraries.forEach(library => {
+                        // Filter libraries based on import type
+                        const showLibrary = (
+                            // For movies, only show movie libraries
+                            (importType === 'movies' && library.type === 'movie') ||
+                            // For shows or seasons, only show TV show libraries
+                            ((importType === 'shows' || importType === 'seasons') && library.type === 'show') ||
+                            // For collections, show both
+                            (importType === 'collections')
+                        );
+                        
+                        if (showLibrary) {
+                            matchingLibrariesCount++;
+                            const option = document.createElement('option');
+                            option.value = library.id;
+                            option.dataset.type = library.type;
+                            option.textContent = `${library.title} (${library.type === 'movie' ? 'Movies' : 'TV Shows'})`;
+                            librarySelect.appendChild(option);
+                        }
+                    });
+                    
+                    // If no libraries match the filter
+                    if (matchingLibrariesCount === 0) {
+                        librarySelect.innerHTML = '<option value="">No matching libraries found</option>';
+                        showErrorInImportOptions('No libraries of the required type were found');
+                    }
+                } else {
+                    librarySelect.innerHTML = '<option value="">No libraries found</option>';
+                    showErrorInImportOptions(data.error || 'No libraries found on Plex server');
+                }
+            } catch (error) {
+                librarySelect.innerHTML = '<option value="">Error loading libraries</option>';
+                showErrorInImportOptions('Error loading Plex libraries: ' + error.message);
+            }
+        }
+        
+        // Load shows for a specific library (for TV season selection)
+        async function loadPlexShows(libraryId) {
+            showSelect.innerHTML = '<option value="">Loading shows...</option>';
+            
+            try {
+                const response = await fetch('./include/plex-import.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: new URLSearchParams({
+                        'action': 'get_plex_shows_for_seasons',
+                        'libraryId': libraryId
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success && data.data.length > 0) {
+                    plexShows = data.data;
+                    showSelect.innerHTML = '<option value="">Select show...</option>';
+                    
+                    plexShows.forEach(show => {
+                        const option = document.createElement('option');
+                        option.value = show.ratingKey;
+                        option.textContent = show.title + (show.year ? ` (${show.year})` : '');
+                        showSelect.appendChild(option);
+                    });
+                } else {
+                    showSelect.innerHTML = '<option value="">No shows found</option>';
+                    showErrorInImportOptions(data.error || 'No shows found in the selected library');
+                }
+            } catch (error) {
+                showSelect.innerHTML = '<option value="">Error loading shows</option>';
+                showErrorInImportOptions('Error loading shows: ' + error.message);
+            }
+        }
+        
+        // Display error in import options container
+        function showErrorInImportOptions(message) {
+            // Only show errors if we have an actual message and if the user has started making selections
+            if (message && importTypeSelect.value) {
+                importErrorContainer.textContent = message;
+                importErrorContainer.style.display = 'block';
+            }
+        }
+
+        function hideErrorInImportOptions() {
+            importErrorContainer.style.display = 'none';
+            importErrorContainer.textContent = '';
+        }
+
+        // Helper function to check if the user has started making selections
+        function hasUserStartedSelections() {
+            return importTypeSelect.value !== '';
+        }
+        
+        // Validate import options and enable/disable start button
+        function validateImportOptions() {
+            const importType = importTypeSelect.value;
+            const libraryId = librarySelect.value;
+            const showId = showSelect.value;
+            const importAllSeasons = document.getElementById('importAllSeasons')?.checked || false;
+            
+            let isValid = false;
+            
+            if (!importType || !libraryId) {
+                isValid = false;
+            } else if (importType === 'seasons') {
+                // If importing all seasons, we just need a valid library
+                // If importing specific show seasons, we need both library and show
+                isValid = importAllSeasons ? true : (showId ? true : false);
+            } else {
+                // For all other types, just need a valid library ID
+                isValid = true;
+            }
+            
+            startPlexImportButton.disabled = !isValid;
+            return isValid;
+        }
+        
+        // Checkbox handler for "Import all seasons"
+        const importAllSeasonsCheckbox = document.getElementById('importAllSeasons');
+        if (importAllSeasonsCheckbox) {
+            importAllSeasonsCheckbox.addEventListener('change', function() {
+                const showSelectionStep = document.getElementById('showSelectionStep');
+                
+                if (this.checked) {
+                    // Hide show selection when "Import all seasons" is checked
+                    showSelectionStep.style.display = 'none';
+                } else {
+                    // Show the show selection step if we have a library selected
+                    const libraryId = librarySelect.value;
+                    if (libraryId) {
+                        const selectedOption = librarySelect.options[librarySelect.selectedIndex];
+                        const libraryType = selectedOption ? selectedOption.dataset.type : '';
+                        
+                        if (libraryType === 'show') {
+                            showSelectionStep.style.display = 'block';
+                            // Load shows for the library if they're not already loaded
+                            if (showSelect.options.length <= 1) {
+                                loadPlexShows(libraryId);
+                            }
+                        }
+                    }
+                }
+                
+                validateImportOptions();
+            });
+        }
+        
+        // Handle import type selection
+        importTypeSelect.addEventListener('change', function() {
+            const selectedType = this.value;
+            
+            // Reset other steps
+            librarySelectionStep.style.display = 'none';
+            seasonsOptionsStep.style.display = 'none';
+            showSelectionStep.style.display = 'none';
+            targetDirectoryStep.style.display = 'none';
+            fileHandlingStep.style.display = 'none';
+            
+            // Reset selects with appropriate default messages
+            librarySelect.innerHTML = '<option value="">Loading libraries...</option>';
+            showSelect.innerHTML = '<option value="">Select a library first...</option>';
+            
+            // Hide any previous error messages
+            hideErrorInImportOptions();
+            
+            if (selectedType) {
+                // Show library selection step
+                librarySelectionStep.style.display = 'block';
+                
+                // Now it's appropriate to load libraries since user has selected a type
+                loadPlexLibraries();
+                
+                // Pre-select target directory based on import type
+                switch (selectedType) {
+                    case 'movies':
+                        targetDirectorySelect.value = 'movies';
+                        break;
+                    case 'shows':
+                        targetDirectorySelect.value = 'tv-shows';
+                        break;
+                    case 'seasons':
+                        targetDirectorySelect.value = 'tv-seasons';
+                        // Show seasons options step
+                        seasonsOptionsStep.style.display = 'block';
+                        break;
+                    case 'collections':
+                        targetDirectorySelect.value = 'collections';
+                        break;
+                }
+                
+                // Show file handling step
+                fileHandlingStep.style.display = 'block';
+            } else {
+                // If user clears the selection, reset the form
+                librarySelect.innerHTML = '<option value="">Select a content type first...</option>';
+                hideErrorInImportOptions();
+                fileHandlingStep.style.display = 'none';
+            }
+            
+            validateImportOptions();
+        });
+        
+        // Handle "Import all seasons" checkbox change
+        document.getElementById('importAllSeasons').addEventListener('change', function() {
+            const showSelectionStep = document.getElementById('showSelectionStep');
+            
+            if (this.checked) {
+                // Hide show selection when "Import all seasons" is checked
+                showSelectionStep.style.display = 'none';
+            } else {
+                // Show the show selection step if we have a library selected
+                const libraryId = librarySelect.value;
+                if (libraryId) {
+                    const selectedOption = librarySelect.options[librarySelect.selectedIndex];
+                    const libraryType = selectedOption ? selectedOption.dataset.type : '';
+                    
+                    if (libraryType === 'show') {
+                        showSelectionStep.style.display = 'block';
+                    }
+                }
+            }
+            
+            validateImportOptions();
+        });
+        
+        // Handle library selection
+        librarySelect.addEventListener('change', function() {
+            const selectedLibraryId = this.value;
+            const selectedOption = this.options[this.selectedIndex];
+            const libraryType = selectedOption ? selectedOption.dataset.type : '';
+            
+            // Reset show selection
+            showSelectionStep.style.display = 'none';
+            showSelect.innerHTML = '<option value="">Loading shows...</option>';
+            
+            // Hide error messages
+            hideErrorInImportOptions();
+            
+            if (selectedLibraryId) {
+                // If importing seasons, show the show selection step
+                if (importTypeSelect.value === 'seasons') {
+                    if (libraryType === 'show') {
+                        showSelectionStep.style.display = 'block';
+                        loadPlexShows(selectedLibraryId);
+                    } else {
+                        showErrorInImportOptions('Please select a TV Show library to import seasons');
+                    }
+                }
+            }
+            
+            validateImportOptions();
+        });
+        
+        // Handle show selection
+        showSelect.addEventListener('change', function() {
+            validateImportOptions();
+        });
+        
+        // Start the import process
+        startPlexImportButton.addEventListener('click', async function() {
+            if (!validateImportOptions()) {
+                return;
+            }
+            
+            // Get selected options
+            const importType = importTypeSelect.value;
+            const libraryId = librarySelect.value;
+            const importAllSeasons = document.getElementById('importAllSeasons')?.checked || false;
+            
+            // Only get showKey if we're not importing all seasons
+            const showKey = (importType === 'seasons' && !importAllSeasons) ? showSelect.value : null;
+            
+            const targetDirectory = targetDirectorySelect.value;
+            const overwriteOption = fileHandlingSelect.value;
+            
+            // Hide the close button when starting the import process
+            const closeButton = plexImportModal.querySelector('.modal-close-btn');
+            if (closeButton) {
+                closeButton.style.display = 'none';
+            }
+            
+            // Show progress container, hide options
+            importOptionsContainer.style.display = 'none';
+            importProgressContainer.style.display = 'block';
+            
+            // Start import process
+            try {
+                await importPlexPosters(importType, libraryId, showKey, targetDirectory, overwriteOption, importAllSeasons);
+            } catch (error) {
+                // Show the close button again on error
+                if (closeButton) {
+                    closeButton.style.display = 'block';
+                }
+                
+                // Hide the progress container
+                importProgressContainer.style.display = 'none';
+                importOptionsContainer.style.display = 'block';
+                
+                // Show error
+                showErrorInImportOptions('Import failed: ' + error.message);
+            }
+        });
+        
+        // Import posters from Plex
+        async function importPlexPosters(type, libraryId, showKey, contentType, overwriteOption, importAllSeasons) {
+            // Configure initial request
+            const initialParams = {
+                'action': 'import_plex_posters',
+                'type': type,
+                'libraryId': libraryId,
+                'contentType': contentType,
+                'overwriteOption': overwriteOption,
+                'batchProcessing': 'true',
+                'startIndex': 0
+            };
+            
+            // Add showKey for seasons import (when not importing all)
+            if (type === 'seasons' && !importAllSeasons && showKey) {
+                initialParams.showKey = showKey;
+            }
+            
+            // Add importAllSeasons parameter if true
+            if (type === 'seasons' && importAllSeasons) {
+                initialParams.importAllSeasons = 'true';
+            }
+            
+            let isComplete = false;
+            let currentIndex = 0;
+            const results = {
+                successful: 0,
+                skipped: 0,
+                failed: 0,
+                errors: []
+            };
+            
+            // Stats dashboard in the modal
+            const statsDashboard = `
+            <div id="importStatsDashboard" style="margin-top: 20px; display: flex; justify-content: space-between; text-align: center; gap: 10px;">
+                <div style="flex: 1; background: rgba(46, 213, 115, 0.1); border: 1px solid var(--success-color); border-radius: 6px; padding: 12px;">
+                    <div style="font-size: 24px; font-weight: bold; color: var(--success-color);" id="statsSuccessful">0</div>
+                    <div style="color: var(--text-primary);">Successful</div>
+                </div>
+                <div style="flex: 1; background: rgba(255, 159, 67, 0.1); border: 1px solid var(--accent-primary); border-radius: 6px; padding: 12px;">
+                    <div style="font-size: 24px; font-weight: bold; color: var(--accent-primary);" id="statsSkipped">0</div>
+                    <div style="color: var(--text-primary);">Skipped</div>
+                </div>
+                <div style="flex: 1; background: rgba(239, 68, 68, 0.1); border: 1px solid var(--danger-color); border-radius: 6px; padding: 12px;">
+                    <div style="font-size: 24px; font-weight: bold; color: var(--danger-color);" id="statsFailed">0</div>
+                    <div style="color: var(--text-primary);">Failed</div>
+                </div>
+            </div>
+            `;
+            
+            // Add stats dashboard to progress container
+            if (!document.getElementById('importStatsDashboard')) {
+                document.getElementById('importProgressDetails').insertAdjacentHTML('afterend', statsDashboard);
+            }
+            
+            // Update progress message for all seasons import
+            if (type === 'seasons' && importAllSeasons) {
+                document.getElementById('importProgressStatus').textContent = 'Importing season posters from all shows...';
+            }
+            
+            const allSkippedDetails = []; // Array to store results
+            
+            // While not complete and not cancelled
+            while (!isComplete && !importCancelled) {
+                try {
+                    const formData = new FormData();
+                    
+                    // Add all parameters
+                    for (const [key, value] of Object.entries({
+                        ...initialParams,
+                        'startIndex': currentIndex,
+                        'totalSuccessful': results.successful,
+                        'totalSkipped': results.skipped,
+                        'totalFailed': results.failed
+                    })) {
+                        formData.append(key, value);
+                    }
+                    
+                    const response = await fetch('./include/plex-import.php', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (!data.success) {
+                        throw new Error(data.error || 'Unknown error during import');
+                    }
+                    
+                    // Update progress
+                    if (data.batchComplete) {
+                        // For "Import all seasons", show which show is being processed
+                        if (type === 'seasons' && importAllSeasons && data.progress.currentShow) {
+                            document.getElementById('importProgressStatus').textContent = 
+                                `Importing seasons from: ${data.progress.currentShow}`;
+                            
+                            // Season progress details
+                            if (data.progress.seasonCount !== undefined) {
+                                document.getElementById('importProgressDetails').innerHTML = 
+                                    `Processing show ${data.progress.processed} of ${data.progress.total} (${data.progress.percentage}%)<br>` +
+                                    `Found ${data.progress.seasonCount} seasons in current show`;
+                            } else {
+                                document.getElementById('importProgressDetails').textContent = 
+                                    `Processing show ${data.progress.processed} of ${data.progress.total} (${data.progress.percentage}%)`;
+                            }
+                        } else {
+                            // Regular batch progress
+                            const percentage = data.progress.percentage;
+                            if (importProgressBar) {
+                                importProgressBar.style.width = `${percentage}%`;
+                            }
+                            
+                            // Update progress text
+                            document.getElementById('importProgressDetails').textContent = 
+                                `Processing ${data.progress.processed} of ${data.progress.total} items (${percentage}%)`;
+                        }
+                        
+                        // Update progress bar for all cases
+                        const percentage = data.progress.percentage;
+                        if (importProgressBar) {
+                            importProgressBar.style.width = `${percentage}%`;
+                        }
+                        
+                        // Track results
+                        if (data.results) {
+                            results.successful += data.results.successful;
+                            results.skipped += data.results.skipped;
+                            results.failed += data.results.failed;
+                            
+                            // Concat any errors
+                            if (data.results.errors && data.results.errors.length) {
+                                results.errors = [...results.errors, ...data.results.errors];
+                            }
+                        }
+                        
+                        if (data.results && data.results.skippedDetails) {
+                            allSkippedDetails.push(...data.results.skippedDetails); // Spread to merge arrays
+                        }
+                        
+                        // Update stats dashboard with the latest totals
+                        updateStatsDashboard(results, allSkippedDetails);
+                        
+                        // Check if complete
+                        isComplete = data.progress.isComplete;
+                        currentIndex = data.progress.nextIndex || 0;
+                    } else {
+                        // Handle non-batch processing result
+                        isComplete = true;
+                        
+                        if (data.results) {
+                            results.successful = data.results.successful;
+                            results.skipped = data.results.skipped;
+                            results.failed = data.results.failed;
+                            results.errors = data.results.errors || [];
+                        }
+                        
+                        // Update stats dashboard
+                        updateStatsDashboard(data.totalStats, allSkippedDetails || results, allSkippedDetails);
+                    }
+                    
+                    // If complete, show results
+                    if (isComplete) {
+                        // Update status text for results
+                        document.getElementById('importProgressStatus').textContent = 'Import complete!';
+                        
+                        // Small delay before showing the results screen
+                        setTimeout(() => {
+                            showImportResults(results, allSkippedDetails);
+                        }, 500);
+                    }
+                } catch (error) {
+                    // Stop processing and show error
+                    throw error;
+                }
+            }
+            
+            return results;
+        }
+        
+        // Update the stats dashboard with the current totals
+        function updateStatsDashboard(stats) {
+            document.getElementById('statsSuccessful').textContent = stats.successful;
+            document.getElementById('statsSkipped').textContent = stats.skipped;
+            document.getElementById('statsFailed').textContent = stats.failed;
+        }
+        
+        // Show import results
+        function showImportResults(results, skipped) {
+            // Accumulate results from all batches
+            if (results) {
+                // Update counts
+                allImportResults.successful += results.successful || 0;
+                allImportResults.skipped += results.skipped || 0;
+                allImportResults.failed += results.failed || 0;
+
+                // Accumulate errors
+                if (results.errors && results.errors.length > 0) {
+                    allImportResults.errors = allImportResults.errors.concat(results.errors);
+                }
+            }
+
+            // Accumulate items from this batch
+            if (skipped && skipped.length > 0) {
+                allImportResults.items = allImportResults.items.concat(skipped);
+            }
+
+            // Hide progress container
+            importProgressContainer.style.display = 'none';
+            
+            // Prepare details HTML if accumulated results exist
+            let skippedDetailsHtml = '';
+            if (allImportResults.items.length > 0) {
+                const skippedDetailsContent = allImportResults.items.map(function(item, index) {
+                    // Truncate long filenames, keeping the collection name more visible
+                    const truncateFilename = (filename) => {
+                        const match = filename.match(/(.+) \[([a-f0-9]+)\]/);
+                        if (match) {
+                            const [, collectionName, hash] = match;
+                            return `${collectionName} [${hash.substring(0, 10)}...]`;
+                        }
+                        return filename.length > 50 
+                            ? filename.substring(0, 47) + '...' 
+                            : filename;
+                    };
+
+                    return `
+                        <div style="
+                            margin-bottom: 12px; 
+                            padding: 12px; 
+                            background-color: ${index % 2 === 0 ? 'var(--background-secondary)' : 'var(--background-tertiary)'};
+                            border-radius: 6px;
+                            display: grid;
+                            gap: 10px;
+                            align-items: start;
+                            border: 1px solid var(--border-color);
+                        ">
+                            <div>
+                                <div style="
+                                    font-weight: bold;
+                                    color: var(--text-primary);
+                                    margin-bottom: 4px;
+                                ">File</div>
+                                <div style="
+                                    color: var(--text-secondary);
+                                    word-break: break-all;
+                                    font-size: 0.9em;
+                                " title="${item.file}">
+                                    ${truncateFilename(item.file)}
+                                </div>
+                                
+                                <div style="
+                                    font-weight: bold;
+                                    color: var(--text-primary);
+                                    margin-top: 8px;
+                                    margin-bottom: 4px;
+                                ">Reason</div>
+                                <div style="
+                                    color: var(--text-secondary);
+                                    font-size: 0.9em;
+                                ">
+                                    ${item.reason}
+                                </div>
+                                
+                                <div style="
+                                    font-weight: bold;
+                                    color: var(--text-primary);
+                                    margin-top: 8px;
+                                    margin-bottom: 4px;
+                                ">Message</div>
+                                <div style="
+                                    color: var(--text-secondary);
+                                    font-size: 0.9em;
+                                ">
+                                    ${item.message}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                skippedDetailsHtml = `
+                <div style="margin-top: 15px; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden;">
+                    <div 
+                        style="
+                            background-color: var(--background-secondary); 
+                            padding: 12px 15px; 
+                            cursor: pointer; 
+                            display: flex; 
+                            justify-content: space-between; 
+                            align-items: center;
+                            border-bottom: 1px solid var(--border-color);
+                        " 
+                        onclick="
+                            var detailsSection = this.nextElementSibling;
+                            detailsSection.style.display = detailsSection.style.display === 'none' ? 'block' : 'none';
+                            this.querySelector('.toggle-icon').textContent = 
+                                detailsSection.style.display === 'none' ? '▼' : '▲';
+                        "
+                    >
+                        <strong style="color: var(--text-primary);">Skipped Details</strong> 
+                        <span style="color: var(--text-secondary);">
+                            <span class="toggle-icon">▼</span> 
+                            ${allImportResults.items.length} items
+                        </span>
+                    </div>
+                    <div style="
+                        display: none; 
+                        max-height: 300px; 
+                        text-align: left;
+                        overflow-y: auto; 
+                        padding: 15px; 
+                        background-color: var(--background-primary);
+                    ">
+                        ${skippedDetailsContent}
+                    </div>
+                </div>`;
+            }
+            
+            // Enhance results summary with stats
+            const resultsSummary = `
+            <div style="margin-bottom: 20px; text-align: center;">
+                <div style="display: flex; justify-content: space-between; gap: 15px; margin-bottom: 20px;">
+                    <div style="flex: 1; background: rgba(46, 213, 115, 0.1); border: 1px solid var(--success-color); border-radius: 6px; padding: 15px;">
+                        <div style="font-size: 28px; font-weight: bold; color: var(--success-color);">${allImportResults.successful}</div>
+                        <div style="color: var(--text-primary);">Successful</div>
+                    </div>
+                    <div style="flex: 1; background: rgba(255, 159, 67, 0.1); border: 1px solid var(--accent-primary); border-radius: 6px; padding: 15px;">
+                        <div style="font-size: 28px; font-weight: bold; color: var(--accent-primary);">${allImportResults.skipped}</div>
+                        <div style="color: var(--text-primary);">Skipped</div>
+                    </div>
+                    <div style="flex: 1; background: rgba(239, 68, 68, 0.1); border: 1px solid var(--danger-color); border-radius: 6px; padding: 15px;">
+                        <div style="font-size: 28px; font-weight: bold; color: var(--danger-color);">${allImportResults.failed}</div>
+                        <div style="color: var(--text-primary);">Failed</div>
+                    </div>
+                </div>
+                <div style="color: var(--text-secondary);">
+                    Total processed: ${allImportResults.successful + allImportResults.skipped + allImportResults.failed}
+                </div>
+                ${skippedDetailsHtml}
+            </div>
+            `;
+            
+            // Add the results summary to the results container
+            const importResultsContainer = document.getElementById('importResultsContainer');
+            const existingContent = importResultsContainer.innerHTML;
+            importResultsContainer.innerHTML = existingContent.replace(
+                '<h3 style="margin-bottom: 16px; margin-top: 20px; display: flex; justify-content: center; align-items: center;">',
+                resultsSummary + '<h3 style="margin-bottom: 16px; margin-top: 20px; display: flex; justify-content: center; align-items: center;">'
+            );
+            
+            // Show results container
+            importResultsContainer.style.display = 'block';
+            
+            // Show errors if any
+            const importErrors = document.getElementById('importErrors');
+            if (allImportResults.errors.length > 0) {
+                const errorList = importErrors.querySelector('ul');
+                errorList.innerHTML = '';
+                
+                allImportResults.errors.forEach(error => {
+                    const li = document.createElement('li');
+                    li.textContent = error;
+                    errorList.appendChild(li);
+                });
+                
+                importErrors.style.display = 'block';
+            } else {
+                importErrors.style.display = 'none';
+            }
+            
+            // Show the close button again when results are shown
+            const closeButton = plexImportModal.querySelector('.modal-close-btn');
+            if (closeButton) {
+                closeButton.style.display = 'block';
+            }
+        }
+        
+        // Event handlers
+        showPlexImportButton.addEventListener('click', showPlexModal);
+        closePlexImportButton?.addEventListener('click', hidePlexModal);
+        
+        // Don't close when clicking outside the modal during import
+        plexImportModal.addEventListener('click', function(e) {
+            if (e.target === plexImportModal) {
+                // Check if import is in progress
+                if (importProgressContainer.style.display === 'block') {
+                    // Don't close if import is in progress
+                    return;
+                }
+                hidePlexModal();
+            }
+        });
+        
+        // Close error modal event handlers
+        closeErrorModalButton?.addEventListener('click', hideErrorModal);
+        
+        plexErrorCloseButtons.forEach(button => {
+            button.addEventListener('click', hideErrorModal);
+        });
+        
+        // Close results and prepare for a new import
+        closeResultsButton?.addEventListener('click', function() {
+            // Make sure to hide the modal and reset
+            hideModal(plexImportModal);
+            // Force a page refresh to ensure a clean state
+            setTimeout(function() {
+                window.location.reload();
+            }, 300);
+        });
+    }
+    
+    // =========== JELLYFIN IMPORT MODAL ===========
+    
     // Check if Jellyfin Import Modal exists
     const jellyfinImportModal = document.getElementById('jellyfinImportModal');
     const showJellyfinImportButton = document.getElementById('showJellyfinImportModal');
 
-    if (jellyfinImportModal && showJellyfinImportButton) {
+    if (jellyfinImportModal && showJellyfinImportButton && isLoggedIn) {
         // Modal elements
         const closeJellyfinImportButton = jellyfinImportModal.querySelector('.modal-close-btn');
         const jellyfinErrorModal = document.getElementById('jellyfinErrorModal');
@@ -2889,11 +4177,6 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Connection status
         const connectionStatus = document.getElementById('jellyfinConnectionStatus');
-        
-        // State variables
-        let jellyfinLibraries = [];
-        let jellyfinShows = [];
-        let importCancelled = false;
         
         // Show/hide Jellyfin Import Modal functions
         function showJellyfinModal() {
@@ -3369,456 +4652,443 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
         
+        // Import posters from Jellyfin
+        async function importJellyfinPosters(type, libraryId, showKey, contentType, overwriteOption, importAllSeasons) {
+            // Configure initial request
+            const initialParams = {
+                'action': 'import_jellyfin_posters',
+                'type': type,
+                'libraryId': libraryId,
+                'contentType': contentType,
+                'overwriteOption': overwriteOption,
+                'batchProcessing': 'true',
+                'startIndex': 0
+            };
+            
+            // Add showKey for seasons import (when not importing all)
+            if (type === 'seasons' && !importAllSeasons) {
+                if (!showKey) {
+                    throw new Error('Show ID is required for single-show seasons import');
+                }
+                initialParams.showKey = showKey;
+            }
+            
+            // Add importAllSeasons parameter if true
+            if (type === 'seasons' && importAllSeasons) {
+                initialParams.importAllSeasons = 'true';
+            }
+            
+            let isComplete = false;
+            let currentIndex = 0;
+            const results = {
+                successful: 0,
+                skipped: 0,
+                failed: 0,
+                errors: []
+            };
+            
+            // Stats dashboard in the modal
+            const statsDashboard = `
+            <div id="jellyfinImportStatsDashboard" style="margin-top: 20px; display: flex; justify-content: space-between; text-align: center; gap: 10px;">
+                <div style="flex: 1; background: rgba(46, 213, 115, 0.1); border: 1px solid var(--success-color); border-radius: 6px; padding: 12px;">
+                    <div style="font-size: 24px; font-weight: bold; color: var(--success-color);" id="jellyfinStatsSuccessful">0</div>
+                    <div style="color: var(--text-primary);">Successful</div>
+                </div>
+                <div style="flex: 1; background: rgba(255, 159, 67, 0.1); border: 1px solid var(--accent-primary); border-radius: 6px; padding: 12px;">
+                    <div style="font-size: 24px; font-weight: bold; color: var(--accent-primary);" id="jellyfinStatsSkipped">0</div>
+                    <div style="color: var(--text-primary);">Skipped</div>
+                </div>
+                <div style="flex: 1; background: rgba(239, 68, 68, 0.1); border: 1px solid var(--danger-color); border-radius: 6px; padding: 12px;">
+                    <div style="font-size: 24px; font-weight: bold; color: var(--danger-color);" id="jellyfinStatsFailed">0</div>
+                    <div style="color: var(--text-primary);">Failed</div>
+                </div>
+            </div>
+            `;
+            
+            // Add stats dashboard to progress container
+            if (!document.getElementById('jellyfinImportStatsDashboard')) {
+                document.getElementById('jellyfinImportProgressDetails').insertAdjacentHTML('afterend', statsDashboard);
+            }
+            
+            // Update progress message for all seasons import
+            if (type === 'seasons' && importAllSeasons) {
+                document.getElementById('jellyfinImportProgressStatus').textContent = 'Importing season posters from all shows...';
+            }
+            
+            const allSkippedDetails = []; // Array to store results
 
-	// Import posters from Jellyfin
-	async function importJellyfinPosters(type, libraryId, showKey, contentType, overwriteOption, importAllSeasons) {
-		// Configure initial request
-		const initialParams = {
-		    'action': 'import_jellyfin_posters',
-		    'type': type,
-		    'libraryId': libraryId,
-		    'contentType': contentType,
-		    'overwriteOption': overwriteOption,
-		    'batchProcessing': 'true',
-		    'startIndex': 0
-		};
-		
-		// Add showKey for seasons import (when not importing all)
-		if (type === 'seasons' && !importAllSeasons) {
-		    if (!showKey) {
-		        throw new Error('Show ID is required for single-show seasons import');
-		    }
-		    initialParams.showKey = showKey;
-		}
-		
-		// Add importAllSeasons parameter if true
-		if (type === 'seasons' && importAllSeasons) {
-		    initialParams.importAllSeasons = 'true';
-		}
-		
-		let isComplete = false;
-		let currentIndex = 0;
-		const results = {
-		    successful: 0,
-		    skipped: 0,
-		    failed: 0,
-		    errors: []
-		};
-		
-		// Stats dashboard in the modal
-		const statsDashboard = `
-		<div id="jellyfinImportStatsDashboard" style="margin-top: 20px; display: flex; justify-content: space-between; text-align: center; gap: 10px;">
-		    <div style="flex: 1; background: rgba(46, 213, 115, 0.1); border: 1px solid var(--success-color); border-radius: 6px; padding: 12px;">
-		        <div style="font-size: 24px; font-weight: bold; color: var(--success-color);" id="jellyfinStatsSuccessful">0</div>
-		        <div style="color: var(--text-primary);">Successful</div>
-		    </div>
-		    <div style="flex: 1; background: rgba(255, 159, 67, 0.1); border: 1px solid var(--accent-primary); border-radius: 6px; padding: 12px;">
-		        <div style="font-size: 24px; font-weight: bold; color: var(--accent-primary);" id="jellyfinStatsSkipped">0</div>
-		        <div style="color: var(--text-primary);">Skipped</div>
-		    </div>
-		    <div style="flex: 1; background: rgba(239, 68, 68, 0.1); border: 1px solid var(--danger-color); border-radius: 6px; padding: 12px;">
-		        <div style="font-size: 24px; font-weight: bold; color: var(--danger-color);" id="jellyfinStatsFailed">0</div>
-		        <div style="color: var(--text-primary);">Failed</div>
-		    </div>
-		</div>
-		`;
-		
-		// Add stats dashboard to progress container
-		if (!document.getElementById('jellyfinImportStatsDashboard')) {
-		    document.getElementById('jellyfinImportProgressDetails').insertAdjacentHTML('afterend', statsDashboard);
-		}
-		
-		// Update progress message for all seasons import
-		if (type === 'seasons' && importAllSeasons) {
-		    document.getElementById('jellyfinImportProgressStatus').textContent = 'Importing season posters from all shows...';
-		}
-		
-		const allSkippedDetails = []; // Array to store results
-
-		// While not complete and not cancelled
-		while (!isComplete && !importCancelled) {
-		    try {
-		        const formData = new FormData();
-		        
-		        // Add all parameters
-		        for (const [key, value] of Object.entries({
-		            ...initialParams,
-		            'startIndex': currentIndex,
-		            'totalSuccessful': results.successful,
-		            'totalSkipped': results.skipped,
-		            'totalFailed': results.failed
-		        })) {
-		            formData.append(key, value);
-		        }
-		        
-		        const response = await fetch('./include/jellyfin-import.php', {
-		            method: 'POST',
-		            body: formData
-		        });
-		        
-		        const responseText = await response.text();
-		        
-		        let data;
-		        try {
-		            data = JSON.parse(responseText);
-		        } catch (parseError) {
-		            throw new Error(`Failed to parse JSON response: ${responseText.substring(0, 100)}...`);
-		        }
-		        
-		        if (!data.success) {
-		            throw new Error(data.error || 'Unknown error during import');
-		        }
-		        
-	        	if (data.results && data.results.skippedDetails) {
-					allSkippedDetails.push(...data.results.skippedDetails); // Spread to merge arrays
-				}
-		        
-		        // Update progress
-		        if (data.batchComplete) {
-		            
-		            // For "Import all seasons", show which show is being processed
-		            if (type === 'seasons' && importAllSeasons && data.progress.currentShow) {
-		                document.getElementById('jellyfinImportProgressStatus').textContent = 
-		                    `Importing seasons from: ${data.progress.currentShow}`;
-		                
-		                // Season progress details
-		                if (data.progress.seasonCount !== undefined) {
-		                    document.getElementById('jellyfinImportProgressDetails').innerHTML = 
-		                        `Processing show ${data.progress.processed} of ${data.progress.total} (${data.progress.percentage}%)<br>` +
-		                        `Found ${data.progress.seasonCount} seasons in current show`;
-		                } else {
-		                    document.getElementById('jellyfinImportProgressDetails').textContent = 
-		                        `Processing show ${data.progress.processed} of ${data.progress.total} (${data.progress.percentage}%)`;
-		                }
-		            } else {
-		                // Regular batch progress
-		                const percentage = data.progress.percentage;
-		                if (jellyfinImportProgressBar) {
-		                    jellyfinImportProgressBar.style.width = `${percentage}%`;
-		                } else {
-		                    const progressBarElement = document.querySelector('#jellyfinImportProgressBar > div');
-		                    if (progressBarElement) {
-		                        progressBarElement.style.width = `${percentage}%`;
-		                    }
-		                }
-		                
-		                // Update progress text
-		                document.getElementById('jellyfinImportProgressDetails').textContent = 
-		                    `Processing ${data.progress.processed} of ${data.progress.total} items (${percentage}%)`;
-		            }
-		            
-		            // Update progress bar for all cases
-		            const percentage = data.progress.percentage;
-		            if (jellyfinImportProgressBar) {
-		                jellyfinImportProgressBar.style.width = `${percentage}%`;
-		            }
-		            
-		            // Track results
-		            if (data.results) {
-		                results.successful += data.results.successful;
-		                results.skipped += data.results.skipped;
-		                results.failed += data.results.failed;
-		                
-		                // Concat any errors
-		                if (data.results.errors && data.results.errors.length) {
-		                    results.errors = [...results.errors, ...data.results.errors];
-		                }
-		            }
-		            
-		            // Update stats dashboard with the latest totals
-		            updateJellyfinStatsDashboard(results, allSkippedDetails);
-		            
-		            // Check if complete
-		            isComplete = data.progress.isComplete;
-		            currentIndex = data.progress.nextIndex || 0;
-		            
-		            
-		            // Force a small delay between requests to prevent overwhelming the server
-		            if (!isComplete) {
-		                await new Promise(resolve => setTimeout(resolve, 100));
-		            }
-		        } else {
-		            // Handle non-batch processing result
-		            isComplete = true;
-		            
-		            if (data.results) {
-		                results.successful = data.results.successful;
-		                results.skipped = data.results.skipped;
-		                results.failed = data.results.failed;
-		                results.errors = data.results.errors || [];
-		            }
-		            
-		            // Update stats dashboard
-		            updateJellyfinStatsDashboard(data.totalStats, allSkippedDetails || results,  allSkippedDetails);
-		        }
-		        
-		        // If complete, show results
-		        if (isComplete) {
-		            // Update status text for results
-		            document.getElementById('jellyfinImportProgressStatus').textContent = 'Import complete!';
-		            
-		            // Small delay before showing the results screen
-		            setTimeout(() => {
-		                showJellyfinImportResults(results, allSkippedDetails);
-		            }, 500);
-		        }
-		    } catch (error) {
-		        throw error;
-		    }
-		}
-		
-		return results;
-	}
+            // While not complete and not cancelled
+            while (!isComplete && !importCancelled) {
+                try {
+                    const formData = new FormData();
+                    
+                    // Add all parameters
+                    for (const [key, value] of Object.entries({
+                        ...initialParams,
+                        'startIndex': currentIndex,
+                        'totalSuccessful': results.successful,
+                        'totalSkipped': results.skipped,
+                        'totalFailed': results.failed
+                    })) {
+                        formData.append(key, value);
+                    }
+                    
+                    const response = await fetch('./include/jellyfin-import.php', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const responseText = await response.text();
+                    
+                    let data;
+                    try {
+                        data = JSON.parse(responseText);
+                    } catch (parseError) {
+                        throw new Error(`Failed to parse JSON response: ${responseText.substring(0, 100)}...`);
+                    }
+                    
+                    if (!data.success) {
+                        throw new Error(data.error || 'Unknown error during import');
+                    }
+                    
+                    if (data.results && data.results.skippedDetails) {
+                        allSkippedDetails.push(...data.results.skippedDetails); // Spread to merge arrays
+                    }
+                    
+                    // Update progress
+                    if (data.batchComplete) {
+                        
+                        // For "Import all seasons", show which show is being processed
+                        if (type === 'seasons' && importAllSeasons && data.progress.currentShow) {
+                            document.getElementById('jellyfinImportProgressStatus').textContent = 
+                                `Importing seasons from: ${data.progress.currentShow}`;
+                            
+                            // Season progress details
+                            if (data.progress.seasonCount !== undefined) {
+                                document.getElementById('jellyfinImportProgressDetails').innerHTML = 
+                                    `Processing show ${data.progress.processed} of ${data.progress.total} (${data.progress.percentage}%)<br>` +
+                                    `Found ${data.progress.seasonCount} seasons in current show`;
+                            } else {
+                                document.getElementById('jellyfinImportProgressDetails').textContent = 
+                                    `Processing show ${data.progress.processed} of ${data.progress.total} (${data.progress.percentage}%)`;
+                            }
+                        } else {
+                            // Regular batch progress
+                            const percentage = data.progress.percentage;
+                            if (jellyfinImportProgressBar) {
+                                jellyfinImportProgressBar.style.width = `${percentage}%`;
+                            } else {
+                                const progressBarElement = document.querySelector('#jellyfinImportProgressBar > div');
+                                if (progressBarElement) {
+                                    progressBarElement.style.width = `${percentage}%`;
+                                }
+                            }
+                            
+                            // Update progress text
+                            document.getElementById('jellyfinImportProgressDetails').textContent = 
+                                `Processing ${data.progress.processed} of ${data.progress.total} items (${percentage}%)`;
+                        }
+                        
+                        // Update progress bar for all cases
+                        const percentage = data.progress.percentage;
+                        if (jellyfinImportProgressBar) {
+                            jellyfinImportProgressBar.style.width = `${percentage}%`;
+                        }
+                        
+                        // Track results
+                        if (data.results) {
+                            results.successful += data.results.successful;
+                            results.skipped += data.results.skipped;
+                            results.failed += data.results.failed;
+                            
+                            // Concat any errors
+                            if (data.results.errors && data.results.errors.length) {
+                                results.errors = [...results.errors, ...data.results.errors];
+                            }
+                        }
+                        
+                        // Update stats dashboard with the latest totals
+                        updateJellyfinStatsDashboard(results, allSkippedDetails);
+                        
+                        // Check if complete
+                        isComplete = data.progress.isComplete;
+                        currentIndex = data.progress.nextIndex || 0;
+                        
+                        // Force a small delay between requests to prevent overwhelming the server
+                        if (!isComplete) {
+                            await new Promise(resolve => setTimeout(resolve, 100));
+                        }
+                    } else {
+                        // Handle non-batch processing result
+                        isComplete = true;
+                        
+                        if (data.results) {
+                            results.successful = data.results.successful;
+                            results.skipped = data.results.skipped;
+                            results.failed = data.results.failed;
+                            results.errors = data.results.errors || [];
+                        }
+                        
+                        // Update stats dashboard
+                        updateJellyfinStatsDashboard(data.totalStats, allSkippedDetails || results,  allSkippedDetails);
+                    }
+                    
+                    // If complete, show results
+                    if (isComplete) {
+                        // Update status text for results
+                        document.getElementById('jellyfinImportProgressStatus').textContent = 'Import complete!';
+                        
+                        // Small delay before showing the results screen
+                        setTimeout(() => {
+                            showJellyfinImportResults(results, allSkippedDetails);
+                        }, 500);
+                    }
+                } catch (error) {
+                    throw error;
+                }
+            }
+            
+            return results;
+        }
         
         // Update the stats dashboard with the current totals
-		function updateJellyfinStatsDashboard(stats) {
-			
-			// Make sure the elements exist before trying to update them
-			const successfulElement = document.getElementById('jellyfinStatsSuccessful');
-			const skippedElement = document.getElementById('jellyfinStatsSkipped');
-			const failedElement = document.getElementById('jellyfinStatsFailed');
-			
-			if (successfulElement) {
-				successfulElement.textContent = stats.successful || 0;
-			}
-			
-			if (skippedElement) {
-				skippedElement.textContent = stats.skipped || 0;
-			}
-			
-			if (failedElement) {
-				failedElement.textContent = stats.failed || 0;
-			}
-			
-		}
-        
-// Global variable to store all batch results
-let allJellyfinImportResults = {
-    successful: 0,
-    skipped: 0,
-    failed: 0,
-    errors: [],
-    items: []
-};
-
-// Show import results
-function showJellyfinImportResults(results, skipped) {
-    // Accumulate results from all batches
-    if (results) {
-        // Update counts
-        allJellyfinImportResults.successful += results.successful || 0;
-        allJellyfinImportResults.skipped += results.skipped || 0;
-        allJellyfinImportResults.failed += results.failed || 0;
-
-        // Accumulate errors
-        if (results.errors && results.errors.length > 0) {
-            allJellyfinImportResults.errors = allJellyfinImportResults.errors.concat(results.errors);
+        function updateJellyfinStatsDashboard(stats) {
+            // Make sure the elements exist before trying to update them
+            const successfulElement = document.getElementById('jellyfinStatsSuccessful');
+            const skippedElement = document.getElementById('jellyfinStatsSkipped');
+            const failedElement = document.getElementById('jellyfinStatsFailed');
+            
+            if (successfulElement) {
+                successfulElement.textContent = stats.successful || 0;
+            }
+            
+            if (skippedElement) {
+                skippedElement.textContent = stats.skipped || 0;
+            }
+            
+            if (failedElement) {
+                failedElement.textContent = stats.failed || 0;
+            }
         }
-    }
+        
+        // Show import results
+        function showJellyfinImportResults(results, skipped) {
+            // Accumulate results from all batches
+            if (results) {
+                // Update counts
+                allJellyfinImportResults.successful += results.successful || 0;
+                allJellyfinImportResults.skipped += results.skipped || 0;
+                allJellyfinImportResults.failed += results.failed || 0;
 
-    // Accumulate items from this batch
-    if (skipped && skipped.length > 0) {
-        allJellyfinImportResults.items = allJellyfinImportResults.items.concat(skipped);
-    }
-
-    // Hide progress container
-    jellyfinImportProgressContainer.style.display = 'none';
-    
-    // Prepare details HTML if accumulated results exist
-    let skippedDetailsHtml = '';
-    if (allJellyfinImportResults.items.length > 0) {
-        const skippedDetailsContent = allJellyfinImportResults.items.map(function(item, index) {
-            // Truncate long filenames, keeping the collection name more visible
-            const truncateFilename = (filename) => {
-                const match = filename.match(/(.+) \[([a-f0-9]+)\]/);
-                if (match) {
-                    const [, collectionName, hash] = match;
-                    return `${collectionName} [${hash.substring(0, 10)}...]`;
+                // Accumulate errors
+                if (results.errors && results.errors.length > 0) {
+                    allJellyfinImportResults.errors = allJellyfinImportResults.errors.concat(results.errors);
                 }
-                return filename.length > 50 
-                    ? filename.substring(0, 47) + '...' 
-                    : filename;
-            };
+            }
 
-            return `
-                <div style="
-                    margin-bottom: 12px; 
-                    padding: 12px; 
-                    background-color: ${index % 2 === 0 ? 'var(--background-secondary)' : 'var(--background-tertiary)'};
-                    border-radius: 6px;
-                    display: grid;
-                    gap: 10px;
-                    align-items: start;
-                    border: 1px solid var(--border-color);
-                ">
-                    <div>
+            // Accumulate items from this batch
+            if (skipped && skipped.length > 0) {
+                allJellyfinImportResults.items = allJellyfinImportResults.items.concat(skipped);
+            }
+
+            // Hide progress container
+            jellyfinImportProgressContainer.style.display = 'none';
+            
+            // Prepare details HTML if accumulated results exist
+            let skippedDetailsHtml = '';
+            if (allJellyfinImportResults.items.length > 0) {
+                const skippedDetailsContent = allJellyfinImportResults.items.map(function(item, index) {
+                    // Truncate long filenames, keeping the collection name more visible
+                    const truncateFilename = (filename) => {
+                        const match = filename.match(/(.+) \[([a-f0-9]+)\]/);
+                        if (match) {
+                            const [, collectionName, hash] = match;
+                            return `${collectionName} [${hash.substring(0, 10)}...]`;
+                        }
+                        return filename.length > 50 
+                            ? filename.substring(0, 47) + '...' 
+                            : filename;
+                    };
+
+                    return `
                         <div style="
-                            font-weight: bold;
-                            color: var(--text-primary);
-                            margin-bottom: 4px;
-                        ">File</div>
-                        <div style="
-                            color: var(--text-secondary);
-                            word-break: break-all;
-                            font-size: 0.9em;
-                        " title="${item.file}">
-                            ${truncateFilename(item.file)}
-                        </div>
-                        
-                        <div style="
-                            font-weight: bold;
-                            color: var(--text-primary);
-                            margin-top: 8px;
-                            margin-bottom: 4px;
-                        ">Reason</div>
-                        <div style="
-                            color: var(--text-secondary);
-                            font-size: 0.9em;
+                            margin-bottom: 12px; 
+                            padding: 12px; 
+                            background-color: ${index % 2 === 0 ? 'var(--background-secondary)' : 'var(--background-tertiary)'};
+                            border-radius: 6px;
+                            display: grid;
+                            gap: 10px;
+                            align-items: start;
+                            border: 1px solid var(--border-color);
                         ">
-                            ${item.reason}
+                            <div>
+                                <div style="
+                                    font-weight: bold;
+                                    color: var(--text-primary);
+                                    margin-bottom: 4px;
+                                ">File</div>
+                                <div style="
+                                    color: var(--text-secondary);
+                                    word-break: break-all;
+                                    font-size: 0.9em;
+                                " title="${item.file}">
+                                    ${truncateFilename(item.file)}
+                                </div>
+                                
+                                <div style="
+                                    font-weight: bold;
+                                    color: var(--text-primary);
+                                    margin-top: 8px;
+                                    margin-bottom: 4px;
+                                ">Reason</div>
+                                <div style="
+                                    color: var(--text-secondary);
+                                    font-size: 0.9em;
+                                ">
+                                    ${item.reason}
+                                </div>
+                                
+                                <div style="
+                                    font-weight: bold;
+                                    color: var(--text-primary);
+                                    margin-top: 8px;
+                                    margin-bottom: 4px;
+                                ">Message</div>
+                                <div style="
+                                    color: var(--text-secondary);
+                                    font-size: 0.9em;
+                                ">
+                                    ${item.message}
+                                </div>
+                            </div>
                         </div>
-                        
-                        <div style="
-                            font-weight: bold;
-                            color: var(--text-primary);
-                            margin-top: 8px;
-                            margin-bottom: 4px;
-                        ">Message</div>
-                        <div style="
-                            color: var(--text-secondary);
-                            font-size: 0.9em;
-                        ">
-                            ${item.message}
-                        </div>
+                    `;
+                }).join('');
+
+                skippedDetailsHtml = `
+                <div style="margin-top: 15px; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden;">
+                    <div 
+                        style="
+                            background-color: var(--background-secondary); 
+                            padding: 12px 15px; 
+                            cursor: pointer; 
+                            display: flex; 
+                            justify-content: space-between; 
+                            align-items: center;
+                            border-bottom: 1px solid var(--border-color);
+                        " 
+                        onclick="
+                            var detailsSection = this.nextElementSibling;
+                            detailsSection.style.display = detailsSection.style.display === 'none' ? 'block' : 'none';
+                            this.querySelector('.toggle-icon').textContent = 
+                                detailsSection.style.display === 'none' ? '▼' : '▲';
+                        "
+                    >
+                        <strong style="color: var(--text-primary);">Skipped Details</strong> 
+                        <span style="color: var(--text-secondary);">
+                            <span class="toggle-icon">▼</span> 
+                            ${allJellyfinImportResults.items.length} items
+                        </span>
+                    </div>
+                    <div style="
+                        display: none; 
+                        max-height: 300px; 
+                        text-align: left;
+                        overflow-y: auto; 
+                        padding: 15px; 
+                        background-color: var(--background-primary);
+                    ">
+                        ${skippedDetailsContent}
+                    </div>
+                </div>`;
+            }
+            
+            // Enhance results summary with stats
+            const resultsSummary = `
+            <div style="margin-bottom: 20px; text-align: center;">
+                <div style="display: flex; justify-content: space-between; gap: 15px; margin-bottom: 20px;">
+                    <div style="flex: 1; background: rgba(46, 213, 115, 0.1); border: 1px solid var(--success-color); border-radius: 6px; padding: 15px;">
+                        <div style="font-size: 28px; font-weight: bold; color: var(--success-color);">${allJellyfinImportResults.successful}</div>
+                        <div style="color: var(--text-primary);">Successful</div>
+                    </div>
+                    <div style="flex: 1; background: rgba(255, 159, 67, 0.1); border: 1px solid var(--accent-primary); border-radius: 6px; padding: 15px;">
+                        <div style="font-size: 28px; font-weight: bold; color: var(--accent-primary);">${allJellyfinImportResults.skipped}</div>
+                        <div style="color: var(--text-primary);">Skipped</div>
+                    </div>
+                    <div style="flex: 1; background: rgba(239, 68, 68, 0.1); border: 1px solid var(--danger-color); border-radius: 6px; padding: 15px;">
+                        <div style="font-size: 28px; font-weight: bold; color: var(--danger-color);">${allJellyfinImportResults.failed}</div>
+                        <div style="color: var(--text-primary);">Failed</div>
                     </div>
                 </div>
+                <div style="color: var(--text-secondary);">
+                    Total processed: ${allJellyfinImportResults.successful + allJellyfinImportResults.skipped + allJellyfinImportResults.failed}
+                </div>
+                ${skippedDetailsHtml}
+            </div>
             `;
-        }).join('');
+            
+            // Add the results summary to the results container
+            const jellyfinImportResultsContainer = document.getElementById('jellyfinImportResultsContainer');
+            const existingContent = jellyfinImportResultsContainer.innerHTML;
+            jellyfinImportResultsContainer.innerHTML = existingContent.replace(
+                '<h3 style="margin-bottom: 16px; margin-top: 20px; display: flex; justify-content: center; align-items: center;">',
+                resultsSummary + '<h3 style="margin-bottom: 16px; margin-top: 20px; display: flex; justify-content: center; align-items: center;">'
+            );
+            
+            // Show results container
+            jellyfinImportResultsContainer.style.display = 'block';
+            
+            // Show errors if any
+            const jellyfinImportErrors = document.getElementById('jellyfinImportErrors');
+            if (allJellyfinImportResults.errors.length > 0) {
+                const errorList = jellyfinImportErrors.querySelector('ul');
+                errorList.innerHTML = '';
+                
+                allJellyfinImportResults.errors.forEach(function(error) {
+                    const li = document.createElement('li');
+                    li.textContent = error;
+                    errorList.appendChild(li);
+                });
+                
+                jellyfinImportErrors.style.display = 'block';
+            } else {
+                jellyfinImportErrors.style.display = 'none';
+            }
+            
+            // ENSURE the close button is visible
+            const closeButton = jellyfinImportModal.querySelector('.modal-close-btn');
+            if (closeButton) {
+                closeButton.style.display = 'block';
+            }
+            
+            // Also ensure the close results button is properly set up
+            const closeResultsButton = document.getElementById('closeJellyfinImportResults');
+            if (closeResultsButton) {
+                closeResultsButton.style.display = 'block';
+                // Remove any existing event listeners to prevent multiple attachments
+                closeResultsButton.removeEventListener('click', closeImportResultsHandler);
+                closeResultsButton.addEventListener('click', closeImportResultsHandler);
+            }
+        }
 
-        skippedDetailsHtml = `
-        <div style="margin-top: 15px; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden;">
-            <div 
-                style="
-                    background-color: var(--background-secondary); 
-                    padding: 12px 15px; 
-                    cursor: pointer; 
-                    display: flex; 
-                    justify-content: space-between; 
-                    align-items: center;
-                    border-bottom: 1px solid var(--border-color);
-                " 
-                onclick="
-                    var detailsSection = this.nextElementSibling;
-                    detailsSection.style.display = detailsSection.style.display === 'none' ? 'block' : 'none';
-                    this.querySelector('.toggle-icon').textContent = 
-                        detailsSection.style.display === 'none' ? '▼' : '▲';
-                "
-            >
-                <strong style="color: var(--text-primary);">Skipped Details</strong> 
-                <span style="color: var(--text-secondary);">
-                    <span class="toggle-icon">▼</span> 
-                    ${allJellyfinImportResults.items.length} items
-                </span>
-            </div>
-            <div style="
-                display: none; 
-                max-height: 300px; 
-                text-align: left;
-                overflow-y: auto; 
-                padding: 15px; 
-                background-color: var(--background-primary);
-            ">
-                ${skippedDetailsContent}
-            </div>
-        </div>`;
-    }
-    
-    // Enhance results summary with stats
-    const resultsSummary = `
-    <div style="margin-bottom: 20px; text-align: center;">
-        <div style="display: flex; justify-content: space-between; gap: 15px; margin-bottom: 20px;">
-            <div style="flex: 1; background: rgba(46, 213, 115, 0.1); border: 1px solid var(--success-color); border-radius: 6px; padding: 15px;">
-                <div style="font-size: 28px; font-weight: bold; color: var(--success-color);">${allJellyfinImportResults.successful}</div>
-                <div style="color: var(--text-primary);">Successful</div>
-            </div>
-            <div style="flex: 1; background: rgba(255, 159, 67, 0.1); border: 1px solid var(--accent-primary); border-radius: 6px; padding: 15px;">
-                <div style="font-size: 28px; font-weight: bold; color: var(--accent-primary);">${allJellyfinImportResults.skipped}</div>
-                <div style="color: var(--text-primary);">Skipped</div>
-            </div>
-            <div style="flex: 1; background: rgba(239, 68, 68, 0.1); border: 1px solid var(--danger-color); border-radius: 6px; padding: 15px;">
-                <div style="font-size: 28px; font-weight: bold; color: var(--danger-color);">${allJellyfinImportResults.failed}</div>
-                <div style="color: var(--text-primary);">Failed</div>
-            </div>
-        </div>
-        <div style="color: var(--text-secondary);">
-            Total processed: ${allJellyfinImportResults.successful + allJellyfinImportResults.skipped + allJellyfinImportResults.failed}
-        </div>
-        ${skippedDetailsHtml}
-    </div>
-    `;
-    
-    // Add the results summary to the results container
-    const jellyfinImportResultsContainer = document.getElementById('jellyfinImportResultsContainer');
-    const existingContent = jellyfinImportResultsContainer.innerHTML;
-    jellyfinImportResultsContainer.innerHTML = existingContent.replace(
-        '<h3 style="margin-bottom: 16px; margin-top: 20px; display: flex; justify-content: center; align-items: center;">',
-        resultsSummary + '<h3 style="margin-bottom: 16px; margin-top: 20px; display: flex; justify-content: center; align-items: center;">'
-    );
-    
-    // Show results container
-    jellyfinImportResultsContainer.style.display = 'block';
-    
-    // Show errors if any
-    const jellyfinImportErrors = document.getElementById('jellyfinImportErrors');
-    if (allJellyfinImportResults.errors.length > 0) {
-        const errorList = jellyfinImportErrors.querySelector('ul');
-        errorList.innerHTML = '';
-        
-        allJellyfinImportResults.errors.forEach(function(error) {
-            const li = document.createElement('li');
-            li.textContent = error;
-            errorList.appendChild(li);
-        });
-        
-        jellyfinImportErrors.style.display = 'block';
-    } else {
-        jellyfinImportErrors.style.display = 'none';
-    }
-    
-    // ENSURE the close button is visible
-    const closeButton = jellyfinImportModal.querySelector('.modal-close-btn');
-    if (closeButton) {
-        closeButton.style.display = 'block';
-    }
-    
-    // Also ensure the close results button is properly set up
-    const closeResultsButton = document.getElementById('closeJellyfinImportResults');
-    if (closeResultsButton) {
-        closeResultsButton.style.display = 'block';
-        // Remove any existing event listeners to prevent multiple attachments
-        closeResultsButton.removeEventListener('click', closeImportResultsHandler);
-        closeResultsButton.addEventListener('click', closeImportResultsHandler);
-    }
-}
-
-// Separate event handler function to avoid multiple listener attachments
-function closeImportResultsHandler() {
-    // Reset the global results object when closing
-    allJellyfinImportResults = {
-        successful: 0,
-        skipped: 0,
-        failed: 0,
-        errors: [],
-        items: []
-    };
-    
-    jellyfinImportModal.classList.remove('show');
-    setTimeout(function() {
-        jellyfinImportModal.style.display = 'none';
-        // Force a page refresh to ensure a clean state
-        window.location.reload();
-    }, 300);
-}
+        // Separate event handler function to avoid multiple listener attachments
+        function closeImportResultsHandler() {
+            // Reset the global results object when closing
+            allJellyfinImportResults = {
+                successful: 0,
+                skipped: 0,
+                failed: 0,
+                errors: [],
+                items: []
+            };
+            
+            jellyfinImportModal.classList.remove('show');
+            setTimeout(function() {
+                jellyfinImportModal.style.display = 'none';
+                // Force a page refresh to ensure a clean state
+                window.location.reload();
+            }, 300);
+        }
         
         // Event handlers
         showJellyfinImportButton.addEventListener('click', showJellyfinModal);
@@ -3854,1590 +5124,450 @@ function closeImportResultsHandler() {
         });
     }
     
-// Send to Plex functionality
-
-// Function to send image to Plex
-async function sendToPlex(filename, directory) {
-    // Show a loading notification
-    const notification = showSendingNotification();
+    // =========== PLEX INTEGRATION UTILITIES ===========
     
-    try {
-        const formData = new FormData();
-        formData.append('action', 'send_to_plex');
-        formData.append('filename', filename);
-        formData.append('directory', directory);
-        
-        const response = await fetch('./include/send-to-plex.php', {
-            method: 'POST',
-            body: formData
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            // Show success notification
-            showPlexSuccessNotification();
-        } else {
-            // Show error notification
-            showPlexErrorNotification(data.error || 'Failed to send poster to Plex');
-        }
-    } catch (error) {
-        // Show error notification
-        showPlexErrorNotification('Error sending poster to Plex: ' + error.message);
-    } finally {
-        // Hide the sending notification
-        notification.remove();
-    }
-}
-
-// Function to show sending notification
-function showSendingNotification() {
-    const notification = document.createElement('div');
-    notification.className = 'plex-notification plex-sending';
-    notification.innerHTML = `
-        <div class="plex-notification-content">
-            <div class="plex-spinner"></div>
-            <span>Sending to Plex...</span>
-        </div>
-    `;
-    document.body.appendChild(notification);
-    
-    // Force reflow to trigger animation
-    notification.offsetHeight;
-    notification.classList.add('show');
-    
-    return notification;
-}
-
-// Function to show success notification
-function showPlexSuccessNotification() {
-    const notification = document.createElement('div');
-    notification.className = 'plex-notification plex-success';
-    notification.innerHTML = `
-        <div class="plex-notification-content">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                <polyline points="22 4 12 14.01 9 11.01"></polyline>
-            </svg>
-            <span>Sent to Plex successfully!</span>
-        </div>
-    `;
-    document.body.appendChild(notification);
-    
-    // Force reflow to trigger animation
-    notification.offsetHeight;
-    notification.classList.add('show');
-    
-    // Auto-remove after 3 seconds
-    setTimeout(() => {
-        notification.classList.remove('show');
-        setTimeout(() => {
-            notification.remove();
-        }, 300); // Match transition duration
-    }, 3000);
-}
-
-// Function to show error notification
-function showPlexErrorNotification(message) {
-    const notification = document.createElement('div');
-    notification.className = 'plex-notification plex-error';
-    notification.innerHTML = `
-        <div class="plex-notification-content">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10"></circle>
-                <line x1="12" y1="8" x2="12" y2="12"></line>
-                <line x1="12" y1="16" x2="12.01" y2="16"></line>
-            </svg>
-            <span>${message}</span>
-        </div>
-    `;
-    document.body.appendChild(notification);
-    
-    // Force reflow to trigger animation
-    notification.offsetHeight;
-    notification.classList.add('show');
-    
-    // Auto-remove after 5 seconds
-    setTimeout(() => {
-        notification.classList.remove('show');
-        setTimeout(() => {
-            notification.remove();
-        }, 300); // Match transition duration
-    }, 5000);
-}
-
-// Send to Plex handler function
-function sendToPlexHandler(e) {
-    e.preventDefault();
-    const filename = this.getAttribute('data-filename');
-    const directory = this.getAttribute('data-dirname');
-    
-    // Store the data in the modal
-    const modal = document.getElementById('plexConfirmModal');
-    const filenameElement = document.getElementById('plexConfirmFilename');
-    
-    filenameElement.textContent = filename;
-    filenameElement.setAttribute('data-filename', filename);
-    filenameElement.setAttribute('data-dirname', directory);
-    
-    // Show the modal
-    showModal(modal);
-}
-
-function initPlexConfirmModal() {
-    const modal = document.getElementById('plexConfirmModal');
-    if (!modal) {
-        return;
-    }
-    
-    // Get elements - fix for the cancelButton selector
-    const closeButton = modal.querySelector('.modal-close-btn');
-    const cancelButton = document.getElementById('cancelPlexSend');
-    const confirmButton = modal.querySelector('.send-to-plex-confirm');
-    
-    // Close button handler
-    if (closeButton) {
-        closeButton.addEventListener('click', function() {
-            hideModal(modal);
-        });
-    }
-    
-    // Cancel button handler
-    if (cancelButton) {
-        cancelButton.addEventListener('click', function() {
-            hideModal(modal);
-        });
-    }
-    
-    // Confirm button handler
-    if (confirmButton) {
-        confirmButton.addEventListener('click', function() {
-            const filenameElement = document.getElementById('plexConfirmFilename');
-            const filename = filenameElement.getAttribute('data-filename');
-            const directory = filenameElement.getAttribute('data-dirname');
-            
-            // Hide the modal
-            hideModal(modal);
-            
-            // Send the poster to Plex
-            sendToPlex(filename, directory);
-        });
-    }
-    
-    // Click outside to close - make sure this handler works
-    modal.addEventListener('click', function(e) {
-        if (e.target === modal) {
-            hideModal(modal);
-        }
-    });
-    
-    // Escape key to close
-    document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape' && modal.classList.contains('show')) {
-            hideModal(modal);
-        }
-    });
-}
-
-function createImportFromPlexModal() {
-    const modalHTML = `
-    <div id="importFromPlexModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Import from Plex</h3>
-                <button type="button" class="modal-close-btn">×</button>
-            </div>
-            <div class="modal-body">
-                <p>Are you sure you want to import this poster from Plex?</p>
-                <p id="importFromPlexFilename" style="margin-top: 10px; font-weight: 500; overflow-wrap: break-word;" data-filename="" data-dirname=""></p>
-            </div>
-            <div class="modal-actions">
-                <button type="button" class="modal-button cancel" id="cancelImportFromPlex">Cancel</button>
-                <button type="button" class="modal-button import-from-plex-confirm">Import</button>
-            </div>
-        </div>
-    </div>
-    `;
-    
-    // Append the modal HTML to the body
-    document.body.insertAdjacentHTML('beforeend', modalHTML);
-}
-
-function initImportFromPlexFeature() {
-    const modal = document.getElementById('importFromPlexModal');
-    if (!modal) {
-        console.error("Import from Plex modal not found");
-        return;
-    }
-    
-    // Get elements
-    const closeButton = modal.querySelector('.modal-close-btn');
-    const cancelButton = document.getElementById('cancelImportFromPlex');
-    const confirmButton = modal.querySelector('.import-from-plex-confirm');
-    
-    // Close button handler
-    if (closeButton) {
-        closeButton.addEventListener('click', function() {
-            hideModal(modal);
-        });
-    }
-    
-    // Cancel button handler
-    if (cancelButton) {
-        cancelButton.addEventListener('click', function() {
-            hideModal(modal);
-        });
-    }
-    
-    // Confirm button handler
-    if (confirmButton) {
-        confirmButton.addEventListener('click', function() {
-            const filenameElement = document.getElementById('importFromPlexFilename');
-            const filename = filenameElement.getAttribute('data-filename');
-            const directory = filenameElement.getAttribute('data-dirname');
-            
-            // Hide the modal
-            hideModal(modal);
-            
-            // Import the poster from Plex
-            importFromPlex(filename, directory);
-        });
-    }
-    
-    // Click outside to close - make sure this handler works
-    modal.addEventListener('click', function(e) {
-        if (e.target === modal) {
-            hideModal(modal);
-        }
-    });
-    
-    // Escape key to close
-    document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape' && modal.classList.contains('show')) {
-            hideModal(modal);
-        }
-    });
-}
-
-// Import from Plex handler function
-function importFromPlexHandler(e) {
-    e.preventDefault();
-    const filename = this.getAttribute('data-filename');
-    const directory = this.getAttribute('data-dirname');
-    
-    // Store the data in the modal
-    const modal = document.getElementById('importFromPlexModal');
-    const filenameElement = document.getElementById('importFromPlexFilename');
-    
-    filenameElement.textContent = filename;
-    filenameElement.setAttribute('data-filename', filename);
-    filenameElement.setAttribute('data-dirname', directory);
-    
-    // Show the modal
-    showModal(modal);
-}
-
-// Function to send the import request to the server
-async function importFromPlex(filename, directory) {
-    // Show a loading notification
-    const notification = showImportingNotification();
-    
-    try {
-        const formData = new FormData();
-        formData.append('action', 'import_from_plex');
-        formData.append('filename', filename);
-        formData.append('directory', directory);
-        
-        const response = await fetch('./include/import-from-plex.php', {
-            method: 'POST',
-            body: formData
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            // Show success notification
-            showImportSuccessNotification();
-            
-            // Refresh the image to show the updated version
-            refreshImage(filename, directory);
-        } else {
-            // Show error notification
-            showImportErrorNotification(data.error || 'Failed to import poster from Plex');
-        }
-    } catch (error) {
-        // Show error notification
-        showImportErrorNotification('Error importing poster from Plex: ' + error.message);
-    } finally {
-        // Hide the sending notification
-        notification.remove();
-    }
-}
-
-function refreshImage(filename, directory) {
-    const images = document.querySelectorAll('.gallery-image');
-    images.forEach(img => {
-        const imgPath = img.getAttribute('data-src');
-        if (imgPath && imgPath.includes(filename)) {
-            // Add a timestamp to force a cache refresh
-            const timestamp = new Date().getTime();
-            const newSrc = imgPath + '?t=' + timestamp;
-            
-            // Set the new source
-            img.src = '';
-            img.setAttribute('data-src', newSrc);
-            img.src = newSrc;
-            
-            // Reset loading state
-            img.classList.remove('loaded');
-            const placeholder = img.previousElementSibling;
-            if (placeholder && placeholder.classList.contains('gallery-image-placeholder')) {
-                placeholder.classList.remove('hidden');
-            }
-            
-            // Set loaded class when the new image loads
-            img.onload = function() {
-                img.classList.add('loaded');
-                if (placeholder) {
-                    placeholder.classList.add('hidden');
-                }
-            };
-        }
-    });
-}
-
-// Function to show importing notification
-function showImportingNotification() {
-    const notification = document.createElement('div');
-    notification.className = 'plex-notification plex-sending';
-    notification.innerHTML = `
-        <div class="plex-notification-content">
-            <div class="plex-spinner"></div>
-            <span>Importing from Plex...</span>
-        </div>
-    `;
-    document.body.appendChild(notification);
-    
-    // Force reflow to trigger animation
-    notification.offsetHeight;
-    notification.classList.add('show');
-    
-    return notification;
-}
-
-// Function to show success notification
-function showImportSuccessNotification() {
-    const notification = document.createElement('div');
-    notification.className = 'plex-notification plex-success';
-    notification.innerHTML = `
-        <div class="plex-notification-content">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                <polyline points="22 4 12 14.01 9 11.01"></polyline>
-            </svg>
-            <span>Imported from Plex successfully!</span>
-        </div>
-    `;
-    document.body.appendChild(notification);
-    
-    // Force reflow to trigger animation
-    notification.offsetHeight;
-    notification.classList.add('show');
-    
-    // Auto-remove after 3 seconds
-    setTimeout(() => {
-        notification.classList.remove('show');
-        setTimeout(() => {
-            notification.remove();
-        }, 300); // Match transition duration
-    }, 3000);
-}
-
-// Function to show error notification
-function showImportErrorNotification(message) {
-    const notification = document.createElement('div');
-    notification.className = 'plex-notification plex-error';
-    notification.innerHTML = `
-        <div class="plex-notification-content">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10"></circle>
-                <line x1="12" y1="8" x2="12" y2="12"></line>
-                <line x1="12" y1="16" x2="12.01" y2="16"></line>
-            </svg>
-            <span>${message}</span>
-        </div>
-    `;
-    document.body.appendChild(notification);
-    
-    // Force reflow to trigger animation
-    notification.offsetHeight;
-    notification.classList.add('show');
-    
-    // Auto-remove after 5 seconds
-    setTimeout(() => {
-        notification.classList.remove('show');
-        setTimeout(() => {
-            notification.remove();
-        }, 300); // Match transition duration
-    }, 5000);
-}
-
-function initializeImportFromPlexButtons() {
-    // Add Import from Plex button to appropriate gallery items
-    document.querySelectorAll('.gallery-item').forEach(item => {
-        const filenameElement = item.querySelector('.gallery-caption');
-        const overlayActions = item.querySelector('.image-overlay-actions');
-        
-        if (filenameElement && overlayActions) {
-            const filename = filenameElement.getAttribute('data-full-text');
-            
-            // Only show the Import from Plex button for files with "Plex" in the name
-            if (isPlexFile(filename)) {
-                // Check if button already exists to avoid duplicates
-                if (!overlayActions.querySelector('.import-from-plex-btn')) {
-                    // Create button to replace the Move button
-                    
-                    if (moveButton) {
-                        const directoryValue = moveButton.getAttribute('data-dirname');
-                        const filenameValue = moveButton.getAttribute('data-filename');
-                        
-                        const importFromPlexButton = document.createElement('button');
-                        importFromPlexButton.className = 'overlay-action-button import-from-plex-btn';
-                        importFromPlexButton.setAttribute('data-filename', filenameValue);
-                        importFromPlexButton.setAttribute('data-dirname', directoryValue);
-                        importFromPlexButton.innerHTML = `
-                            <svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
-                                <polyline points="10 17 15 12 10 7"></polyline>
-                                <line x1="15" y1="12" x2="3" y2="12"></line>
-                            </svg>
-                            Import from Plex
-                        `;
-                        
-                        // Add event listener
-                        importFromPlexButton.addEventListener('click', importFromPlexHandler);
-                    }
-                }
-            }
-        }
-    });
-}
-
-// Function to check if a filename has "Plex" in it
-function isPlexFile(filename) {
-    return filename.toLowerCase().includes('plex');
-}
-
-// Function to initialize Send to Plex buttons
-function initializeSendToPlexButtons() {
-    // Add Send to Plex button to appropriate gallery items
-    document.querySelectorAll('.gallery-item').forEach(item => {
-        const filenameElement = item.querySelector('.gallery-caption');
-        const overlayActions = item.querySelector('.image-overlay-actions');
-        
-        if (filenameElement && overlayActions) {
-            const filename = filenameElement.getAttribute('data-full-text');
-            
-            // Only show the Send to Plex button for files with "Plex" in the name
-            if (isPlexFile(filename)) {
-                // Check if button already exists to avoid duplicates
-                if (!overlayActions.querySelector('.send-to-plex-btn')) {
-                    // Create button before the existing Delete button
-                    const deleteButton = overlayActions.querySelector('.delete-btn');
-                    
-                    if (deleteButton) {
-                        const directoryValue = deleteButton.getAttribute('data-dirname');
-                        const filenameValue = deleteButton.getAttribute('data-filename');
-                        
-                        const sendToPlexButton = document.createElement('button');
-                        sendToPlexButton.className = 'overlay-action-button send-to-plex-btn';
-                        sendToPlexButton.setAttribute('data-filename', filenameValue);
-                        sendToPlexButton.setAttribute('data-dirname', directoryValue);
-                        sendToPlexButton.innerHTML = `
-                            <svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
-                                <polyline points="16 6 12 2 8 6"></polyline>
-                                <line x1="12" y1="2" x2="12" y2="15"></line>
-                            </svg>
-                            Send to Plex
-                        `;
-                        
-                        // Insert before Delete button
-                        deleteButton.parentNode.insertBefore(sendToPlexButton, deleteButton);
-                        
-                        // Add event listener
-                        sendToPlexButton.addEventListener('click', sendToPlexHandler);
-                    }
-                }
-            }
-        }
-    });
-}
-    
-    // =========== PLEX IMPORT MODAL ===========
-    
-    // Only initialize if user is logged in
-    if (isLoggedIn && showPlexImportButton && plexImportModal) {
-        // Plex-specific elements
-        const startPlexImportButton = document.getElementById('startPlexImport');
-        const importTypeSelect = document.getElementById('plexImportType');
-        const librarySelect = document.getElementById('plexLibrary');
-        const showSelect = document.getElementById('plexShow');
-        const targetDirectorySelect = document.getElementById('targetDirectory');
-        const fileHandlingSelect = document.getElementById('fileHandling');
-        
-        // Step containers
-        const importTypeStep = document.getElementById('importTypeStep');
-        const librarySelectionStep = document.getElementById('librarySelectionStep');
-        const showSelectionStep = document.getElementById('showSelectionStep');
-        const targetDirectoryStep = document.getElementById('targetDirectoryStep');
-        const fileHandlingStep = document.getElementById('fileHandlingStep');
-        
-        // Progress and results elements
-        const importProgressContainer = document.getElementById('importProgressContainer');
-        const importProgressBar = document.getElementById('importProgressBar')?.querySelector('div');
-        const importProgressDetails = document.getElementById('importProgressDetails');
-        const importResultsContainer = document.getElementById('importResultsContainer');
-        const importOptionsContainer = document.getElementById('plexImportOptions');
-        
-        // Error handling
-        const importErrorContainer = document.querySelector('.import-error');
-        const plexErrorMessage = document.getElementById('plexErrorMessage');
-        const plexErrorCloseButtons = document.querySelectorAll('.plexErrorClose');
-        
-        // Results elements
-        const closeResultsButton = document.getElementById('closeImportResults');
-        const importErrors = document.getElementById('importErrors');
-        
-        // Connection status
-        const connectionStatus = document.getElementById('plexConnectionStatus');
-        
-        // State variables
-        let plexLibraries = [];
-        let plexShows = [];
-        let importCancelled = false;
-        
-        // Show/hide Plex Import Modal functions
-		function showPlexModal() {
-			showModal(plexImportModal);
-			
-			// Reset the form to a clean state
-			resetPlexImport();
-			
-			// Don't call validateImportOptions() here - it's too early
-			// Don't call loadPlexLibraries() yet - wait for user to select content type
-			
-			// Just test the connection
-			testPlexConnection();
-		}
-
-        function hidePlexModal() {
-            hideModal(plexImportModal);
-            resetPlexImport();
-        }
-        
-        function showErrorModal(message) {
-            plexErrorMessage.textContent = message;
-            showModal(plexErrorModal);
-        }
-        
-        function hideErrorModal() {
-            hideModal(plexErrorModal);
-        }
-        
-        // Reset the import form
-		function resetPlexImport() {
-		// Show the close button again when results are shown
-		const closeButton = plexImportModal.querySelector('.modal-close-btn');
-		if (closeButton) {
-			closeButton.style.display = 'block';
-			
-			// Ensure close button has proper event handler
-			closeButton.addEventListener('click', function() {
-				hideModal(plexImportModal);
-				// Force a page refresh to ensure a clean state
-				setTimeout(function() {
-				    window.location.reload();
-				}, 300);
-			});
-		}
-			
-			// Reset form selections
-			importTypeSelect.value = '';
-			librarySelect.innerHTML = '<option value="">Select a content type first...</option>';
-			showSelect.innerHTML = '<option value="">Select a library first...</option>';
-			targetDirectorySelect.value = 'movies';
-			fileHandlingSelect.value = 'overwrite';
-			
-			// Hide all steps except type
-			importTypeStep.style.display = 'block';
-			librarySelectionStep.style.display = 'none';
-			showSelectionStep.style.display = 'none';
-			seasonsOptionsStep.style.display = 'none';
-			targetDirectoryStep.style.display = 'none';
-			fileHandlingStep.style.display = 'none';
-			
-			// Reset containers
-			importProgressContainer.style.display = 'none';
-			importResultsContainer.style.display = 'none';
-			importOptionsContainer.style.display = 'block';
-			
-			// Hide error container instead of just clearing it
-			importErrorContainer.style.display = 'none';
-			importErrorContainer.textContent = '';
-			
-			// Disable start button
-			startPlexImportButton.disabled = true;
-			
-			// Reset progress
-			if (importProgressBar) {
-				importProgressBar.style.width = '0%';
-			}
-			importProgressDetails.textContent = 'Processing 0 of 0 items (0%)';
-			
-			// Reset import cancelled flag
-			importCancelled = false;
-		}
-        
-        // Test Plex connection and display status
-        async function testPlexConnection() {
-            connectionStatus.style.display = 'block';
-            connectionStatus.innerHTML = `
-                <div style="padding: 10px; border-radius: 4px; background: rgba(255, 159, 67, 0.1); border: 1px solid var(--accent-primary);">
-                    <span style="display: inline-block; margin-right: 8px;">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="12" cy="12" r="10"></circle>
-                            <polyline points="12 6 12 12 16 14"></polyline>
-                        </svg>
-                    </span>
-                    Testing connection to Plex server...
-                </div>
-            `;
-            
-            try {
-                const response = await fetch('./include/plex-import.php', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                    },
-                    body: new URLSearchParams({
-                        'action': 'test_plex_connection'
-                    })
-                });
+    // Function to refresh image after updates
+    function refreshImage(filename, directory) {
+        const images = document.querySelectorAll('.gallery-image');
+        images.forEach(img => {
+            const imgPath = img.getAttribute('data-src');
+            if (imgPath && imgPath.includes(filename)) {
+                // Add a timestamp to force a cache refresh
+                const timestamp = new Date().getTime();
+                const newSrc = imgPath + '?t=' + timestamp;
                 
-                const data = await response.json();
+                // Set the new source
+                img.src = '';
+                img.setAttribute('data-src', newSrc);
+                img.src = newSrc;
                 
-                if (data.success) {
-                    connectionStatus.innerHTML = `
-                        <div style="padding: 10px; border-radius: 4px; background: rgba(46, 213, 115, 0.1); border: 1px solid var(--success-color);">
-                            <span style="display: inline-block; margin-right: 8px; color: var(--success-color);">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
-                                </svg>
-                            </span>
-                            Connected to Plex server
-                        </div>
-                    `;
-                    
-                    // Load libraries if connection successful
-                    loadPlexLibraries();
-                } else {
-                    connectionStatus.innerHTML = `
-                        <div style="padding: 10px; border-radius: 4px; background: rgba(239, 68, 68, 0.1); border: 1px solid var(--danger-color);">
-                            <span style="display: inline-block; margin-right: 8px; color: var(--danger-color);">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <circle cx="12" cy="12" r="10"></circle>
-                                    <line x1="12" y1="8" x2="12" y2="12"></line>
-                                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                                </svg>
-                            </span>
-                            Failed to connect to Plex server: ${data.error}
-                        </div>
-                    `;
-                    
-                    // Disable the form if connection failed
-                    startPlexImportButton.disabled = true;
+                // Reset loading state
+                img.classList.remove('loaded');
+                const placeholder = img.previousElementSibling;
+                if (placeholder && placeholder.classList.contains('gallery-image-placeholder')) {
+                    placeholder.classList.remove('hidden');
                 }
-            } catch (error) {
-                connectionStatus.innerHTML = `
-                    <div style="padding: 10px; border-radius: 4px; background: rgba(239, 68, 68, 0.1); border: 1px solid var(--danger-color);">
-                        <span style="display: inline-block; margin-right: 8px; color: var(--danger-color);">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <circle cx="12" cy="12" r="10"></circle>
-                                <line x1="12" y1="8" x2="12" y2="12"></line>
-                                <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                            </svg>
-                        </span>
-                        Error connecting to Plex server: ${error.message}
+                
+                // Set loaded class when the new image loads
+                img.onload = function() {
+                    img.classList.add('loaded');
+                    if (placeholder) {
+                        placeholder.classList.add('hidden');
+                    }
+                };
+            }
+        });
+    }
+    
+    // Function to check if a filename has "Plex" in it
+    function isPlexFile(filename) {
+        return filename.toLowerCase().includes('plex');
+    }
+    
+    // =========== SEND TO PLEX FUNCTIONALITY ===========
+    
+    // Function to send image to Plex
+    async function sendToPlex(filename, directory) {
+        // Show a loading notification
+        const notification = showSendingNotification();
+        
+        try {
+            const formData = new FormData();
+            formData.append('action', 'send_to_plex');
+            formData.append('filename', filename);
+            formData.append('directory', directory);
+            
+            const response = await fetch('./include/send-to-plex.php', {
+                method: 'POST',
+                body: formData
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                // Show success notification
+                showPlexSuccessNotification();
+            } else {
+                // Show error notification
+                showPlexErrorNotification(data.error || 'Failed to send poster to Plex');
+            }
+        } catch (error) {
+            // Show error notification
+            showPlexErrorNotification('Error sending poster to Plex: ' + error.message);
+        } finally {
+            // Hide the sending notification
+            notification.remove();
+        }
+    }
+    
+    // Function to show sending notification
+    function showSendingNotification() {
+        const notification = document.createElement('div');
+        notification.className = 'plex-notification plex-sending';
+        notification.innerHTML = `
+            <div class="plex-notification-content">
+                <div class="plex-spinner"></div>
+                <span>Sending to Plex...</span>
+            </div>
+        `;
+        document.body.appendChild(notification);
+        
+        // Force reflow to trigger animation
+        notification.offsetHeight;
+        notification.classList.add('show');
+        
+        return notification;
+    }
+    
+    // Function to show success notification for Plex send
+    function showPlexSuccessNotification() {
+        const notification = document.createElement('div');
+        notification.className = 'plex-notification plex-success';
+        notification.innerHTML = `
+            <div class="plex-notification-content">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                </svg>
+                <span>Sent to Plex successfully!</span>
+            </div>
+        `;
+        document.body.appendChild(notification);
+        
+        // Force reflow to trigger animation
+        notification.offsetHeight;
+        notification.classList.add('show');
+        
+        // Auto-remove after 3 seconds
+        setTimeout(() => {
+            notification.classList.remove('show');
+            setTimeout(() => {
+                notification.remove();
+            }, 300); // Match transition duration
+        }, 3000);
+    }
+    
+    // Function to show error notification for Plex
+    function showPlexErrorNotification(message) {
+        const notification = document.createElement('div');
+        notification.className = 'plex-notification plex-error';
+        notification.innerHTML = `
+            <div class="plex-notification-content">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+                <span>${message}</span>
+            </div>
+        `;
+        document.body.appendChild(notification);
+        
+        // Force reflow to trigger animation
+        notification.offsetHeight;
+        notification.classList.add('show');
+        
+        // Auto-remove after 5 seconds
+        setTimeout(() => {
+            notification.classList.remove('show');
+            setTimeout(() => {
+                notification.remove();
+            }, 300); // Match transition duration
+        }, 5000);
+    }
+    
+    // Initialize Plex Confirm Modal
+    function initPlexConfirmModal() {
+        const modal = document.getElementById('plexConfirmModal');
+        if (!modal) {
+            return;
+        }
+        
+        // Get elements
+        const closeButton = modal.querySelector('.modal-close-btn');
+        const cancelButton = document.getElementById('cancelPlexSend');
+        const confirmButton = modal.querySelector('.send-to-plex-confirm');
+        
+        // Close button handler
+        if (closeButton) {
+            closeButton.addEventListener('click', function() {
+                hideModal(modal);
+            });
+        }
+        
+        // Cancel button handler
+        if (cancelButton) {
+            cancelButton.addEventListener('click', function() {
+                hideModal(modal);
+            });
+        }
+        
+        // Confirm button handler
+        if (confirmButton) {
+            confirmButton.addEventListener('click', function() {
+                const filenameElement = document.getElementById('plexConfirmFilename');
+                const filename = filenameElement.getAttribute('data-filename');
+                const directory = filenameElement.getAttribute('data-dirname');
+                
+                // Hide the modal
+                hideModal(modal);
+                
+                // Send the poster to Plex
+                sendToPlex(filename, directory);
+            });
+        }
+        
+        // Click outside to close
+        modal.addEventListener('click', function(e) {
+            if (e.target === modal) {
+                hideModal(modal);
+            }
+        });
+        
+        // Escape key to close
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && modal.classList.contains('show')) {
+                hideModal(modal);
+            }
+        });
+    }
+    
+    // Send to Plex handler function
+    function sendToPlexHandler(e) {
+        e.preventDefault();
+        const filename = this.getAttribute('data-filename');
+        const directory = this.getAttribute('data-dirname');
+        
+        // Store the data in the modal
+        const modal = document.getElementById('plexConfirmModal');
+        const filenameElement = document.getElementById('plexConfirmFilename');
+        
+        filenameElement.textContent = filename;
+        filenameElement.setAttribute('data-filename', filename);
+        filenameElement.setAttribute('data-dirname', directory);
+        
+        // Show the modal
+        showModal(modal);
+    }
+    
+    // =========== IMPORT FROM PLEX FUNCTIONALITY ===========
+    
+    // Create Import from Plex Modal if it doesn't exist
+    function createImportFromPlexModal() {
+        if (!document.getElementById('importFromPlexModal')) {
+            const modalHTML = `
+            <div id="importFromPlexModal" class="modal">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>Import from Plex</h3>
+                        <button type="button" class="modal-close-btn">×</button>
                     </div>
-                `;
-                
-                // Disable the form if connection error
-                startPlexImportButton.disabled = true;
-            }
-        }
-        
-		// Updated loadPlexLibraries function to filter libraries based on import type
-		async function loadPlexLibraries() {
-			// Get the currently selected import type
-			const importType = importTypeSelect.value;
-			
-			// If no import type is selected, don't try to load libraries
-			if (!importType) {
-				librarySelect.innerHTML = '<option value="">Select a content type first...</option>';
-				return;
-			}
-			
-			librarySelect.innerHTML = '<option value="">Loading libraries...</option>';
-			
-			try {
-				const response = await fetch('./include/plex-import.php', {
-				    method: 'POST',
-				    headers: {
-				        'Content-Type': 'application/x-www-form-urlencoded',
-				    },
-				    body: new URLSearchParams({
-				        'action': 'get_plex_libraries'
-				    })
-				});
-				
-				const data = await response.json();
-				
-				if (data.success && data.data.length > 0) {
-				    plexLibraries = data.data;
-				    librarySelect.innerHTML = '<option value="">Select library...</option>';
-				    
-				    let matchingLibrariesCount = 0;
-				    
-				    plexLibraries.forEach(library => {
-				        // Filter libraries based on import type
-				        const showLibrary = (
-				            // For movies, only show movie libraries
-				            (importType === 'movies' && library.type === 'movie') ||
-				            // For shows or seasons, only show TV show libraries
-				            ((importType === 'shows' || importType === 'seasons') && library.type === 'show') ||
-				            // For collections, show both
-				            (importType === 'collections')
-				        );
-				        
-				        if (showLibrary) {
-				            matchingLibrariesCount++;
-				            const option = document.createElement('option');
-				            option.value = library.id;
-				            option.dataset.type = library.type;
-				            option.textContent = `${library.title} (${library.type === 'movie' ? 'Movies' : 'TV Shows'})`;
-				            librarySelect.appendChild(option);
-				        }
-				    });
-				    
-				    // If no libraries match the filter
-				    if (matchingLibrariesCount === 0) {
-				        librarySelect.innerHTML = '<option value="">No matching libraries found</option>';
-				        showErrorInImportOptions('No libraries of the required type were found');
-				    }
-				} else {
-				    librarySelect.innerHTML = '<option value="">No libraries found</option>';
-				    showErrorInImportOptions(data.error || 'No libraries found on Plex server');
-				}
-			} catch (error) {
-				librarySelect.innerHTML = '<option value="">Error loading libraries</option>';
-				showErrorInImportOptions('Error loading Plex libraries: ' + error.message);
-			}
-		}
-        
-        // Load shows for a specific library (for TV season selection)
-        async function loadPlexShows(libraryId) {
-            showSelect.innerHTML = '<option value="">Loading shows...</option>';
-            
-            try {
-                const response = await fetch('./include/plex-import.php', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                    },
-                    body: new URLSearchParams({
-                        'action': 'get_plex_shows_for_seasons',
-                        'libraryId': libraryId
-                    })
-                });
-                
-                const data = await response.json();
-                
-                if (data.success && data.data.length > 0) {
-                    plexShows = data.data;
-                    showSelect.innerHTML = '<option value="">Select show...</option>';
-                    
-                    plexShows.forEach(show => {
-                        const option = document.createElement('option');
-                        option.value = show.ratingKey;
-                        option.textContent = show.title + (show.year ? ` (${show.year})` : '');
-                        showSelect.appendChild(option);
-                    });
-                } else {
-                    showSelect.innerHTML = '<option value="">No shows found</option>';
-                    showErrorInImportOptions(data.error || 'No shows found in the selected library');
-                }
-            } catch (error) {
-                showSelect.innerHTML = '<option value="">Error loading shows</option>';
-                showErrorInImportOptions('Error loading shows: ' + error.message);
-            }
-        }
-        
-        // Display error in import options container
-		function showErrorInImportOptions(message) {
-			// Only show errors if we have an actual message and if the user has started making selections
-			if (message && importTypeSelect.value) {
-				importErrorContainer.textContent = message;
-				importErrorContainer.style.display = 'block';
-			}
-		}
-
-		function hideErrorInImportOptions() {
-			importErrorContainer.style.display = 'none';
-			importErrorContainer.textContent = '';
-		}
-
-		// Helper function to check if the user has started making selections
-		function hasUserStartedSelections() {
-			return importTypeSelect.value !== '';
-		}
-        
-        // Validate import options and enable/disable start button
-		function validateImportOptions() {
-			const importType = importTypeSelect.value;
-			const libraryId = librarySelect.value;
-			const showId = showSelect.value;
-			const importAllSeasons = document.getElementById('importAllSeasons')?.checked || false;
-			
-			let isValid = false;
-			
-			if (!importType || !libraryId) {
-				isValid = false;
-			} else if (importType === 'seasons') {
-				// If importing all seasons, we just need a valid library
-				// If importing specific show seasons, we need both library and show
-				isValid = importAllSeasons ? true : (showId ? true : false);
-			} else {
-				// For all other types, just need a valid library ID
-				isValid = true;
-			}
-			
-			startPlexImportButton.disabled = !isValid;
-			return isValid;
-		}
-		
-		// Updated checkbox handler for "Import all seasons"
-		const importAllSeasonsCheckbox = document.getElementById('importAllSeasons');
-		if (importAllSeasonsCheckbox) {
-			importAllSeasonsCheckbox.addEventListener('change', function() {
-				const showSelectionStep = document.getElementById('showSelectionStep');
-				
-				if (this.checked) {
-				    // Hide show selection when "Import all seasons" is checked
-				    showSelectionStep.style.display = 'none';
-				} else {
-				    // Show the show selection step if we have a library selected
-				    const libraryId = librarySelect.value;
-				    if (libraryId) {
-				        const selectedOption = librarySelect.options[librarySelect.selectedIndex];
-				        const libraryType = selectedOption ? selectedOption.dataset.type : '';
-				        
-				        if (libraryType === 'show') {
-				            showSelectionStep.style.display = 'block';
-				            // Load shows for the library if they're not already loaded
-				            if (showSelect.options.length <= 1) {
-				                loadPlexShows(libraryId);
-				            }
-				        }
-				    }
-				}
-				
-				validateImportOptions();
-			});
-		}
-        
-        // Handle import type selection
-		importTypeSelect.addEventListener('change', function() {
-			const selectedType = this.value;
-			
-			// Reset other steps
-			librarySelectionStep.style.display = 'none';
-			seasonsOptionsStep.style.display = 'none';
-			showSelectionStep.style.display = 'none';
-			targetDirectoryStep.style.display = 'none';
-			fileHandlingStep.style.display = 'none';
-			
-			// Reset selects with appropriate default messages
-			librarySelect.innerHTML = '<option value="">Loading libraries...</option>';
-			showSelect.innerHTML = '<option value="">Select a library first...</option>';
-			
-			// Hide any previous error messages
-			hideErrorInImportOptions();
-			
-			if (selectedType) {
-				// Show library selection step
-				librarySelectionStep.style.display = 'block';
-				
-				// Now it's appropriate to load libraries since user has selected a type
-				loadPlexLibraries();
-				
-				// Pre-select target directory based on import type
-				switch (selectedType) {
-				    case 'movies':
-				        targetDirectorySelect.value = 'movies';
-				        break;
-				    case 'shows':
-				        targetDirectorySelect.value = 'tv-shows';
-				        break;
-				    case 'seasons':
-				        targetDirectorySelect.value = 'tv-seasons';
-				        // Show seasons options step
-				        seasonsOptionsStep.style.display = 'block';
-				        break;
-				    case 'collections':
-				        targetDirectorySelect.value = 'collections';
-				        break;
-				}
-				
-				// Show file handling step
-				fileHandlingStep.style.display = 'block';
-			} else {
-				// If user clears the selection, reset the form
-				librarySelect.innerHTML = '<option value="">Select a content type first...</option>';
-				hideErrorInImportOptions();
-				fileHandlingStep.style.display = 'none';
-			}
-			
-			validateImportOptions();
-		});
-	
-	// Handle "Import all seasons" checkbox change
-	document.getElementById('importAllSeasons').addEventListener('change', function() {
-		const showSelectionStep = document.getElementById('showSelectionStep');
-		
-		if (this.checked) {
-		    // Hide show selection when "Import all seasons" is checked
-		    showSelectionStep.style.display = 'none';
-		} else {
-		    // Show the show selection step if we have a library selected
-		    const libraryId = librarySelect.value;
-		    if (libraryId) {
-		        const selectedOption = librarySelect.options[librarySelect.selectedIndex];
-		        const libraryType = selectedOption ? selectedOption.dataset.type : '';
-		        
-		        if (libraryType === 'show') {
-		            showSelectionStep.style.display = 'block';
-		        }
-		    }
-		}
-		
-		validateImportOptions();
-	});
-        
-        // Handle library selection
-        librarySelect.addEventListener('change', function() {
-            const selectedLibraryId = this.value;
-            const selectedOption = this.options[this.selectedIndex];
-            const libraryType = selectedOption ? selectedOption.dataset.type : '';
-            
-            // Reset show selection
-            showSelectionStep.style.display = 'none';
-            showSelect.innerHTML = '<option value="">Loading shows...</option>';
-            
-            // Hide error messages
-            hideErrorInImportOptions();
-            
-            if (selectedLibraryId) {
-                // If importing seasons, show the show selection step
-                if (importTypeSelect.value === 'seasons') {
-                    if (libraryType === 'show') {
-                        showSelectionStep.style.display = 'block';
-                        loadPlexShows(selectedLibraryId);
-                    } else {
-                        showErrorInImportOptions('Please select a TV Show library to import seasons');
-                    }
-                }
-            }
-            
-            validateImportOptions();
-        });
-        
-        // Handle show selection
-        showSelect.addEventListener('change', function() {
-            validateImportOptions();
-        });
-        
-        // Start the import process
-		startPlexImportButton.addEventListener('click', async function() {
-			if (!validateImportOptions()) {
-				return;
-			}
-			
-			// Get selected options
-			const importType = importTypeSelect.value;
-			const libraryId = librarySelect.value;
-			const importAllSeasons = document.getElementById('importAllSeasons')?.checked || false;
-			
-			// Only get showKey if we're not importing all seasons
-			const showKey = (importType === 'seasons' && !importAllSeasons) ? showSelect.value : null;
-			
-			const targetDirectory = targetDirectorySelect.value;
-			const overwriteOption = fileHandlingSelect.value;
-			
-			// Hide the close button when starting the import process
-			const closeButton = plexImportModal.querySelector('.modal-close-btn');
-			if (closeButton) {
-				closeButton.style.display = 'none';
-			}
-			
-			// Show progress container, hide options
-			importOptionsContainer.style.display = 'none';
-			importProgressContainer.style.display = 'block';
-			
-			// Start import process
-			try {
-				await importPlexPosters(importType, libraryId, showKey, targetDirectory, overwriteOption, importAllSeasons);
-			} catch (error) {
-				// Show the close button again on error
-				if (closeButton) {
-				    closeButton.style.display = 'block';
-				}
-				
-				// Hide the progress container
-				importProgressContainer.style.display = 'none';
-				importOptionsContainer.style.display = 'block';
-				
-				// Show error
-				showErrorInImportOptions('Import failed: ' + error.message);
-			}
-		});
-        
-        // Import posters from Plex
-		async function importPlexPosters(type, libraryId, showKey, contentType, overwriteOption, importAllSeasons) {
-			// Configure initial request
-			const initialParams = {
-				'action': 'import_plex_posters',
-				'type': type,
-				'libraryId': libraryId,
-				'contentType': contentType,
-				'overwriteOption': overwriteOption,
-				'batchProcessing': 'true',
-				'startIndex': 0
-			};
-			
-			// Add showKey for seasons import (when not importing all)
-			if (type === 'seasons' && !importAllSeasons && showKey) {
-				initialParams.showKey = showKey;
-			}
-			
-			// Add importAllSeasons parameter if true
-			if (type === 'seasons' && importAllSeasons) {
-				initialParams.importAllSeasons = 'true';
-			}
-			
-			let isComplete = false;
-			let currentIndex = 0;
-			const results = {
-				successful: 0,
-				skipped: 0,
-				failed: 0,
-				errors: []
-			};
-			
-			// Stats dashboard in the modal
-			const statsDashboard = `
-			<div id="importStatsDashboard" style="margin-top: 20px; display: flex; justify-content: space-between; text-align: center; gap: 10px;">
-				<div style="flex: 1; background: rgba(46, 213, 115, 0.1); border: 1px solid var(--success-color); border-radius: 6px; padding: 12px;">
-				    <div style="font-size: 24px; font-weight: bold; color: var(--success-color);" id="statsSuccessful">0</div>
-				    <div style="color: var(--text-primary);">Successful</div>
-				</div>
-				<div style="flex: 1; background: rgba(255, 159, 67, 0.1); border: 1px solid var(--accent-primary); border-radius: 6px; padding: 12px;">
-				    <div style="font-size: 24px; font-weight: bold; color: var(--accent-primary);" id="statsSkipped">0</div>
-				    <div style="color: var(--text-primary);">Skipped</div>
-				</div>
-				<div style="flex: 1; background: rgba(239, 68, 68, 0.1); border: 1px solid var(--danger-color); border-radius: 6px; padding: 12px;">
-				    <div style="font-size: 24px; font-weight: bold; color: var(--danger-color);" id="statsFailed">0</div>
-				    <div style="color: var(--text-primary);">Failed</div>
-				</div>
-			</div>
-			`;
-			
-			// Add stats dashboard to progress container
-			if (!document.getElementById('importStatsDashboard')) {
-				document.getElementById('importProgressDetails').insertAdjacentHTML('afterend', statsDashboard);
-			}
-			
-			// Update progress message for all seasons import
-			if (type === 'seasons' && importAllSeasons) {
-				document.getElementById('importProgressStatus').textContent = 'Importing season posters from all shows...';
-			}
-			
-		    const allSkippedDetails = []; // Array to store results
-		    
-			// While not complete and not cancelled
-			while (!isComplete && !importCancelled) {
-				try {
-				    const formData = new FormData();
-				    
-				    // Add all parameters
-				    for (const [key, value] of Object.entries({
-				        ...initialParams,
-				        'startIndex': currentIndex,
-				        'totalSuccessful': results.successful,
-				        'totalSkipped': results.skipped,
-				        'totalFailed': results.failed
-				    })) {
-				        formData.append(key, value);
-				    }
-				    
-				    const response = await fetch('./include/plex-import.php', {
-				        method: 'POST',
-				        body: formData
-				    });
-				    
-				    const data = await response.json();
-				    
-				    if (!data.success) {
-				        throw new Error(data.error || 'Unknown error during import');
-				    }
-				    
-				    // Update progress
-				    if (data.batchComplete) {
-				        // For "Import all seasons", show which show is being processed
-				        if (type === 'seasons' && importAllSeasons && data.progress.currentShow) {
-				            document.getElementById('importProgressStatus').textContent = 
-				                `Importing seasons from: ${data.progress.currentShow}`;
-				            
-				            // Season progress details
-				            if (data.progress.seasonCount !== undefined) {
-				                document.getElementById('importProgressDetails').innerHTML = 
-				                    `Processing show ${data.progress.processed} of ${data.progress.total} (${data.progress.percentage}%)<br>` +
-				                    `Found ${data.progress.seasonCount} seasons in current show`;
-				            } else {
-				                document.getElementById('importProgressDetails').textContent = 
-				                    `Processing show ${data.progress.processed} of ${data.progress.total} (${data.progress.percentage}%)`;
-				            }
-				        } else {
-				            // Regular batch progress
-				            const percentage = data.progress.percentage;
-				            if (importProgressBar) {
-				                importProgressBar.style.width = `${percentage}%`;
-				            }
-				            
-				            // Update progress text
-				            document.getElementById('importProgressDetails').textContent = 
-				                `Processing ${data.progress.processed} of ${data.progress.total} items (${percentage}%)`;
-				        }
-				        
-				        // Update progress bar for all cases
-				        const percentage = data.progress.percentage;
-				        if (importProgressBar) {
-				            importProgressBar.style.width = `${percentage}%`;
-				        }
-				        
-				        // Track results
-				        if (data.results) {
-				            results.successful += data.results.successful;
-				            results.skipped += data.results.skipped;
-				            results.failed += data.results.failed;
-				            
-				            // Concat any errors
-				            if (data.results.errors && data.results.errors.length) {
-				                results.errors = [...results.errors, ...data.results.errors];
-				            }
-				        }
-				        
-				    if (data.results && data.results.skippedDetails) {
-						allSkippedDetails.push(...data.results.skippedDetails); // Spread to merge arrays
-					}
-		            
-				        
-				        // Update stats dashboard with the latest totals
-				        updateStatsDashboard(results, allSkippedDetails);
-				        
-				        // Check if complete
-				        isComplete = data.progress.isComplete;
-				        currentIndex = data.progress.nextIndex || 0;
-				    } else {
-				        // Handle non-batch processing result
-				        isComplete = true;
-				        
-				        if (data.results) {
-				            results.successful = data.results.successful;
-				            results.skipped = data.results.skipped;
-				            results.failed = data.results.failed;
-				            results.errors = data.results.errors || [];
-				        }
-				        
-				        // Update stats dashboard
-				        updateStatsDashboard(data.totalStats, allSkippedDetails || results, allSkippedDetails);
-				    }
-				    
-				    // If complete, show results
-				    if (isComplete) {
-				        // Update status text for results
-				        document.getElementById('importProgressStatus').textContent = 'Import complete!';
-				        
-				        // Small delay before showing the results screen
-				        setTimeout(() => {
-				            showImportResults(results, allSkippedDetails);
-				        }, 500);
-				    }
-				} catch (error) {
-				    // Stop processing and show error
-				    throw error;
-				}
-			}
-			
-			return results;
-		}
-		
-		// Update the stats dashboard with the current totals
-		function updateStatsDashboard(stats) {
-			document.getElementById('statsSuccessful').textContent = stats.successful;
-			document.getElementById('statsSkipped').textContent = stats.skipped;
-			document.getElementById('statsFailed').textContent = stats.failed;
-		}
-        
-// Global variable to store all results across batches
-let allImportResults = {
-    successful: 0,
-    skipped: 0,
-    failed: 0,
-    errors: [],
-    items: []
-};
-
-// Show import results
-function showImportResults(results, skipped) {
-    // Accumulate results from all batches
-    if (results) {
-        // Update counts
-        allImportResults.successful += results.successful || 0;
-        allImportResults.skipped += results.skipped || 0;
-        allImportResults.failed += results.failed || 0;
-
-        // Accumulate errors
-        if (results.errors && results.errors.length > 0) {
-            allImportResults.errors = allImportResults.errors.concat(results.errors);
-        }
-    }
-
-    // Accumulate items from this batch
-    if (skipped && skipped.length > 0) {
-        allImportResults.items = allImportResults.items.concat(skipped);
-    }
-
-    // Hide progress container
-    importProgressContainer.style.display = 'none';
-    
-    // Prepare details HTML if accumulated results exist
-    let skippedDetailsHtml = '';
-    if (allImportResults.items.length > 0) {
-        const skippedDetailsContent = allImportResults.items.map(function(item, index) {
-            // Truncate long filenames, keeping the collection name more visible
-            const truncateFilename = (filename) => {
-                const match = filename.match(/(.+) \[([a-f0-9]+)\]/);
-                if (match) {
-                    const [, collectionName, hash] = match;
-                    return `${collectionName} [${hash.substring(0, 10)}...]`;
-                }
-                return filename.length > 50 
-                    ? filename.substring(0, 47) + '...' 
-                    : filename;
-            };
-
-            return `
-                <div style="
-                    margin-bottom: 12px; 
-                    padding: 12px; 
-                    background-color: ${index % 2 === 0 ? 'var(--background-secondary)' : 'var(--background-tertiary)'};
-                    border-radius: 6px;
-                    display: grid;
-                    gap: 10px;
-                    align-items: start;
-                    border: 1px solid var(--border-color);
-                ">
-                    <div>
-                        <div style="
-                            font-weight: bold;
-                            color: var(--text-primary);
-                            margin-bottom: 4px;
-                        ">File</div>
-                        <div style="
-                            color: var(--text-secondary);
-                            word-break: break-all;
-                            font-size: 0.9em;
-                        " title="${item.file}">
-                            ${truncateFilename(item.file)}
-                        </div>
-                        
-                        <div style="
-                            font-weight: bold;
-                            color: var(--text-primary);
-                            margin-top: 8px;
-                            margin-bottom: 4px;
-                        ">Reason</div>
-                        <div style="
-                            color: var(--text-secondary);
-                            font-size: 0.9em;
-                        ">
-                            ${item.reason}
-                        </div>
-                        
-                        <div style="
-                            font-weight: bold;
-                            color: var(--text-primary);
-                            margin-top: 8px;
-                            margin-bottom: 4px;
-                        ">Message</div>
-                        <div style="
-                            color: var(--text-secondary);
-                            font-size: 0.9em;
-                        ">
-                            ${item.message}
-                        </div>
+                    <div class="modal-body">
+                        <p>Are you sure you want to import this poster from Plex?</p>
+                        <p id="importFromPlexFilename" style="margin-top: 10px; font-weight: 500; overflow-wrap: break-word;" data-filename="" data-dirname=""></p>
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" class="modal-button cancel" id="cancelImportFromPlex">Cancel</button>
+                        <button type="button" class="modal-button import-from-plex-confirm">Import</button>
                     </div>
                 </div>
+            </div>
             `;
-        }).join('');
-
-        skippedDetailsHtml = `
-        <div style="margin-top: 15px; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden;">
-            <div 
-                style="
-                    background-color: var(--background-secondary); 
-                    padding: 12px 15px; 
-                    cursor: pointer; 
-                    display: flex; 
-                    justify-content: space-between; 
-                    align-items: center;
-                    border-bottom: 1px solid var(--border-color);
-                " 
-                onclick="
-                    var detailsSection = this.nextElementSibling;
-                    detailsSection.style.display = detailsSection.style.display === 'none' ? 'block' : 'none';
-                    this.querySelector('.toggle-icon').textContent = 
-                        detailsSection.style.display === 'none' ? '▼' : '▲';
-                "
-            >
-                <strong style="color: var(--text-primary);">Skipped Details</strong> 
-                <span style="color: var(--text-secondary);">
-                    <span class="toggle-icon">▼</span> 
-                    ${allImportResults.items.length} items
-                </span>
-            </div>
-            <div style="
-                display: none; 
-                max-height: 300px; 
-                text-align: left;
-                overflow-y: auto; 
-                padding: 15px; 
-                background-color: var(--background-primary);
-            ">
-                ${skippedDetailsContent}
-            </div>
-        </div>`;
-    }
-    
-    // Enhance results summary with stats
-    const resultsSummary = `
-    <div style="margin-bottom: 20px; text-align: center;">
-        <div style="display: flex; justify-content: space-between; gap: 15px; margin-bottom: 20px;">
-            <div style="flex: 1; background: rgba(46, 213, 115, 0.1); border: 1px solid var(--success-color); border-radius: 6px; padding: 15px;">
-                <div style="font-size: 28px; font-weight: bold; color: var(--success-color);">${allImportResults.successful}</div>
-                <div style="color: var(--text-primary);">Successful</div>
-            </div>
-            <div style="flex: 1; background: rgba(255, 159, 67, 0.1); border: 1px solid var(--accent-primary); border-radius: 6px; padding: 15px;">
-                <div style="font-size: 28px; font-weight: bold; color: var(--accent-primary);">${allImportResults.skipped}</div>
-                <div style="color: var(--text-primary);">Skipped</div>
-            </div>
-            <div style="flex: 1; background: rgba(239, 68, 68, 0.1); border: 1px solid var(--danger-color); border-radius: 6px; padding: 15px;">
-                <div style="font-size: 28px; font-weight: bold; color: var(--danger-color);">${allImportResults.failed}</div>
-                <div style="color: var(--text-primary);">Failed</div>
-            </div>
-        </div>
-        <div style="color: var(--text-secondary);">
-            Total processed: ${allImportResults.successful + allImportResults.skipped + allImportResults.failed}
-        </div>
-        ${skippedDetailsHtml}
-    </div>
-    `;
-    
-    // Add the results summary to the results container
-    const importResultsContainer = document.getElementById('importResultsContainer');
-    const existingContent = importResultsContainer.innerHTML;
-    importResultsContainer.innerHTML = existingContent.replace(
-        '<h3 style="margin-bottom: 16px; margin-top: 20px; display: flex; justify-content: center; align-items: center;">',
-        resultsSummary + '<h3 style="margin-bottom: 16px; margin-top: 20px; display: flex; justify-content: center; align-items: center;">'
-    );
-    
-    // Show results container
-    importResultsContainer.style.display = 'block';
-    
-    // Show errors if any
-    const importErrors = document.getElementById('importErrors');
-    if (allImportResults.errors.length > 0) {
-        const errorList = importErrors.querySelector('ul');
-        errorList.innerHTML = '';
-        
-        allImportResults.errors.forEach(error => {
-            const li = document.createElement('li');
-            li.textContent = error;
-            errorList.appendChild(li);
-        });
-        
-        importErrors.style.display = 'block';
-    } else {
-        importErrors.style.display = 'none';
-    }
-    
-    // Show the close button again when results are shown
-    const closeButton = plexImportModal.querySelector('.modal-close-btn');
-    if (closeButton) {
-        closeButton.style.display = 'block';
-    }
-}
-        
-        // Event handlers
-        showPlexImportButton.addEventListener('click', showPlexModal);
-        closePlexImportButton?.addEventListener('click', hidePlexModal);
-        
-        // Don't close when clicking outside the modal during import
-        plexImportModal.addEventListener('click', function(e) {
-            if (e.target === plexImportModal) {
-                // Check if import is in progress
-                if (importProgressContainer.style.display === 'block') {
-                    // Don't close if import is in progress
-                    return;
-                }
-                hidePlexModal();
-            }
-        });
-        
-        // Close error modal event handlers
-        closeErrorModalButton?.addEventListener('click', hideErrorModal);
-        
-        plexErrorCloseButtons.forEach(button => {
-            button.addEventListener('click', hideErrorModal);
-        });
-        
-		// Close results and prepare for a new import
-		closeResultsButton?.addEventListener('click', function() {
-			// Make sure to hide the modal and reset
-			hideModal(plexImportModal);
-			// Force a page refresh to ensure a clean state
-			setTimeout(function() {
-				window.location.reload();
-			}, 300);
-		});
-    }
-    
-    // =========== DELETE MODAL ===========
-    if (deleteModal) {
-        // Fix close button
-        const cancelDeleteBtn = document.getElementById('cancelDelete');
-        if (cancelDeleteBtn) {
-            cancelDeleteBtn.addEventListener('click', () => {
-                hideModal(deleteModal, deleteForm);
-            });
+            
+            // Append the modal HTML to the body
+            document.body.insertAdjacentHTML('beforeend', modalHTML);
         }
-
-        // Close when clicking outside the modal
-        deleteModal.addEventListener('click', (e) => {
-            if (e.target === deleteModal) {
-                hideModal(deleteModal, deleteForm);
-            }
-        });
+    }
+    
+    // Initialize Import from Plex feature
+    function initImportFromPlexFeature() {
+        const modal = document.getElementById('importFromPlexModal');
+        if (!modal) {
+            console.error("Import from Plex modal not found");
+            return;
+        }
         
-        // Fix close button
-        if (closeDeleteButton) {
-            closeDeleteButton.addEventListener('click', () => {
-                hideModal(deleteModal, deleteForm);
+        // Get elements
+        const closeButton = modal.querySelector('.modal-close-btn');
+        const cancelButton = document.getElementById('cancelImportFromPlex');
+        const confirmButton = modal.querySelector('.import-from-plex-confirm');
+        
+        // Close button handler
+        if (closeButton) {
+            closeButton.addEventListener('click', function() {
+                hideModal(modal);
             });
         }
         
-        // Handle form submission
-        if (deleteForm) {
-            deleteForm.addEventListener('submit', async function(e) {
-                e.preventDefault();
-                const formData = new FormData(deleteForm);
+        // Cancel button handler
+        if (cancelButton) {
+            cancelButton.addEventListener('click', function() {
+                hideModal(modal);
+            });
+        }
+        
+        // Confirm button handler
+        if (confirmButton) {
+            confirmButton.addEventListener('click', function() {
+                const filenameElement = document.getElementById('importFromPlexFilename');
+                const filename = filenameElement.getAttribute('data-filename');
+                const directory = filenameElement.getAttribute('data-dirname');
                 
-                try {
-                    const response = await fetch(window.location.href, {
-                        method: 'POST',
-                        body: formData
-                    });
-                    
-                    const data = await response.json();
-                    
-                    if (data.success) {
-                        hideModal(deleteModal);
-                        window.location.reload();
-                    } else {
-                        alert(data.error || 'Failed to delete file');
-                    }
-                } catch (error) {
-                    alert('An error occurred while deleting the file');
-                }
+                // Hide the modal
+                hideModal(modal);
+                
+                // Import the poster from Plex
+                importFromPlex(filename, directory);
             });
         }
-    }
-
-    
-    // =========== COMMON FUNCTIONALITY ===========
-    
-    // Handle escape key for modals
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-            if (loginModal?.classList.contains('show')) hideModal(loginModal, loginForm);
-            if (uploadModal?.classList.contains('show')) hideModal(uploadModal);
-            
-            // Don't close Plex import modal if import is in progress
-            if (plexImportModal?.classList.contains('show') && 
-                document.getElementById('importProgressContainer')?.style.display !== 'block') {
-                hideModal(plexImportModal);
+        
+        // Click outside to close
+        modal.addEventListener('click', function(e) {
+            if (e.target === modal) {
+                hideModal(modal);
             }
-            
-            if (deleteModal?.classList.contains('show')) hideModal(deleteModal, deleteForm);
-            if (plexErrorModal?.classList.contains('show')) hideModal(plexErrorModal);
-        }
-    });
-    
-    // =========== UPLOAD ERROR HANDLING ===========
-    
-    const uploadError = document.querySelector('.upload-error');
-    
-    function showUploadError(message) {
-        if (uploadError) {
-            uploadError.textContent = message;
-            uploadError.style.display = 'block';
-        }
-    }
-    
-    function hideUploadError() {
-        if (uploadError) {
-            uploadError.style.display = 'none';
-            uploadError.textContent = '';
-        }
-    }
-    
-    // =========== FILE INPUT HANDLING ===========
-    
-    // File input handling
-    const fileInput = document.getElementById('fileInput');
-    if (fileInput) {
-        fileInput.addEventListener('change', function(e) {
-            const fileName = e.target.files[0]?.name || 'No file chosen';
-            const fileNameElement = this.parentElement.querySelector('.file-name');
-            if (fileNameElement) {
-                fileNameElement.textContent = fileName;
+        });
+        
+        // Escape key to close
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && modal.classList.contains('show')) {
+                hideModal(modal);
             }
         });
     }
     
-    // =========== GALLERY ITEM FUNCTIONALITY ===========
+    // Import from Plex handler function
+    function importFromPlexHandler(e) {
+        e.preventDefault();
+        const filename = this.getAttribute('data-filename');
+        const directory = this.getAttribute('data-dirname');
+        
+        // Store the data in the modal
+        const modal = document.getElementById('importFromPlexModal');
+        const filenameElement = document.getElementById('importFromPlexFilename');
+        
+        filenameElement.textContent = filename;
+        filenameElement.setAttribute('data-filename', filename);
+        filenameElement.setAttribute('data-dirname', directory);
+        
+        // Show the modal
+        showModal(modal);
+    }
+    
+    // Function to send the import request to the server
+    async function importFromPlex(filename, directory) {
+        // Show a loading notification
+        const notification = showImportingNotification();
+        
+        try {
+            const formData = new FormData();
+            formData.append('action', 'import_from_plex');
+            formData.append('filename', filename);
+            formData.append('directory', directory);
+            
+            const response = await fetch('./include/import-from-plex.php', {
+                method: 'POST',
+                body: formData
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                // Show success notification
+                showImportSuccessNotification();
+                
+                // Refresh the image to show the updated version
+                refreshImage(filename, directory);
+            } else {
+                // Show error notification
+                showImportErrorNotification(data.error || 'Failed to import poster from Plex');
+            }
+        } catch (error) {
+            // Show error notification
+            showImportErrorNotification('Error importing poster from Plex: ' + error.message);
+        } finally {
+            // Hide the sending notification
+            notification.remove();
+        }
+    }
+    
+    // Function to show importing notification
+    function showImportingNotification() {
+        const notification = document.createElement('div');
+        notification.className = 'plex-notification plex-sending';
+        notification.innerHTML = `
+            <div class="plex-notification-content">
+                <div class="plex-spinner"></div>
+                <span>Importing from Plex...</span>
+            </div>
+        `;
+        document.body.appendChild(notification);
+        
+        // Force reflow to trigger animation
+        notification.offsetHeight;
+        notification.classList.add('show');
+        
+        return notification;
+    }
+    
+    // Function to show success notification for imports
+    function showImportSuccessNotification() {
+        const notification = document.createElement('div');
+        notification.className = 'plex-notification plex-success';
+        notification.innerHTML = `
+            <div class="plex-notification-content">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                </svg>
+                <span>Imported from Plex successfully!</span>
+            </div>
+        `;
+        document.body.appendChild(notification);
+        
+        // Force reflow to trigger animation
+        notification.offsetHeight;
+        notification.classList.add('show');
+        
+        // Auto-remove after 3 seconds
+        setTimeout(() => {
+            notification.classList.remove('show');
+            setTimeout(() => {
+                notification.remove();
+            }, 300); // Match transition duration
+        }, 3000);
+    }
+    
+    // Function to show error notification for imports
+    function showImportErrorNotification(message) {
+        const notification = document.createElement('div');
+        notification.className = 'plex-notification plex-error';
+        notification.innerHTML = `
+            <div class="plex-notification-content">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+                <span>${message}</span>
+            </div>
+        `;
+        document.body.appendChild(notification);
+        
+        // Force reflow to trigger animation
+        notification.offsetHeight;
+        notification.classList.add('show');
+        
+        // Auto-remove after 5 seconds
+        setTimeout(() => {
+            notification.classList.remove('show');
+            setTimeout(() => {
+                notification.remove();
+            }, 300); // Match transition duration
+        }, 5000);
+    }
+    
+    // =========== GALLERY FUNCTIONALITY ===========
     
     // Event Handler Functions
     function deleteHandler(e) {
@@ -5456,10 +5586,9 @@ function showImportResults(results, skipped) {
         
         try {
             navigator.clipboard.writeText(encodedUrl).then(() => {
-                showNotification();
+                showCopyNotification();
             });
         } catch (err) {
-            
             // Fallback for browsers that don't support clipboard API
             const textarea = document.createElement('textarea');
             textarea.value = encodedUrl;
@@ -5469,26 +5598,13 @@ function showImportResults(results, skipped) {
             
             try {
                 document.execCommand('copy');
-                showNotification();
+                showCopyNotification();
             } catch (e) {
                 alert('Copy failed. Please select and copy the URL manually.');
             }
             
             document.body.removeChild(textarea);
         }
-    }
-    
-    // Notification function
-    function showNotification() {
-        copyNotification.style.display = 'block';
-        copyNotification.classList.add('show');
-        
-        setTimeout(() => {
-            copyNotification.classList.remove('show');
-            setTimeout(() => {
-                copyNotification.style.display = 'none';
-            }, 300);
-        }, 2000);
     }
     
     // Initialize all button handlers
@@ -5504,6 +5620,35 @@ function showImportResults(results, skipped) {
             button.removeEventListener('click', deleteHandler);
             button.addEventListener('click', deleteHandler);
         });
+        
+        // Send to Plex buttons
+        document.querySelectorAll('.send-to-plex-btn').forEach(button => {
+            button.removeEventListener('click', sendToPlexHandler);
+            button.addEventListener('click', sendToPlexHandler);
+        });
+        
+        // Import from Plex buttons
+        document.querySelectorAll('.import-from-plex-btn').forEach(button => {
+            button.removeEventListener('click', importFromPlexHandler);
+            button.addEventListener('click', importFromPlexHandler);
+        });
+        
+        // Initialize Plex-specific buttons
+        initChangePosters();
+        initializeSendToPlexButtons();
+        initializeImportFromPlexButtons();
+    }
+    
+    // Debounce function for resize handling
+    function debounce(func, wait) {
+        let timeout;
+        return function() {
+            const context = this, args = arguments;
+            clearTimeout(timeout);
+            timeout = setTimeout(function() {
+                func.apply(context, args);
+            }, wait);
+        };
     }
     
     // Initialize caption truncation
@@ -5560,19 +5705,7 @@ function showImportResults(results, skipped) {
         });
     }
     
-    // Debounce function for resize handling
-    function debounce(func, wait) {
-        let timeout;
-        return function() {
-            const context = this, args = arguments;
-            clearTimeout(timeout);
-            timeout = setTimeout(function() {
-                func.apply(context, args);
-            }, wait);
-        };
-    }
-    
-    // Initialize gallery features
+    // Initialize gallery features (lazy loading, touch interactions)
     function initializeGalleryFeatures() {
         // Initialize lazy loading
         const observerOptions = {
@@ -5708,171 +5841,7 @@ function showImportResults(results, skipped) {
         window.addEventListener('scroll', handleScroll, { passive: true });
     }
     
-    // =========== SEARCH FUNCTIONALITY ===========
-    
-    // Get the search form and input
-    const searchForm = document.querySelector('.search-form');
-    const searchInput = document.querySelector('.search-input');
-
-    // Set autocomplete off to prevent browser behavior
-    if (searchInput) {
-        searchInput.setAttribute('autocomplete', 'off');
-    }
-
-    // Handle form submission (search button click or Enter key)
-    if (searchForm) {
-        searchForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const searchValue = searchForm.querySelector('.search-input').value;
-            const currentUrl = new URL(window.location.href);
-            
-            if (searchValue) {
-                currentUrl.searchParams.set('search', searchValue);
-            } else {
-                currentUrl.searchParams.delete('search');
-            }
-            
-            // Maintain directory filter if exists
-            const currentDirectory = currentUrl.searchParams.get('directory');
-            if (currentDirectory) {
-                currentUrl.searchParams.set('directory', currentDirectory);
-            }
-            
-            // Update URL
-            window.history.pushState({}, '', currentUrl.toString());
-            
-            // Perform search
-            fetch(currentUrl.toString())
-                .then(response => response.text())
-                .then(html => {
-                    const parser = new DOMParser();
-                    const newDoc = parser.parseFromString(html, 'text/html');
-                    
-                    // Update stats
-                    document.querySelector('.gallery-stats').innerHTML = 
-                        newDoc.querySelector('.gallery-stats').innerHTML;
-                    
-                    // Update pagination
-                    const paginationContainer = document.querySelector('.pagination');
-                    const newPagination = newDoc.querySelector('.pagination');
-                    
-                    if (paginationContainer) {
-                        if (newPagination) {
-                            paginationContainer.style.display = 'flex';
-                            paginationContainer.innerHTML = newPagination.innerHTML;
-                        } else {
-                            paginationContainer.style.display = 'none';
-                        }
-                    }
-                    
-                    // Get the gallery container
-                    const galleryContainer = document.querySelector('.gallery');
-                    
-                    // Check if there are results
-                    const newGallery = newDoc.querySelector('.gallery');
-                    const noResults = newDoc.querySelector('.no-results');
-                    
-                    if (newGallery) {
-                        // Show gallery with results
-                        if (galleryContainer) {
-                            galleryContainer.style.display = 'grid';
-                            galleryContainer.innerHTML = newGallery.innerHTML;
-                        }
-                        // Remove any existing no-results message
-                        const existingNoResults = document.querySelector('.no-results');
-                        if (existingNoResults) {
-                            existingNoResults.remove();
-                        }
-                    } else if (noResults) {
-                        // Hide gallery
-                        if (galleryContainer) {
-                            galleryContainer.style.display = 'none';
-                        }
-                        // Remove any existing no-results message
-                        const existingNoResults = document.querySelector('.no-results');
-                        if (existingNoResults) {
-                            existingNoResults.remove();
-                        }
-                        // Insert new no-results message after gallery stats
-                        const galleryStats = document.querySelector('.gallery-stats');
-                        galleryStats.insertAdjacentHTML('afterend', noResults.outerHTML);
-                    }
-                    
-                    // Blur the search input to hide keyboard on mobile
-                    if (searchInput) {
-                        searchInput.blur();
-                    }
-                    
-                    // Reinitialize observers and buttons
-                    initializeGalleryFeatures();
-                    initializeButtons();
-                });
-        });
-    }
-    
-        // Fix for Plex Import modal
-    const plexImportButton = document.getElementById('showPlexImportModal');
-    if (plexImportButton) {
-        plexImportButton.addEventListener('click', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            const plexModal = document.getElementById('plexImportModal');
-            if (plexModal) {
-                plexModal.style.display = 'block';
-                setTimeout(() => {
-                    plexModal.classList.add('show');
-                }, 10);
-            }
-        });
-    }
-    
-    // Fix for Jellyfin Import modal
-    const jellyfinImportButton = document.getElementById('showJellyfinImportModal');
-    if (jellyfinImportButton) {
-        jellyfinImportButton.addEventListener('click', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            const jellyfinModal = document.getElementById('jellyfinImportModal');
-            if (jellyfinModal) {
-                jellyfinModal.style.display = 'block';
-                setTimeout(() => {
-                    jellyfinModal.classList.add('show');
-                }, 10);
-            }
-        });
-    }
-    
-    // Prevent dropdown from closing when clicking inside it
-    const dropdownContents = document.querySelectorAll('.dropdown-content');
-    dropdownContents.forEach(content => {
-        content.addEventListener('click', function(e) {
-            e.stopPropagation();
-        });
-    });
-   
-    const sendToPlexButtons = document.querySelectorAll('.send-to-plex-btn');
-    
-    sendToPlexButtons.forEach(button => {
-        button.addEventListener('click', sendToPlexHandler);
-    });
-    
-    document.querySelectorAll('.import-from-plex-btn').forEach(button => {
-        button.addEventListener('click', importFromPlexHandler);
-    });
-    
-    
-    // Handle browser back/forward
-    window.addEventListener('popstate', function() {
-        location.reload();
-    });
-    
-    const changePosterModal = document.getElementById('changePosterModal');
-    const closeChangePosterButton = changePosterModal?.querySelector('.modal-close-btn');
-    const fileChangePosterForm = document.getElementById('fileChangePosterForm');
-    const urlChangePosterForm = document.getElementById('urlChangePosterForm');
-    const fileChangePosterInput = document.getElementById('fileChangePosterInput');
-    const changeError = document.querySelector('.change-poster-error');
+    // =========== CHANGE POSTER FUNCTIONALITY ===========
     
     // Initialize Change Poster buttons on all Plex posters
     function initChangePosters() {
@@ -5972,263 +5941,254 @@ function showImportResults(results, skipped) {
         showModal(changePosterModal);
     }
     
-    // File input change handler
-    if (fileChangePosterInput) {
-        fileChangePosterInput.addEventListener('change', function(e) {
-            const fileName = e.target.files[0]?.name || '';
-            const fileNameElement = this.parentElement.querySelector('.file-name');
-            if (fileNameElement) {
-                fileNameElement.textContent = fileName;
-            }
+    // =========== PLEX BUTTON INITIALIZATION ===========
+    
+    // Initialize Send to Plex buttons
+    function initializeSendToPlexButtons() {
+        // Add Send to Plex button to appropriate gallery items
+        document.querySelectorAll('.gallery-item').forEach(item => {
+            const filenameElement = item.querySelector('.gallery-caption');
+            const overlayActions = item.querySelector('.image-overlay-actions');
             
-            // Enable/disable submit button based on file selection
-            const submitButton = fileChangePosterForm.querySelector('button[type="submit"]');
-            if (submitButton) {
-                submitButton.disabled = !fileName;
+            if (filenameElement && overlayActions) {
+                const filename = filenameElement.getAttribute('data-full-text');
+                
+                // Only show the Send to Plex button for files with "Plex" in the name
+                if (isPlexFile(filename)) {
+                    // Check if button already exists to avoid duplicates
+                    if (!overlayActions.querySelector('.send-to-plex-btn')) {
+                        // Create button before the existing Delete button
+                        const deleteButton = overlayActions.querySelector('.delete-btn');
+                        
+                        if (deleteButton) {
+                            const directoryValue = deleteButton.getAttribute('data-dirname');
+                            const filenameValue = deleteButton.getAttribute('data-filename');
+                            
+                            const sendToPlexButton = document.createElement('button');
+                            sendToPlexButton.className = 'overlay-action-button send-to-plex-btn';
+                            sendToPlexButton.setAttribute('data-filename', filenameValue);
+                            sendToPlexButton.setAttribute('data-dirname', directoryValue);
+                            sendToPlexButton.innerHTML = `
+                                <svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
+                                    <polyline points="16 6 12 2 8 6"></polyline>
+                                    <line x1="12" y1="2" x2="12" y2="15"></line>
+                                </svg>
+                                Send to Plex
+                            `;
+                            
+                            // Insert before Delete button
+                            deleteButton.parentNode.insertBefore(sendToPlexButton, deleteButton);
+                            
+                            // Add event listener
+                            sendToPlexButton.addEventListener('click', sendToPlexHandler);
+                        }
+                    }
+                }
             }
         });
     }
     
-    // Tab functionality for the Change Poster modal
-    const changePosterTabs = changePosterModal.querySelectorAll('.upload-tab-btn');
-    const changePosterForms = changePosterModal.querySelectorAll('.upload-form');
-    
-    changePosterTabs.forEach(tab => {
-        tab.addEventListener('click', function() {
-            const tabName = this.getAttribute('data-tab');
+    // Initialize Import from Plex buttons
+    function initializeImportFromPlexButtons() {
+        // Add Import from Plex button to appropriate gallery items
+        document.querySelectorAll('.gallery-item').forEach(item => {
+            const filenameElement = item.querySelector('.gallery-caption');
+            const overlayActions = item.querySelector('.image-overlay-actions');
             
-            // Update active tab
-            changePosterTabs.forEach(t => t.classList.remove('active'));
-            this.classList.add('active');
-            
-            // Show active form
-            changePosterForms.forEach(form => {
-                if (form.id === tabName + 'ChangePosterForm') {
-                    form.classList.add('active');
-                } else {
-                    form.classList.remove('active');
+            if (filenameElement && overlayActions) {
+                const filename = filenameElement.getAttribute('data-full-text');
+                
+                // Only show the Import from Plex button for files with "Plex" in the name
+                if (isPlexFile(filename)) {
+                    // Check if button already exists to avoid duplicates
+                    if (!overlayActions.querySelector('.import-from-plex-btn')) {
+                        // Get the move button as reference
+                        const moveButton = overlayActions.querySelector('.move-btn');
+                        
+                        if (moveButton) {
+                            const directoryValue = moveButton.getAttribute('data-dirname');
+                            const filenameValue = moveButton.getAttribute('data-filename');
+                            
+                            const importFromPlexButton = document.createElement('button');
+                            importFromPlexButton.className = 'overlay-action-button import-from-plex-btn';
+                            importFromPlexButton.setAttribute('data-filename', filenameValue);
+                            importFromPlexButton.setAttribute('data-dirname', directoryValue);
+                            importFromPlexButton.innerHTML = `
+                                <svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
+                                    <polyline points="10 17 15 12 10 7"></polyline>
+                                    <line x1="15" y1="12" x2="3" y2="12"></line>
+                                </svg>
+                                Import from Plex
+                            `;
+                            
+                            // Add event listener
+                            importFromPlexButton.addEventListener('click', importFromPlexHandler);
+                        }
+                    }
                 }
-            });
+            }
+        });
+    }
+    
+    // =========== SEARCH FUNCTIONALITY ===========
+    
+    // Set autocomplete off to prevent browser behavior
+    if (searchInput) {
+        searchInput.setAttribute('autocomplete', 'off');
+    }
+
+    // Handle form submission (search button click or Enter key)
+    if (searchForm) {
+        searchForm.addEventListener('submit', function(e) {
+            e.preventDefault();
             
-            // Clear any error messages
-            hideChangeError();
+            const searchValue = searchForm.querySelector('.search-input').value;
+            const currentUrl = new URL(window.location.href);
+            
+            if (searchValue) {
+                currentUrl.searchParams.set('search', searchValue);
+            } else {
+                currentUrl.searchParams.delete('search');
+            }
+            
+            // Maintain directory filter if exists
+            const currentDirectory = currentUrl.searchParams.get('directory');
+            if (currentDirectory) {
+                currentUrl.searchParams.set('directory', currentDirectory);
+            }
+            
+            // Update URL
+            window.history.pushState({}, '', currentUrl.toString());
+            
+            // Perform search
+            fetch(currentUrl.toString())
+                .then(response => response.text())
+                .then(html => {
+                    const parser = new DOMParser();
+                    const newDoc = parser.parseFromString(html, 'text/html');
+                    
+                    // Update stats
+                    document.querySelector('.gallery-stats').innerHTML = 
+                        newDoc.querySelector('.gallery-stats').innerHTML;
+                    
+                    // Update pagination
+                    const paginationContainer = document.querySelector('.pagination');
+                    const newPagination = newDoc.querySelector('.pagination');
+                    
+                    if (paginationContainer) {
+                        if (newPagination) {
+                            paginationContainer.style.display = 'flex';
+                            paginationContainer.innerHTML = newPagination.innerHTML;
+                        } else {
+                            paginationContainer.style.display = 'none';
+                        }
+                    }
+                    
+                    // Get the gallery container
+                    const galleryContainer = document.querySelector('.gallery');
+                    
+                    // Check if there are results
+                    const newGallery = newDoc.querySelector('.gallery');
+                    const noResults = newDoc.querySelector('.no-results');
+                    
+                    if (newGallery) {
+                        // Show gallery with results
+                        if (galleryContainer) {
+                            galleryContainer.style.display = 'grid';
+                            galleryContainer.innerHTML = newGallery.innerHTML;
+                        }
+                        // Remove any existing no-results message
+                        const existingNoResults = document.querySelector('.no-results');
+                        if (existingNoResults) {
+                            existingNoResults.remove();
+                        }
+                    } else if (noResults) {
+                        // Hide gallery
+                        if (galleryContainer) {
+                            galleryContainer.style.display = 'none';
+                        }
+                        // Remove any existing no-results message
+                        const existingNoResults = document.querySelector('.no-results');
+                        if (existingNoResults) {
+                            existingNoResults.remove();
+                        }
+                        // Insert new no-results message after gallery stats
+                        const galleryStats = document.querySelector('.gallery-stats');
+                        galleryStats.insertAdjacentHTML('afterend', noResults.outerHTML);
+                    }
+                    
+                    // Blur the search input to hide keyboard on mobile
+                    if (searchInput) {
+                        searchInput.blur();
+                    }
+                    
+                    // Reinitialize observers and buttons
+                    initializeGalleryFeatures();
+                    initializeButtons();
+                });
+        });
+    }
+    
+    // =========== DROPDOWN & ADDITIONAL EVENT LISTENERS ===========
+    
+    // Fix for Plex Import modal
+    const plexImportButton = document.getElementById('showPlexImportModal');
+    if (plexImportButton) {
+        plexImportButton.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const plexModal = document.getElementById('plexImportModal');
+            if (plexModal) {
+                plexModal.style.display = 'block';
+                setTimeout(() => {
+                    plexModal.classList.add('show');
+                }, 10);
+            }
+        });
+    }
+    
+    // Fix for Jellyfin Import modal
+    const jellyfinImportButton = document.getElementById('showJellyfinImportModal');
+    if (jellyfinImportButton) {
+        jellyfinImportButton.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const jellyfinModal = document.getElementById('jellyfinImportModal');
+            if (jellyfinModal) {
+                jellyfinModal.style.display = 'block';
+                setTimeout(() => {
+                    jellyfinModal.classList.add('show');
+                }, 10);
+            }
+        });
+    }
+    
+    // Prevent dropdown from closing when clicking inside it
+    const dropdownContents = document.querySelectorAll('.dropdown-content');
+    dropdownContents.forEach(content => {
+        content.addEventListener('click', function(e) {
+            e.stopPropagation();
         });
     });
     
-    // Form submission handler - File upload
-    if (fileChangePosterForm) {
-        fileChangePosterForm.addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            // Show a loading notification
-            const notification = showNotification('Replacing poster...', 'loading');
-            
-            try {
-                const formData = new FormData(this);
-                
-                const response = await fetch('./include/change-poster.php', {
-                    method: 'POST',
-                    body: formData
-                });
-                
-                const data = await response.json();
-                
-				if (data.success) {
-				
-				    // Remove the loading notification first
-					notification.remove();
-					
-					// Hide the modal
-					hideModal(changePosterModal);
-					
-					// Show success notification
-					showNotification('Poster successfully replaced!', 'success');
-					
-					// Refresh the image to show the updated version
-					const filename = formData.get('original_filename');
-					const directory = formData.get('directory');
-					refreshImage(filename, directory);
-				} else {
-					// Show error in modal
-					showChangeError(data.error || 'Failed to replace poster from URL');
-					notification.remove();
-				}
-            } catch (error) {
-                // Show error in modal
-                showChangeError('Error replacing poster: ' + error.message);
-                notification.remove();
-            }
+    // Handle browser back/forward
+    window.addEventListener('popstate', function() {
+        location.reload();
+    });
+    
+    // =========== CLOSING BUTTON HANDLING ===========
+    
+    // For regular close buttons
+    const closeButtons = document.querySelectorAll('.plex-import-modal-close, #closeImportModal, .close-button');
+    closeButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            setTimeout(function() {
+                window.location.reload();
+            }, 300);
         });
-    }
-    
-    // Form submission handler - URL upload
-    if (urlChangePosterForm) {
-        urlChangePosterForm.addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            // Show a loading notification
-            const notification = showNotification('Replacing poster from URL...', 'loading');
-            
-            try {
-                const formData = new FormData(this);
-                
-                const response = await fetch('./include/change-poster.php', {
-                    method: 'POST',
-                    body: formData
-                });
-                
-                const data = await response.json();
-                
-				if (data.success) {
-				
-					// Remove the loading notification first
-					notification.remove();
-					
-					// Hide the modal
-					hideModal(changePosterModal);
-					
-					// Show success notification
-					showNotification('Poster successfully replaced!', 'success');
-					
-					// Refresh the image to show the updated version
-					const filename = formData.get('original_filename');
-					const directory = formData.get('directory');
-					refreshImage(filename, directory);
-				} else {
-					// Show error in modal
-					showChangeError(data.error || 'Failed to replace poster from URL');
-					notification.remove();
-				}
-            } catch (error) {
-                // Show error in modal
-                showChangeError('Error replacing poster: ' + error.message);
-                notification.remove();
-            }
-        });
-    }
-    
-    // Error handling functions
-    function showChangeError(message) {
-        if (changeError) {
-            changeError.textContent = message;
-            changeError.style.display = 'block';
-        }
-    }
-    
-    function hideChangeError() {
-        if (changeError) {
-            changeError.textContent = '';
-            changeError.style.display = 'none';
-        }
-    }
-    
-    // Modal close handlers
-    if (closeChangePosterButton) {
-        closeChangePosterButton.addEventListener('click', function() {
-            hideModal(changePosterModal);
-        });
-    }
-    
-    // Click outside to close
-    if (changePosterModal) {
-        changePosterModal.addEventListener('click', function(e) {
-            if (e.target === changePosterModal) {
-                hideModal(changePosterModal);
-            }
-        });
-    }
-    
-    // Show notification function
-    function showNotification(message, type) {
-        const notification = document.createElement('div');
-        notification.className = `plex-notification plex-${type}`;
-        
-        let iconHtml = '';
-        if (type === 'success') {
-            iconHtml = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                <polyline points="22 4 12 14.01 9 11.01"></polyline>
-            </svg>`;
-        } else if (type === 'error') {
-            iconHtml = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10"></circle>
-                <line x1="12" y1="8" x2="12" y2="12"></line>
-                <line x1="12" y1="16" x2="12.01" y2="16"></line>
-            </svg>`;
-        } else if (type === 'loading') {
-            iconHtml = `<div class="plex-spinner"></div>`;
-        }
-        
-        notification.innerHTML = `
-            <div class="plex-notification-content">
-                ${iconHtml}
-                <span>${message}</span>
-            </div>
-        `;
-        
-        document.body.appendChild(notification);
-        
-        // Force reflow to trigger animation
-        notification.offsetHeight;
-        notification.classList.add('show');
-        
-        // Auto-remove after 3 seconds for success/error notifications
-        if (type !== 'loading') {
-            setTimeout(() => {
-                notification.classList.remove('show');
-                setTimeout(() => {
-                    notification.remove();
-                }, 300); // Match transition duration
-            }, 3000);
-        }
-        
-        return notification;
-    }
-    
-    // Refresh image function (reuse the existing function)
-    function refreshImage(filename, directory) {
-        const images = document.querySelectorAll('.gallery-image');
-        images.forEach(img => {
-            const imgPath = img.getAttribute('data-src');
-            if (imgPath && imgPath.includes(filename)) {
-                // Add a timestamp to force a cache refresh
-                const timestamp = new Date().getTime();
-                const newSrc = imgPath + '?t=' + timestamp;
-                
-                // Set the new source
-                img.src = '';
-                img.setAttribute('data-src', newSrc);
-                img.src = newSrc;
-                
-                // Reset loading state
-                img.classList.remove('loaded');
-                const placeholder = img.previousElementSibling;
-                if (placeholder && placeholder.classList.contains('gallery-image-placeholder')) {
-                    placeholder.classList.remove('hidden');
-                }
-                
-                // Set loaded class when the new image loads
-                img.onload = function() {
-                    img.classList.add('loaded');
-                    if (placeholder) {
-                        placeholder.classList.add('hidden');
-                    }
-                };
-            }
-        });
-    }
-    
-    // Initialize change poster buttons
-    initChangePosters();
-    
-    // Add to global initialization function if it exists
-    const originalInitButtons = window.initializeButtons;
-    if (typeof originalInitButtons === 'function') {
-        window.initializeButtons = function() {
-            originalInitButtons();
-            initChangePosters();
-        };
-    }
+    });
     
     // =========== INITIALIZATION ===========
     
@@ -6239,7 +6199,6 @@ function showImportResults(results, skipped) {
     initPlexConfirmModal();
     createImportFromPlexModal();
     initImportFromPlexFeature();
-
     
     // Call truncation after images load and on resize
     document.querySelectorAll('.gallery-image').forEach(img => {
@@ -6248,13 +6207,6 @@ function showImportResults(results, skipped) {
     
     // Debounced resize handler
     window.addEventListener('resize', debounce(initializeTruncation, 250));
-    
-    // Clear error when switching tabs in upload modal
-    document.querySelectorAll('.upload-tab-btn').forEach(button => {
-        button.addEventListener('click', () => {
-            hideUploadError();
-        });
-    });
 });
 </script>
 </body>
