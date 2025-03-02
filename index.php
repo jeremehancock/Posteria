@@ -2127,7 +2127,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
         </div>
         <div class="modal-body">
             <p>Are you sure you want to replace the Plex poster with this one?</p>
-            <p id="plexConfirmFilename" style="margin-top: 10px; font-weight: 500; overflow-wrap: break-word;" data-filename="" data-dirname=""></p>
+            <p id="plexConfirmFilename" style="margin-top: 10px; font-weight: 500; overflow-wrap: break-word; display: none;" data-filename="" data-dirname=""></p>
         </div>
         <div class="modal-actions">
             <button type="button" class="modal-button cancel" id="cancelPlexSend">Cancel</button>
@@ -2856,7 +2856,17 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				                </div>
 				            </div>
 							<div class="gallery-caption" data-full-text="<?php echo htmlspecialchars(pathinfo($image['filename'], PATHINFO_FILENAME)); ?>">
-    							<?php echo htmlspecialchars(preg_replace('/\s*\[.*?\]\s*/', ' ', pathinfo($image['filename'], PATHINFO_FILENAME))); ?>
+								<?php 
+								echo htmlspecialchars(
+									preg_replace_callback(
+										'/\b(Plex|Jellyfin)\b/', 
+										function($matches) {
+											return '(' . $matches[1] . ')';
+										}, 
+										preg_replace('/\s*\[.*?\]\s*/', ' ', pathinfo($image['filename'], PATHINFO_FILENAME))
+									)
+								); 
+								?>
 							</div>
 				     	</div>
 				    <?php endforeach; ?>
@@ -6417,7 +6427,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		                </div>
 		                <div class="modal-body">
 		                    <p>Are you sure you want to replace this poster with the one from Plex?</p>
-		                    <p id="importFromPlexFilename" style="margin-top: 10px; font-weight: 500; overflow-wrap: break-word;" data-filename="" data-dirname=""></p>
+		                    <p id="importFromPlexFilename" style="margin-top: 10px; font-weight: 500; overflow-wrap: break-word; display: none;" data-filename="" data-dirname=""></p>
 		                </div>
 		                <div class="modal-actions">
 		                    <button type="button" class="modal-button cancel" id="cancelImportFromPlex">Cancel</button>
@@ -6947,8 +6957,10 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		    const filename = this.getAttribute('data-filename');
 		    const dirname = this.getAttribute('data-dirname');
 		    
+		    const cleanedFilename = this.getAttribute('data-filename').replace(/\.jpg$/i, '').replace(/\s*\[.*?\]\s*/g, ' ').replace(/\b(Plex|Jellyfin)\b/g, '($1)');
+		    
 		    // Update the modal with file info
-		    document.getElementById('changePosterFilename').textContent = `Changing poster: ${filename}`;
+		    document.getElementById('changePosterFilename').textContent = `Changing poster: ${cleanedFilename}`;
 		    document.getElementById('fileChangePosterOriginalFilename').value = filename;
 		    document.getElementById('fileChangePosterDirectory').value = dirname;
 		    document.getElementById('urlChangePosterOriginalFilename').value = filename;
