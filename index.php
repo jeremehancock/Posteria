@@ -1574,7 +1574,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			position: fixed;
 			bottom: 25px;
 			right: 25px;
-			background: linear-gradient(45deg, var(--accent-primary), #ff9f43);
+			background: linear-gradient(45deg, #2ed573, #7bed9f);
 			color: #1f1f1f;
 			padding: 12px 24px;
 			border-radius: 8px;
