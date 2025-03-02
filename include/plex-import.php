@@ -158,12 +158,12 @@ try {
 		if ($mediaType === 'collections') {
 			// Check if "Collection" is not already in the basename
 			if (!stripos($basename, 'Collection')) {
-				$basename .= " Collection Plex";
+				$basename .= " Collection **Plex**";
 			} else {
-				$basename .= " Plex";
+				$basename .= " **Plex**";
 			}
 		} else {
-			$basename .= " Plex";
+			$basename .= " **Plex**";
 		}
 		
 		return $basename . '.' . $extension;
@@ -810,7 +810,7 @@ try {
 	 * @param string $type Type of server ('Plex' or 'Jellyfin')
 	 * @return array Associative array of ID => filename
 	 */
-	function getExistingPosters($directory, $type = 'Plex') {
+	function getExistingPosters($directory, $type = '**Plex**') {
 		$posters = [];
 		
 		// Check if directory exists
@@ -862,7 +862,7 @@ try {
 	 * @param string $type Type of server ('Plex' or 'Jellyfin')
 	 * @return array Results with count of orphaned posters and details
 	 */
-	function markOrphanedPosters($directory, $importedIds, $type = 'Plex') {
+	function markOrphanedPosters($directory, $importedIds, $type = '**Plex**') {
 		// Make sure directory ends with a slash
 		if (substr($directory, -1) !== '/') {
 		    $directory .= '/';
@@ -955,7 +955,7 @@ try {
 		        while (($file = readdir($handle)) !== false) {
 		            try {
 		                if (is_file($directory . $file) && 
-		                    strpos($file, 'Plex') === false && 
+		                    strpos($file, '**Plex**') === false && 
 		                    strpos($file, 'Jellyfin') === false && 
 		                    strpos($file, 'Orphaned') === false) {
 		                    
@@ -1137,7 +1137,7 @@ try {
 							
 							// Process orphaned posters with proper checking
 							if (is_array($allImportedIds)) {
-								$orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, 'Plex');
+								$orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, '**Plex**');
 							} else {
 								logDebug("Error: allImportedIds is not an array", [
 									'type' => gettype($allImportedIds),
@@ -1245,7 +1245,7 @@ try {
 							
 							// Process orphaned posters with proper checking
 							if (is_array($allImportedIds)) {
-								$orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, 'Plex');
+								$orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, '**Plex**');
 							} else {
 								logDebug("Shows: Error: allImportedIds is not an array", [
 									'type' => gettype($allImportedIds),
@@ -1378,7 +1378,7 @@ try {
 									
 									// Process orphaned posters with proper checking
 									if (is_array($allImportedIds)) {
-										$orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, 'Plex');
+										$orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, '**Plex**');
 									} else {
 										logDebug("Seasons: Error: allImportedIds is not an array", [
 											'type' => gettype($allImportedIds),
@@ -1514,7 +1514,7 @@ try {
 								
 								// Process orphaned posters with proper checking
 								if (is_array($allImportedIds)) {
-									$orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, 'Plex');
+									$orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, '**Plex**');
 								} else {
 									logDebug("Seasons: Error: allImportedIds is not an array", [
 										'type' => gettype($allImportedIds),
@@ -1651,11 +1651,11 @@ try {
 									} else {
 										logDebug("Collections: Created target directory");
 										// Process orphaned posters with proper checking
-										$orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, 'Plex');
+										$orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, '**Plex**');
 									}
 								} else {
 									// Process orphaned posters with proper checking
-									$orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, 'Plex');
+									$orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, '**Plex**');
 								}
 								
 								// Clear the session

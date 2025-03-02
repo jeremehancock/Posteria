@@ -610,7 +610,7 @@ try {
             // Check if this should be sent to Plex (if filename contains "Plex")
             $plexResult = ['success' => false];
             
-            if (stripos($originalFilename, 'plex') !== false && isset($plex_config) && !empty($plex_config['token'])) {
+            if (stripos($originalFilename, '**plex**') !== false && isset($plex_config) && !empty($plex_config['token'])) {
                 $plexResult = sendToPlex($originalFilename, $directory);
             }
             

@@ -2813,7 +2813,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 <?php if (isLoggedIn()): ?>
     <?php 
     // Check if filename contains "Plex" to determine if we should show the Plex-related buttons
-    $isPlexFile = strpos(strtolower($image['filename']), 'plex') !== false;
+    $isPlexFile = strpos(strtolower($image['filename']), '**plex**') !== false;
     
     // Only show Send to Plex button for Plex files
     if ($isPlexFile): 
@@ -2857,11 +2857,9 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 							<div class="gallery-caption" data-full-text="<?php echo htmlspecialchars(pathinfo($image['filename'], PATHINFO_FILENAME)); ?>">
 								<?php 
 								echo htmlspecialchars(
-									preg_replace_callback(
-										'/\b(Plex|Jellyfin)\b/', 
-										function($matches) {
-											return '(' . $matches[1] . ')';
-										}, 
+									preg_replace(
+										'/\*\*(Plex|Jellyfin)\*\*/',
+										'($1)',
 										preg_replace('/\s*\[.*?\]\s*/', ' ', pathinfo($image['filename'], PATHINFO_FILENAME))
 									)
 								); 
@@ -5537,7 +5535,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		
 		// Function to check if a filename has "Plex" in it
 		function isPlexFile(filename) {
-		    return filename.toLowerCase().includes('plex');
+		    return filename.toLowerCase().includes('**plex**');
 		}
 		
 		// =========== SEND TO PLEX FUNCTIONALITY ===========

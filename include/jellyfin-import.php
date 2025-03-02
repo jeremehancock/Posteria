@@ -163,12 +163,12 @@ try {
         if ($mediaType === 'collections') {
             // Check if "Collection" is not already in the basename
             if (!stripos($basename, 'Collection')) {
-                $basename .= " Collection Jellyfin";
+                $basename .= " Collection **Jellyfin**";
             } else {
-                $basename .= " Jellyfin";
+                $basename .= " **Jellyfin**";
             }
         } else {
-            $basename .= " Jellyfin";
+            $basename .= " **Jellyfin**";
         }
         
         return $basename . '.' . $extension;
@@ -1052,7 +1052,7 @@ try {
      * @param string $type Type of server ('Plex' or 'Jellyfin')
      * @return array Associative array of ID => filename
      */
-    function getExistingPosters($directory, $type = 'Jellyfin') {
+    function getExistingPosters($directory, $type = '**Jellyfin**') {
         $posters = [];
         
         // Check if directory exists
@@ -1104,7 +1104,7 @@ try {
      * @param string $type Type of server ('Plex' or 'Jellyfin')
      * @return array Results with count of orphaned posters and details
      */
-    function markOrphanedPosters($directory, $importedIds, $type = 'Jellyfin') {
+    function markOrphanedPosters($directory, $importedIds, $type = '**Jellyfin**') {
         // Make sure directory ends with a slash
         if (substr($directory, -1) !== '/') {
             $directory .= '/';
@@ -1197,8 +1197,8 @@ try {
                 while (($file = readdir($handle)) !== false) {
                     try {
                         if (is_file($directory . $file) && 
-                            strpos($file, 'Plex') === false && 
-                            strpos($file, 'Jellyfin') === false && 
+                            strpos($file, '**Plex**') === false && 
+                            strpos($file, '**Jellyfin**') === false && 
                             strpos($file, 'Orphaned') === false) {
                             
                             // Check if file is writable
@@ -1379,7 +1379,7 @@ try {
                             
                             // Process orphaned posters with proper checking
                             if (is_array($allImportedIds)) {
-                                $orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, 'Jellyfin');
+                                $orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, '**Jellyfin**');
                             } else {
                                 logDebug("Movies: Error: allImportedIds is not an array", [
                                     'type' => gettype($allImportedIds),
@@ -1486,7 +1486,7 @@ try {
                             
                             // Process orphaned posters with proper checking
                             if (is_array($allImportedIds)) {
-                                $orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, 'Jellyfin');
+                                $orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, '**Jellyfin**');
                             } else {
                                 logDebug("Shows: Error: allImportedIds is not an array", [
                                     'type' => gettype($allImportedIds),
@@ -1645,7 +1645,7 @@ try {
                                         $orphanedResults = null;
                                         
                                         if ($isComplete && isset($_SESSION['import_season_ids']) && is_array($_SESSION['import_season_ids'])) {
-                                            $orphanedResults = markOrphanedPosters($targetDir, $_SESSION['import_season_ids'], 'Jellyfin');
+                                            $orphanedResults = markOrphanedPosters($targetDir, $_SESSION['import_season_ids'], '**Jellyfin**');
                                             unset($_SESSION['import_season_ids']);
                                         }
                                         
@@ -1753,7 +1753,7 @@ try {
                                     
                                     // Process orphaned posters with proper checking
                                     if (is_array($allImportedIds)) {
-                                        $orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, 'Jellyfin');
+                                        $orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, '**Jellyfin**');
                                     } else {
                                         $orphanedResults = ['orphaned' => 0, 'unmarked' => 0, 'details' => []];
                                     }
@@ -1920,11 +1920,11 @@ try {
                                     } else {
                                         logDebug("Collections: Created target directory");
                                         // Process orphaned posters with proper checking
-                                        $orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, 'Jellyfin');
+                                        $orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, '**Jellyfin**');
                                     }
                                 } else {
                                     // Process orphaned posters with proper checking
-                                    $orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, 'Jellyfin');
+                                    $orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, '**Jellyfin**');
                                 }
                                 
                                 // Clear the session
@@ -2010,7 +2010,7 @@ try {
             // Mark orphaned posters if processing entire library at once
             $orphanedResults = null;
             if (is_array($results['importedIds']) && !empty($results['importedIds'])) {
-                $orphanedResults = markOrphanedPosters($targetDir, $results['importedIds'], 'Jellyfin');
+                $orphanedResults = markOrphanedPosters($targetDir, $results['importedIds'], '**Jellyfin**');
             }
             
             echo json_encode([
