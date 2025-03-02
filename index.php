@@ -6954,7 +6954,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		    const filename = this.getAttribute('data-filename');
 		    const dirname = this.getAttribute('data-dirname');
 		    
-		    const cleanedFilename = this.getAttribute('data-filename').replace(/\.jpg$/i, '').replace(/\s*\[.*?\]\s*/g, ' ').replace(/\b(Plex|Jellyfin)\b/g, '($1)');
+		    const cleanedFilename = this.getAttribute('data-filename').replace(/\.jpg$/i, '').replace(/\s*\[.*?\]\s*/g, ' ').replace(/\*\*(Plex|Jellyfin)\*\*/g, '($1)');
 		    
 		    // Update the modal with file info
 		    document.getElementById('changePosterFilename').textContent = `Changing poster: ${cleanedFilename}`;
