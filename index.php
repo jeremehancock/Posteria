@@ -1497,7 +1497,6 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			display: flex;
 			gap: 10px;
 			margin-bottom: 10px;
-			margin-top: 32px;
 			justify-content: right;
 		}
 
@@ -2048,6 +2047,15 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
         
         <p id="changePosterFilename" style="margin: 10px 24px; font-weight: 500; overflow-wrap: break-word;" data-filename="" data-dirname=""></p>
         
+        <div class="plex-info" style="margin: 0 24px 10px; padding: 10px; background: rgba(46, 213, 115, 0.1); border: 1px solid var(--accent-primary); border-radius: 6px;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 6px;">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="16" x2="12" y2="12"></line>
+                <line x1="12" y1="8" x2="12" y2="8"></line>
+            </svg>
+            <span>Updated poster will be automatically synced with Plex after upload</span>
+        </div>
+        
         <div class="upload-tabs">
             <button class="upload-tab-btn active" data-tab="file">Upload from Disk</button>
             <button class="upload-tab-btn" data-tab="url">Upload from URL</button>
@@ -2078,7 +2086,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
                     </div>
                 </div>
                 <div class="upload-input-group">
-                    <button type="submit" class="modal-button" disabled>Poster</button>
+                    <button type="submit" class="modal-button" disabled style="margin-top: 32px;">Change</button>
                 </div>
                 <div class="upload-help">
                     Maximum file size: 5MB<br>
@@ -2096,7 +2104,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
                     <input type="url" name="image_url" class="login-input" placeholder="Enter poster URL..." required>
                 </div>
                 <div class="upload-input-group">
-                    <button type="submit" class="modal-button">Change</button>
+                    <button type="submit" class="modal-button" style="margin-top: 32px;">Change</button>
                 </div>
                 <div class="upload-help">
                     Maximum file size: 5MB<br>
@@ -2105,7 +2113,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
             </form>
         </div>
     </div>
-</div>     
+</div>   
 		<!-- Add this HTML before the closing </body> tag -->
 <div id="plexConfirmModal" class="modal">
     <div class="modal-content">
@@ -3285,94 +3293,106 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         
         // Form submission handler - File upload
-        if (fileChangePosterForm) {
-            fileChangePosterForm.addEventListener('submit', async function(e) {
-                e.preventDefault();
-                
-                // Show a loading notification
-                const notification = showNotification('Replacing poster...', 'loading');
-                
-                try {
-                    const formData = new FormData(this);
-                    
-                    const response = await fetch('./include/change-poster.php', {
-                        method: 'POST',
-                        body: formData
-                    });
-                    
-                    const data = await response.json();
-                    
-                    if (data.success) {
-                        // Remove the loading notification first
-                        notification.remove();
-                        
-                        // Hide the modal
-                        hideModal(changePosterModal);
-                        
-                        // Show success notification
-                        showNotification('Poster successfully replaced!', 'success');
-                        
-                        // Refresh the image to show the updated version
-                        const filename = formData.get('original_filename');
-                        const directory = formData.get('directory');
-                        refreshImage(filename, directory);
-                    } else {
-                        // Show error in modal
-                        showChangeError(data.error || 'Failed to change poster from URL');
-                        notification.remove();
-                    }
-                } catch (error) {
-                    // Show error in modal
-                    showChangeError('Error replacing poster: ' + error.message);
-                    notification.remove();
-                }
-            });
-        }
+		if (fileChangePosterForm) {
+			fileChangePosterForm.addEventListener('submit', async function(e) {
+				e.preventDefault();
+				
+				// Show a loading notification
+				const notification = showNotification('Replacing poster...', 'loading');
+				
+				try {
+				    const formData = new FormData(this);
+				    
+				    const response = await fetch('./include/change-poster.php', {
+				        method: 'POST',
+				        body: formData
+				    });
+				    
+				    const data = await response.json();
+				    
+				    if (data.success) {
+				        // Remove the loading notification first
+				        notification.remove();
+				        
+				        // Hide the modal
+				        hideModal(changePosterModal);
+				        
+				        // Determine the message based on Plex update status
+				        let message = 'Poster successfully replaced!';
+				        if (data.plexUpdated) {
+				            message = 'Poster replaced and updated in Plex!';
+				        }
+				        
+				        // Show success notification
+				        showNotification(message, 'success');
+				        
+				        // Refresh the image to show the updated version
+				        const filename = formData.get('original_filename');
+				        const directory = formData.get('directory');
+				        refreshImage(filename, directory);
+				    } else {
+				        // Show error in modal
+				        showChangeError(data.error || 'Failed to change poster');
+				        notification.remove();
+				    }
+				} catch (error) {
+				    // Show error in modal
+				    showChangeError('Error replacing poster: ' + error.message);
+				    notification.remove();
+				}
+			});
+		}
         
         // Form submission handler - URL upload
-        if (urlChangePosterForm) {
-            urlChangePosterForm.addEventListener('submit', async function(e) {
-                e.preventDefault();
-                
-                // Show a loading notification
-                const notification = showNotification('Replacing poster from URL...', 'loading');
-                
-                try {
-                    const formData = new FormData(this);
-                    
-                    const response = await fetch('./include/change-poster.php', {
-                        method: 'POST',
-                        body: formData
-                    });
-                    
-                    const data = await response.json();
-                    
-                    if (data.success) {
-                        // Remove the loading notification first
-                        notification.remove();
-                        
-                        // Hide the modal
-                        hideModal(changePosterModal);
-                        
-                        // Show success notification
-                        showNotification('Poster successfully replaced!', 'success');
-                        
-                        // Refresh the image to show the updated version
-                        const filename = formData.get('original_filename');
-                        const directory = formData.get('directory');
-                        refreshImage(filename, directory);
-                    } else {
-                        // Show error in modal
-                        showChangeError(data.error || 'Failed to change poster from URL');
-                        notification.remove();
-                    }
-                } catch (error) {
-                    // Show error in modal
-                    showChangeError('Error replacing poster: ' + error.message);
-                    notification.remove();
-                }
-            });
-        }
+		if (urlChangePosterForm) {
+			urlChangePosterForm.addEventListener('submit', async function(e) {
+				e.preventDefault();
+				
+				// Show a loading notification
+				const notification = showNotification('Replacing poster from URL...', 'loading');
+				
+				try {
+				    const formData = new FormData(this);
+				    
+				    const response = await fetch('./include/change-poster.php', {
+				        method: 'POST',
+				        body: formData
+				    });
+				    
+				    const data = await response.json();
+				    
+				    if (data.success) {
+				        // Remove the loading notification first
+				        notification.remove();
+				        
+				        // Hide the modal
+				        hideModal(changePosterModal);
+				        
+				        // Determine the message based on Plex update status
+				        let message = 'Poster successfully replaced!';
+				        if (data.plexUpdated) {
+				            message = 'Poster replaced and updated in Plex!';
+				        }
+				        
+				        // Show success notification
+				        showNotification(message, 'success');
+				        
+				        // Refresh the image to show the updated version
+				        const filename = formData.get('original_filename');
+				        const directory = formData.get('directory');
+				        refreshImage(filename, directory);
+				    } else {
+				        // Show error in modal
+				        showChangeError(data.error || 'Failed to change poster from URL');
+				        notification.remove();
+				    }
+				} catch (error) {
+				    // Show error in modal
+				    showChangeError('Error replacing poster: ' + error.message);
+				    notification.remove();
+				}
+			});
+		}
         
         // Modal close handlers
         if (closeChangePosterButton) {
