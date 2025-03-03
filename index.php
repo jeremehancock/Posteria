@@ -2208,18 +2208,22 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
                 Import
             </button>
         </div>
-		    <?php if (count($allImages) > 0): ?>
-				<div>
-					<button class="upload-trigger-button" id="showPlexExportModal">
-						<svg class="upload-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-							<path d="M9 3h-4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4"></path>
-							<polyline points="16 7 21 12 16 17"></polyline>
-							<line x1="21" y1="12" x2="9" y2="12"></line>
-						</svg>
-						Export
-					</button>
-				</div>
-			 <?php endif; ?>
+		<?php 
+		// Check for images in all directories, regardless of current filter
+		$totalImagesCount = count(getImageFiles($config, ''));
+		if ($totalImagesCount > 0): 
+		?>
+			<div>
+				<button class="upload-trigger-button" id="showPlexExportModal">
+					<svg class="upload-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					    <path d="M9 3h-4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4"></path>
+					    <polyline points="16 7 21 12 16 17"></polyline>
+					    <line x1="21" y1="12" x2="9" y2="12"></line>
+					</svg>
+					Export
+				</button>
+			</div>
+		<?php endif; ?>
         <?php endif; ?>
         <a href="?action=logout" class="logout-button" title="Logout">
             <svg class="logout-icon" xmlns="http://www.w3.org/2000/svg" viewBox="-2 -2 28 28" fill="none" stroke="currentColor" stroke-width="2" style="margin-left: 5px;">
