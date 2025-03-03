@@ -1361,7 +1361,9 @@ try {
 									}
 									
 									// Clear the session
-									unset($_SESSION['import_season_ids']);
+									if (isset($_SESSION['current_show_title'])) {
+										unset($_SESSION['current_show_title']);
+									}
 								} else {
 									// Ensure we have an array in the session
 									if (!isset($_SESSION['import_season_ids']) || !is_array($_SESSION['import_season_ids'])) {
@@ -1446,6 +1448,30 @@ try {
                             throw new Exception('Show key is required for single-show seasons import');
                         }
                         
+						// Get the show title based on the showKey
+						$showTitle = '';
+						$showDetailsUrl = rtrim($plex_config['server_url'], '/') . "/library/metadata/{$showKey}";
+						$headers = [];
+						foreach (getPlexHeaders($plex_config['token']) as $key => $value) {
+							$headers[] = $key . ': ' . $value;
+						}
+
+						try {
+							$response = makeApiRequest($showDetailsUrl, $headers);
+							$data = json_decode($response, true);
+							
+							if (isset($data['MediaContainer']['Metadata'][0]['title'])) {
+								$showTitle = $data['MediaContainer']['Metadata'][0]['title'];
+								// Store in session for batch processing
+								$_SESSION['current_show_title'] = $showTitle;
+								logDebug("Retrieved show title for season import: {$showTitle}");
+							} else {
+								logDebug("Could not retrieve show title for showKey: {$showKey}");
+							}
+						} catch (Exception $e) {
+							logDebug("Error retrieving show title: " . $e->getMessage());
+						}
+                        
                         if (isset($_POST['batchProcessing']) && $_POST['batchProcessing'] === 'true' && isset($_POST['startIndex'])) {
                             $startIndex = (int)$_POST['startIndex'];
                             $batchSize = $plex_config['import_batch_size'];
@@ -1489,7 +1515,13 @@ try {
 								
 								// Process orphaned posters with proper checking
 								if (is_array($allImportedIds)) {
-								    $orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, '**Orphaned**');
+									// Get the show title from session if not set directly
+									if (empty($showTitle) && isset($_SESSION['current_show_title'])) {
+										$showTitle = $_SESSION['current_show_title'];
+									}
+									
+									// Now call with the show title and media type parameters
+									$orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, '**Orphaned**', '', $showTitle, 'seasons');
 								} else {
 									logDebug("Seasons: Error: allImportedIds is not an array", [
 										'type' => gettype($allImportedIds),
@@ -1499,7 +1531,10 @@ try {
 								}
 								
 								// Clear the session
-								unset($_SESSION['import_season_ids']);
+							// Also clean up the show title after processing is complete
+							if (isset($_SESSION['current_show_title'])) {
+								unset($_SESSION['current_show_title']);
+							}
 							} else {
 								// Ensure we have an array in the session
 								if (!isset($_SESSION['import_season_ids']) || !is_array($_SESSION['import_season_ids'])) {
