@@ -2285,7 +2285,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		            <div class="import-step" id="seasonsOptionsStep" style="display: none;">
 		                <div style="margin-bottom: 16px;">
 		                    <label class="checkbox-container" style="display: flex; align-items: center; cursor: pointer; margin-top: 8px;">
-		                        <input type="checkbox" id="importAllSeasons" style="margin-right: 8px;">
+		                        <input type="checkbox" id="importAllSeasons" style="margin-right: 8px;" checked>
 		                        <span>Import all seasons from all shows (may take longer)</span>
 		                    </label>
 		                </div>
@@ -3676,7 +3676,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		                    const libraryType = selectedOption ? selectedOption.dataset.type : '';
 		                    
 		                    if (libraryType === 'show') {
-		                        showSelectionStep.style.display = 'block';
+		                        showSelectionStep.style.display = 'none';
 		                        // Load shows for the library if they're not already loaded
 		                        if (showSelect.options.length <= 1) {
 		                            loadPlexShows(libraryId);
@@ -3725,7 +3725,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		                case 'seasons':
 		                    targetDirectorySelect.value = 'tv-seasons';
 		                    // Show seasons options step
-		                    seasonsOptionsStep.style.display = 'block';
+		                    seasonsOptionsStep.style.display = 'none';
 		                    break;
 		                case 'collections':
 		                    targetDirectorySelect.value = 'collections';
@@ -3759,7 +3759,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		                const libraryType = selectedOption ? selectedOption.dataset.type : '';
 		                
 		                if (libraryType === 'show') {
-		                    showSelectionStep.style.display = 'block';
+		                    showSelectionStep.style.display = 'none';
 		                }
 		            }
 		        }
@@ -3784,7 +3784,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		            // If importing seasons, show the show selection step
 		            if (importTypeSelect.value === 'seasons') {
 		                if (libraryType === 'show') {
-		                    showSelectionStep.style.display = 'block';
+		                    showSelectionStep.style.display = 'none';
 		                    loadPlexShows(selectedLibraryId);
 		                } else {
 		                    showErrorInImportOptions('Please select a TV Show library to import seasons');
