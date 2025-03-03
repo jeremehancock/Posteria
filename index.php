@@ -5901,6 +5901,8 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		                // Reinitialize observers and buttons
 		                initializeGalleryFeatures();
 		                initializeButtons();
+		                hideNonOrphanedDeleteButtons();
+
 		            });
 		    });
 		}
