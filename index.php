@@ -2223,7 +2223,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
             </button>
         </div>
 		<div>
-			<button class="upload-trigger-button id="showPlexExportModal">
+			<button class="upload-trigger-button" id="showPlexExportModal>
 				<svg class="upload-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 				    <path d="M9 3h-4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4"></path>
 				    <polyline points="16 7 21 12 16 17"></polyline>
