@@ -1718,53 +1718,6 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		}
 
 		/* ==========================================================================
-		   15. Dropdown
-		   ========================================================================== */
-		.dropdown {
-			position: relative;
-			display: inline-block;
-		}
-
-		.dropdown-toggle {
-			cursor: pointer;
-			display: inline-flex;
-			align-items: center;
-		}
-
-		.dropdown-content {
-			display: none;
-			position: absolute;
-			right: 0;
-			background-color: var(--bg-secondary);
-			width: max-content;
-			box-shadow: var(--shadow-md);
-			z-index: 100;
-			border-radius: 8px;
-			border: 1px solid var(--border-color);
-			overflow: hidden;
-		}
-
-		.dropdown-content a {
-			color: var(--text-primary);
-			padding: 12px 16px;
-			text-decoration: none;
-			display: flex;
-			align-items: center;
-			gap: 10px;
-			transition: all 0.2s;
-			justify-content: center;
-		}
-
-		.dropdown-content a:hover {
-			background-color: var(--bg-tertiary);
-			color: var(--accent-primary);
-		}
-
-		.dropdown:hover .dropdown-content {
-			display: block;
-		}
-
-		/* ==========================================================================
 		   16. Tooltips
 		   ========================================================================== */
 		.gallery-caption.has-tooltip {
@@ -2259,45 +2212,25 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 <?php if (isLoggedIn()): ?>
     <div class="auth-actions">
         <?php if ((!empty($plex_config['token']) && !empty($plex_config['server_url']))): ?>
-        <div class="dropdown">
-            <button class="upload-trigger-button dropdown-toggle">
+        <div>
+            <button class="upload-trigger-button" id="showPlexImportModal">
                 <svg class="upload-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
                     <polyline points="8 7 3 12 8 17"></polyline>
                     <line x1="3" y1="12" x2="15" y2="12"></line>
                 </svg>
                 Import
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12" style="margin-left: 5px;">
-                    <polyline points="6 9 12 15 18 9"></polyline>
-                </svg>
             </button>
-            <div class="dropdown-content">
-                <?php if (!empty($plex_config['token']) && !empty($plex_config['server_url'])): ?>
-                <a href="#" id="showPlexImportModal">
-                	From Plex
-                </a>
-                <?php endif; ?>
-            </div>
         </div>
-		<div class="dropdown">
-			<button class="upload-trigger-button dropdown-toggle">
+		<div>
+			<button class="upload-trigger-button id="showPlexExportModal">
 				<svg class="upload-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 				    <path d="M9 3h-4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4"></path>
 				    <polyline points="16 7 21 12 16 17"></polyline>
 				    <line x1="21" y1="12" x2="9" y2="12"></line>
 				</svg>
 				Export
-				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12" style="margin-left: 5px;">
-				    <polyline points="6 9 12 15 18 9"></polyline>
-				</svg>
 			</button>
-			<div class="dropdown-content">
-				<?php if (!empty($plex_config['token']) && !empty($plex_config['server_url'])): ?>
-				<a href="#" id="showPlexExportModal">
-				    To Plex
-				</a>
-				<?php endif; ?>
-			</div>
 		</div>
         <?php endif; ?>
         <a href="?action=logout" class="logout-button" title="Logout">
@@ -5988,32 +5921,6 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		            });
 		    });
 		}
-		
-		// =========== DROPDOWN & ADDITIONAL EVENT LISTENERS ===========
-		
-		// Fix for Plex Import modal
-		const plexImportButton = document.getElementById('showPlexImportModal');
-		if (plexImportButton) {
-		    plexImportButton.addEventListener('click', function(e) {
-		        e.preventDefault();
-		        e.stopPropagation();
-		        const plexModal = document.getElementById('plexImportModal');
-		        if (plexModal) {
-		            plexModal.style.display = 'block';
-		            setTimeout(() => {
-		                plexModal.classList.add('show');
-		            }, 10);
-		        }
-		    });
-		}
-		
-		// Prevent dropdown from closing when clicking inside it
-		const dropdownContents = document.querySelectorAll('.dropdown-content');
-		dropdownContents.forEach(content => {
-		    content.addEventListener('click', function(e) {
-		        e.stopPropagation();
-		    });
-		});
 		
 		// Handle browser back/forward
 		window.addEventListener('popstate', function() {
