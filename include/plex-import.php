@@ -910,7 +910,7 @@ try {
 		            if (!in_array($id, $importedIds)) {
 		                // This poster is orphaned - it has an ID but the ID wasn't in the imported set
 		                $newFilename = preg_replace('/\s*\[[a-f0-9]+\]\s*/', ' ', $filename); // Remove ID
-		                $newFilename = str_replace($type, 'Orphaned', $newFilename); // Replace Plex/Jellyfin with Orphaned
+		                $newFilename = str_replace($type, '**Orphaned**', $newFilename); // Replace Plex/Jellyfin with Orphaned
 		                
 		                // Make sure the new filename doesn't have double spaces
 		                $newFilename = preg_replace('/\s+/', ' ', $newFilename);
@@ -956,8 +956,8 @@ try {
 		            try {
 		                if (is_file($directory . $file) && 
 		                    strpos($file, '**Plex**') === false && 
-		                    strpos($file, 'Jellyfin') === false && 
-		                    strpos($file, 'Orphaned') === false) {
+		                    strpos($file, '**Jellyfin**') === false && 
+		                    strpos($file, '**Orphaned**') === false) {
 		                    
 		                    // Check if file is writable
 		                    if (!is_writable($directory . $file)) {
@@ -968,7 +968,7 @@ try {
 		                    // This file doesn't have a server designation - mark it as orphaned
 		                    $baseFilename = pathinfo($file, PATHINFO_FILENAME);
 		                    $extension = pathinfo($file, PATHINFO_EXTENSION);
-		                    $newFilename = $baseFilename . ' Orphaned.' . $extension;
+		                    $newFilename = $baseFilename . ' **Orphaned**.' . $extension;
 		                    
 		                    logDebug("Marking file as orphaned", [
 		                        'old' => $file,
