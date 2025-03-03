@@ -1663,7 +1663,15 @@ try {
 										    
 										    // Process orphaned posters with proper library type
 										if (is_array($allImportedIds)) {
-											$orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, '**Orphaned**', $libraryType, '', 'collections');
+											if (is_array($allImportedIds)) {
+												$orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, '**Orphaned**', $libraryType, '', 'collections');
+											} else {
+												logDebug("Collections: Error: allImportedIds is not an array", [
+													'type' => gettype($allImportedIds),
+													'value' => $allImportedIds
+												]);
+												$orphanedResults = ['orphaned' => 0, 'unmarked' => 0, 'details' => []];
+											}
 										} else {
 											logDebug("Collections: Error: allImportedIds is not an array", [
 												'type' => gettype($allImportedIds),
@@ -1675,7 +1683,15 @@ try {
 									} else {
 										// Process orphaned posters with proper library type
 									if (is_array($allImportedIds)) {
-										$orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, '**Orphaned**', $libraryType, '', 'collections');
+										if (is_array($allImportedIds)) {
+											$orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, '**Orphaned**', $libraryType, '', 'collections');
+										} else {
+											logDebug("Collections: Error: allImportedIds is not an array", [
+												'type' => gettype($allImportedIds),
+												'value' => $allImportedIds
+											]);
+											$orphanedResults = ['orphaned' => 0, 'unmarked' => 0, 'details' => []];
+										}
 									} else {
 										logDebug("Collections: Error: allImportedIds is not an array", [
 											'type' => gettype($allImportedIds),
