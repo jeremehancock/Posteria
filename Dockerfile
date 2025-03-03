@@ -40,8 +40,6 @@ COPY include/plex-export.php /var/www/html/include/
 COPY include/send-to-plex.php /var/www/html/include/
 COPY include/get-from-plex.php /var/www/html/include/
 COPY include/change-poster.php /var/www/html/include/
-COPY include/jellyfin-import.php /var/www/html/include/
-COPY include/get-from-jellyfin.php /var/www/html/include/
 COPY include/config.php /var/www/html/include/
 
 # Copy assets directory

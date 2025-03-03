@@ -154,7 +154,6 @@ try {
 			$basename .= " [{$id}]";
 		}
 		
-		// Add "Collection" before "Jellyfin" for collection posters
 		if ($mediaType === 'collections') {
 			// Check if "Collection" is not already in the basename
 			if (!stripos($basename, 'Collection')) {
@@ -804,10 +803,10 @@ try {
     }
     
 	/**
-	 * Get all existing posters in a directory with Plex or Jellyfin identifiers
+	 * Get all existing posters in a directory 
 	 * 
 	 * @param string $directory Directory path to search
-	 * @param string $type Type of server ('Plex' or 'Jellyfin')
+	 * @param string $type Type of server ('Plex')
 	 * @return array Associative array of ID => filename
 	 */
 	function getExistingPosters($directory, $type = '**Plex**') {
@@ -859,7 +858,7 @@ try {
 	 * 
 	 * @param string $directory Directory path to search
 	 * @param array $importedIds List of IDs that were successfully imported
-	 * @param string $type Type of server ('Plex' or 'Jellyfin')
+	 * @param string $type Type of server ('Plex')
 	 * @return array Results with count of orphaned posters and details
 	 */
 	function markOrphanedPosters($directory, $importedIds, $type = '**Plex**') {
@@ -901,7 +900,7 @@ try {
 		}
 		
 		try {
-		    // 1. Find posters with IDs that are no longer in Plex/Jellyfin
+		    // 1. Find posters with IDs that are no longer in Plex
 		    $existing = getExistingPosters($directory, $type);
 		    logDebug("Found existing posters", ['count' => count($existing)]);
 		    
@@ -910,7 +909,7 @@ try {
 		            if (!in_array($id, $importedIds)) {
 		                // This poster is orphaned - it has an ID but the ID wasn't in the imported set
 		                $newFilename = preg_replace('/\s*\[[a-f0-9]+\]\s*/', ' ', $filename); // Remove ID
-		                $newFilename = str_replace($type, '**Orphaned**', $newFilename); // Replace Plex/Jellyfin with Orphaned
+		                $newFilename = str_replace($type, '**Orphaned**', $newFilename); // Replace Plex with Orphaned
 		                
 		                // Make sure the new filename doesn't have double spaces
 		                $newFilename = preg_replace('/\s+/', ' ', $newFilename);
@@ -950,13 +949,12 @@ try {
 		        }
 		    }
 		    
-		    // 2. Now find files without Plex, Jellyfin, or Orphaned in the name
+		    // 2. Now find files without Plex, or Orphaned in the name
 		    if ($handle = opendir($directory)) {
 		        while (($file = readdir($handle)) !== false) {
 		            try {
 		                if (is_file($directory . $file) && 
 		                    strpos($file, '**Plex**') === false && 
-		                    strpos($file, '**Jellyfin**') === false && 
 		                    strpos($file, '**Orphaned**') === false) {
 		                    
 		                    // Check if file is writable

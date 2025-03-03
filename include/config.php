@@ -42,12 +42,4 @@ $plex_config = [
     'import_batch_size' => getIntEnvWithFallback('PLEX_IMPORT_BATCH_SIZE', 25)
 ];
 
-$jellyfin_config = [
-    'server_url' => getEnvWithFallback('JELLYFIN_SERVER_URL', ''),
-    'api_key' => getEnvWithFallback('JELLYFIN_API_KEY', ''),
-    'connect_timeout' => getIntEnvWithFallback('JELLYFIN_CONNECT_TIMEOUT', 10),
-    'request_timeout' => getIntEnvWithFallback('JELLYFIN_REQUEST_TIMEOUT', 60),
-    'import_batch_size' => getIntEnvWithFallback('JELLYFIN_IMPORT_BATCH_SIZE', 25)
-];
-
 ?>
