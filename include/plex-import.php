@@ -862,8 +862,18 @@ try {
 		return $posters;
 	}
 
-	// Updated markOrphanedPosters function to replace **Plex** with **Orphaned**
-	function markOrphanedPosters($targetDir, $validIds, $orphanedTag = '**Orphaned**', $libraryType = '') {
+	/**
+	 * Marks orphaned poster files in the specified directory
+	 * 
+	 * @param string $targetDir Directory to check for orphaned posters
+	 * @param array $validIds List of valid IDs that should not be marked as orphaned
+	 * @param string $orphanedTag Tag to replace **Plex** with in orphaned filenames
+	 * @param string $libraryType The library type (movie/show) for collections
+	 * @param string $showTitle The show title for seasons processing
+	 * @param string $mediaType The type of media being processed (movies, shows, seasons, collections)
+	 * @return array Results with counts and details of orphaned files
+	 */
+	function markOrphanedPosters($targetDir, $validIds, $orphanedTag = '**Orphaned**', $libraryType = '', $showTitle = '', $mediaType = '') {
 		$results = [
 		    'orphaned' => 0,
 		    'unmarked' => 0,
@@ -895,29 +905,41 @@ try {
 		        continue;
 		    }
 		    
-		    // Process collection files differently based on library type
-		    if (!empty($libraryType)) {
-		        // Check if this is a collection file
-		        $isCollection = strpos($filename, 'Collection') !== false || 
-		                       strpos($filename, '(Movies)') !== false || 
-		                       strpos($filename, '(TV)') !== false;
-		        
-		        if ($isCollection) {
-		            // Check if this collection matches our library type
-		            $isMatch = false;
+		    // Special handling for different media types
+		    if ($mediaType === 'collections') {
+		        // Process collection files differently based on library type
+		        if (!empty($libraryType)) {
+		            // Check if this is a collection file
+		            $isCollection = strpos($filename, 'Collection') !== false || 
+		                           strpos($filename, '(Movies)') !== false || 
+		                           strpos($filename, '(TV)') !== false;
 		            
-		            if ($libraryType === 'movie' && strpos($filename, '(Movies)') !== false) {
-		                $isMatch = true;
-		            } else if ($libraryType === 'show' && strpos($filename, '(TV)') !== false) {
-		                $isMatch = true;
-		            } else if (strpos($filename, '(Movies)') === false && 
-		                      strpos($filename, '(TV)') === false) {
-		                // Generic collection without type marker - consider it a match
-		                $isMatch = true;
+		            if ($isCollection) {
+		                // Check if this collection matches our library type
+		                $isMatch = false;
+		                
+		                if ($libraryType === 'movie' && strpos($filename, '(Movies)') !== false) {
+		                    $isMatch = true;
+		                } else if ($libraryType === 'show' && strpos($filename, '(TV)') !== false) {
+		                    $isMatch = true;
+		                } else if (strpos($filename, '(Movies)') === false && 
+		                          strpos($filename, '(TV)') === false) {
+		                    // Generic collection without type marker - consider it a match
+		                    $isMatch = true;
+		                }
+		                
+		                // Only process matching collections
+		                if (!$isMatch) {
+		                    continue;
+		                }
 		            }
-		            
-		            // Only process matching collections
-		            if (!$isMatch) {
+		        }
+		    } else if ($mediaType === 'seasons') {
+		        // For seasons, only process if they belong to the show we're currently handling
+		        if (!empty($showTitle)) {
+		            // If we have a show title, check if the filename contains it
+		            if (stripos($filename, $showTitle) === false) {
+		                // This season belongs to a different show, skip it
 		                continue;
 		            }
 		        }
@@ -1085,7 +1107,7 @@ try {
 							
 							// Process orphaned posters with proper checking
 							if (is_array($allImportedIds)) {
-							    $orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, '**Orphaned**');
+								$orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, '**Orphaned**', '', '', 'movies');
 							} else {
 								logDebug("Error: allImportedIds is not an array", [
 									'type' => gettype($allImportedIds),
@@ -1193,7 +1215,7 @@ try {
 							
 							// Process orphaned posters with proper checking
 							if (is_array($allImportedIds)) {
-							    $orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, '**Orphaned**');
+								$orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, '**Orphaned**', '', '', 'shows');
 							} else {
 								logDebug("Shows: Error: allImportedIds is not an array", [
 									'type' => gettype($allImportedIds),
@@ -1326,7 +1348,10 @@ try {
 									
 									// Process orphaned posters with proper checking
 									if (is_array($allImportedIds)) {
-									    $orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, '**Orphaned**');
+										// Get the current show being processed
+										$showTitle = $show['title'];
+										
+										$orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, '**Orphaned**', '', $showTitle, 'seasons');
 									} else {
 										logDebug("Seasons: Error: allImportedIds is not an array", [
 											'type' => gettype($allImportedIds),
@@ -1637,11 +1662,27 @@ try {
 										    logDebug("Collections: Created target directory");
 										    
 										    // Process orphaned posters with proper library type
-										    $orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, '**Orphaned**', $libraryType);
+										if (is_array($allImportedIds)) {
+											$orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, '**Orphaned**', $libraryType, '', 'collections');
+										} else {
+											logDebug("Collections: Error: allImportedIds is not an array", [
+												'type' => gettype($allImportedIds),
+												'value' => $allImportedIds
+											]);
+											$orphanedResults = ['orphaned' => 0, 'unmarked' => 0, 'details' => []];
+										}
 										}
 									} else {
 										// Process orphaned posters with proper library type
-										$orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, '**Orphaned**', $libraryType);
+									if (is_array($allImportedIds)) {
+										$orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, '**Orphaned**', $libraryType, '', 'collections');
+									} else {
+										logDebug("Collections: Error: allImportedIds is not an array", [
+											'type' => gettype($allImportedIds),
+											'value' => $allImportedIds
+										]);
+										$orphanedResults = ['orphaned' => 0, 'unmarked' => 0, 'details' => []];
+									}
 									}
 									
 									// Clear only the temporary session for the current import
