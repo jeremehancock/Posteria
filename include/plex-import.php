@@ -1290,40 +1290,51 @@ try {
                         $shows = $showsResult['data'];
                         
                         // Handle batch processing for shows to get all seasons
-                        if (isset($_POST['batchProcessing']) && $_POST['batchProcessing'] === 'true' && isset($_POST['startIndex'])) {
-                            $startIndex = (int)$_POST['startIndex'];
-                            
-                            // If we're processing shows in batches and handling all shows' seasons
-                            if ($startIndex < count($shows)) {
-                                // Process seasons for this show
-                                $show = $shows[$startIndex];
-                                $seasonsResult = getAllPlexSeasons($plex_config['server_url'], $plex_config['token'], $show['ratingKey']);
-                                
-                                // Get running totals from previous batches if available
-                                $totalStats['successful'] = isset($_POST['totalSuccessful']) ? (int)$_POST['totalSuccessful'] : 0;
-                                $totalStats['skipped'] = isset($_POST['totalSkipped']) ? (int)$_POST['totalSkipped'] : 0;
-                                $totalStats['unchanged'] = isset($_POST['totalUnchanged']) ? (int)$_POST['totalUnchanged'] : 0;
-                                $totalStats['failed'] = isset($_POST['totalFailed']) ? (int)$_POST['totalFailed'] : 0;
-                                $totalStats['skippedDetails'] = isset($_POST['skippedDetails']) ? json_decode($_POST['skippedDetails'], true) : [];
-                                
-                                if ($seasonsResult['success'] && !empty($seasonsResult['data'])) {
-                                    $items = $seasonsResult['data'];
-                                    // Process seasons for this show
-                                    $batchResults = processBatch($items, $plex_config['server_url'], $plex_config['token'], $targetDir, $overwriteOption, $type);
-                                    
-                                    // Update running totals
-                                    $totalStats['successful'] += $batchResults['successful'];
-                                    $totalStats['skipped'] += $batchResults['skipped'];
-                                    $totalStats['unchanged'] += $batchResults['unchanged']; // Added unchanged count
-                                    $totalStats['failed'] += $batchResults['failed'];
-                                    
-                                    if (!empty($batchResults['errors'])) {
-                                        $totalStats['errors'] = array_merge($totalStats['errors'], $batchResults['errors']);
-                                    }
-                                } else {
-                                    $items = []; // No seasons for this show
-                                }
-                                
+						if (isset($_POST['batchProcessing']) && $_POST['batchProcessing'] === 'true' && isset($_POST['startIndex'])) {
+							$startIndex = (int)$_POST['startIndex'];
+							
+							// If we're processing shows in batches and handling all shows' seasons
+							if ($startIndex < count($shows)) {
+								// Process seasons for this show
+								$show = $shows[$startIndex];
+								$seasonsResult = getAllPlexSeasons($plex_config['server_url'], $plex_config['token'], $show['ratingKey']);
+								
+								// Get running totals from previous batches if available
+								$totalStats['successful'] = isset($_POST['totalSuccessful']) ? (int)$_POST['totalSuccessful'] : 0;
+								$totalStats['skipped'] = isset($_POST['totalSkipped']) ? (int)$_POST['totalSkipped'] : 0;
+								$totalStats['unchanged'] = isset($_POST['totalUnchanged']) ? (int)$_POST['totalUnchanged'] : 0;
+								$totalStats['failed'] = isset($_POST['totalFailed']) ? (int)$_POST['totalFailed'] : 0;
+								$totalStats['skippedDetails'] = isset($_POST['skippedDetails']) ? json_decode($_POST['skippedDetails'], true) : [];
+								
+								if ($seasonsResult['success'] && !empty($seasonsResult['data'])) {
+									$items = $seasonsResult['data'];
+									// Process seasons for this show
+									$batchResults = processBatch($items, $plex_config['server_url'], $plex_config['token'], $targetDir, $overwriteOption, $type);
+									
+									// Update running totals
+									$totalStats['successful'] += $batchResults['successful'];
+									$totalStats['skipped'] += $batchResults['skipped'];
+									$totalStats['unchanged'] += $batchResults['unchanged']; // Added unchanged count
+									$totalStats['failed'] += $batchResults['failed'];
+									
+									if (!empty($batchResults['errors'])) {
+										$totalStats['errors'] = array_merge($totalStats['errors'], $batchResults['errors']);
+									}
+								} else {
+									$items = []; // No seasons for this show
+									$batchResults = [
+										'successful' => 0,
+										'skipped' => 0,
+										'unchanged' => 0,
+										'failed' => 0,
+										'errors' => [],
+										'importedIds' => []
+									];
+								}
+								
+								// Check if this is the final show we're processing
+								$isComplete = ($startIndex + 1) >= count($shows);
+								
 								// Handle orphaned posters if this is the final batch
 								$orphanedResults = null;
 								if ($isComplete) {
@@ -1348,10 +1359,8 @@ try {
 									
 									// Process orphaned posters with proper checking
 									if (is_array($allImportedIds)) {
-										// Get the current show being processed
-										$showTitle = $show['title'];
-										
-										$orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, '**Orphaned**', '', $showTitle, 'seasons');
+										// For all-seasons import, don't filter by show title
+										$orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, '**Orphaned**', '', '', 'seasons');
 									} else {
 										logDebug("Seasons: Error: allImportedIds is not an array", [
 											'type' => gettype($allImportedIds),
@@ -1361,6 +1370,7 @@ try {
 									}
 									
 									// Clear the session
+									unset($_SESSION['import_season_ids']);
 									if (isset($_SESSION['current_show_title'])) {
 										unset($_SESSION['current_show_title']);
 									}
@@ -1383,41 +1393,18 @@ try {
 									]);
 								}
 								
-                                // Return batch progress information for the controller
-								echo json_encode([
-									'success' => true,
-									'batchComplete' => true,
-                                    'progress' => [
-                                        'processed' => $startIndex + 1,
-                                        'total' => count($shows),
-                                        'percentage' => round((($startIndex + 1) / count($shows)) * 100),
-                                        'isComplete' => ($startIndex + 1) >= count($shows),
-                                        'nextIndex' => ($startIndex + 1) >= count($shows) ? null : $startIndex + 1,
-                                        'currentShow' => $show['title'],
-                                        'seasonCount' => count($items)
-                                    ],
-									'results' => $batchResults,
-									'orphanedResults' => $orphanedResults,
-									'totalStats' => [
-										'successful' => $batchResults['successful'] ?? 0,
-										'skipped' => $batchResults['skipped'] ?? 0,
-										'unchanged' => $batchResults['unchanged'] ?? 0,
-										'failed' => $batchResults['failed'] ?? 0,
-										'orphaned' => $orphanedResults ? (($orphanedResults['orphaned'] ?? 0) + ($orphanedResults['unmarked'] ?? 0)) : 0
-									]
-								]);
-                                exit;
-                            } else {
-                                // All done
+								// Return batch progress information for the controller
 								echo json_encode([
 									'success' => true,
 									'batchComplete' => true,
 									'progress' => [
-										'processed' => $endIndex,
-										'total' => count($allSeasons),
-										'percentage' => round(($endIndex / count($allSeasons)) * 100),
+										'processed' => $startIndex + 1,
+										'total' => count($shows),
+										'percentage' => round((($startIndex + 1) / count($shows)) * 100),
 										'isComplete' => $isComplete,
-										'nextIndex' => $isComplete ? null : $endIndex
+										'nextIndex' => $isComplete ? null : $startIndex + 1,
+										'currentShow' => $show['title'],
+										'seasonCount' => count($items)
 									],
 									'results' => $batchResults,
 									'orphanedResults' => $orphanedResults,
@@ -1429,9 +1416,38 @@ try {
 										'orphaned' => $orphanedResults ? (($orphanedResults['orphaned'] ?? 0) + ($orphanedResults['unmarked'] ?? 0)) : 0
 									]
 								]);
-                                exit;
-                            }
-                        } else {
+								exit;
+							} else {
+								// All done
+								echo json_encode([
+									'success' => true,
+									'batchComplete' => true,
+									'progress' => [
+										'processed' => count($shows),
+										'total' => count($shows),
+										'percentage' => 100,
+										'isComplete' => true,
+										'nextIndex' => null
+									],
+									'results' => [
+										'successful' => 0,
+										'skipped' => 0,
+										'unchanged' => 0,
+										'failed' => 0,
+										'errors' => []
+									],
+									'orphanedResults' => null,
+									'totalStats' => [
+										'successful' => isset($_POST['totalSuccessful']) ? (int)$_POST['totalSuccessful'] : 0,
+										'skipped' => isset($_POST['totalSkipped']) ? (int)$_POST['totalSkipped'] : 0,
+										'unchanged' => isset($_POST['totalUnchanged']) ? (int)$_POST['totalUnchanged'] : 0,
+										'failed' => isset($_POST['totalFailed']) ? (int)$_POST['totalFailed'] : 0,
+										'orphaned' => 0
+									]
+								]);
+								exit;
+							}
+						} else {
                             // Non-batch processing or initial call - not recommended for large libraries
                             $allSeasons = [];
                             foreach ($shows as $show) {
