@@ -854,149 +854,81 @@ try {
 	}
 
 	/**
-	 * Mark orphaned posters in a directory
+	 * Marks orphaned poster files in the specified directory
 	 * 
-	 * @param string $directory Directory path to search
-	 * @param array $importedIds List of IDs that were successfully imported
-	 * @param string $type Type of server ('Plex')
-	 * @return array Results with count of orphaned posters and details
+	 * @param string $directory Directory to check for orphaned posters
+	 * @param array $validIds List of valid IDs that should not be marked as orphaned
+	 * @param string $prefix Prefix to add to orphaned filenames
+	 * @param string $type The type of collection (movies, tvshows, etc.)
+	 * @return array Results with counts and details of orphaned files
 	 */
-	function markOrphanedPosters($directory, $importedIds, $type = '**Plex**') {
-		// Make sure directory ends with a slash
-		if (substr($directory, -1) !== '/') {
-		    $directory .= '/';
-		}
-		
-		// Ensure importedIds is always an array
-		if (!is_array($importedIds)) {
-		    $importedIds = [];
-		    logDebug("Warning: importedIds was not an array, initialized to empty array");
-		}
-		
-		logDebug("Marking orphaned posters", [
-		    'directory' => $directory,
-		    'importedIds_count' => count($importedIds),
-		    'type' => $type,
-		    'directory_exists' => is_dir($directory),
-		    'directory_writable' => is_dir($directory) ? is_writable($directory) : false
-		]);
-		
+	function markOrphanedPosters($directory, $validIds, $prefix = '**Orphaned**', $type = '') {
 		$results = [
 		    'orphaned' => 0,
 		    'unmarked' => 0,
 		    'details' => []
 		];
 		
-		// Verify directory exists
 		if (!is_dir($directory)) {
-		    logDebug("Directory does not exist: {$directory}");
 		    return $results;
 		}
 		
-		// Verify directory is readable
-		if (!is_readable($directory)) {
-		    logDebug("Directory is not readable: {$directory}");
-		    return $results;
-		}
+		// Get all files in the directory
+		$files = glob($directory . '/*');
 		
-		try {
-		    // 1. Find posters with IDs that are no longer in Plex
-		    $existing = getExistingPosters($directory, $type);
-		    logDebug("Found existing posters", ['count' => count($existing)]);
+		foreach ($files as $file) {
+		    if (!is_file($file)) {
+		        continue;
+		    }
 		    
-		    foreach ($existing as $id => $filename) {
-		        try {
-		            if (!in_array($id, $importedIds)) {
-		                // This poster is orphaned - it has an ID but the ID wasn't in the imported set
-		                $newFilename = preg_replace('/\s*\[[a-f0-9]+\]\s*/', ' ', $filename); // Remove ID
-		                $newFilename = str_replace($type, '**Orphaned**', $newFilename); // Replace Plex with Orphaned
+		    $filename = basename($file);
+		    
+		    // Skip files that are already marked
+		    if (strpos($filename, '**') === 0) {
+		        continue;
+		    }
+		    
+		    // Extract the ID from the filename (assuming format like "123.jpg" or "123.png")
+		    $idMatch = [];
+		    if (preg_match('/^(\d+)\.(?:jpg|jpeg|png)$/i', $filename, $idMatch)) {
+		        $fileId = $idMatch[1];
+		        
+		        // Check if the type-specific prefix is in the filename
+		        $typeSpecific = false;
+		        if (!empty($type)) {
+		            // This assumes you have a naming convention that includes the type
+		            // For example: "movie_123.jpg" or "tv_123.jpg"
+		            // Adjust the regex pattern based on your actual file naming convention
+		            $typeMatch = [];
+		            if (preg_match('/^' . preg_quote($type, '/') . '_(\d+)\.(?:jpg|jpeg|png)$/i', $filename, $typeMatch)) {
+		                $typeSpecific = true;
+		                $fileId = $typeMatch[1];
+		            }
+		        }
+		        
+		        // Only process files that match the current type OR
+		        // files that don't have type specification in their names
+		        if (empty($type) || !$typeSpecific || strpos($filename, $type . '_') === 0) {
+		            // Check if the ID is in our valid list
+		            if (!in_array($fileId, $validIds)) {
+		                // Rename the file to mark it as orphaned
+		                $newFilename = $prefix . '_' . $filename;
+		                $newPath = $directory . '/' . $newFilename;
 		                
-		                // Make sure the new filename doesn't have double spaces
-		                $newFilename = preg_replace('/\s+/', ' ', $newFilename);
-		                $newFilename = trim($newFilename);
-		                
-		                logDebug("Renaming orphaned poster", [
-		                    'old' => $filename,
-		                    'new' => $newFilename
-		                ]);
-		                
-		                // Check if the file exists and is writable
-		                if (!file_exists($directory . $filename)) {
-		                    logDebug("File doesn't exist: {$directory}{$filename}");
-		                    continue;
-		                }
-		                
-		                if (!is_writable($directory . $filename)) {
-		                    logDebug("File is not writable: {$directory}{$filename}");
-		                    continue;
-		                }
-		                
-		                // Rename the file
-		                if (rename($directory . $filename, $directory . $newFilename)) {
+		                if (rename($file, $newPath)) {
 		                    $results['orphaned']++;
 		                    $results['details'][] = [
 		                        'oldName' => $filename,
-		                        'newName' => $newFilename,
-		                        'reason' => 'No longer in ' . $type
+		                        'newName' => $newFilename
 		                    ];
 		                } else {
-		                    logDebug("Failed to rename: {$directory}{$filename}");
+		                    $results['unmarked']++;
 		                }
 		            }
-		        } catch (Exception $e) {
-		            logDebug("Error processing file {$filename}: " . $e->getMessage());
-		            continue; // Skip this file and continue with others
 		        }
 		    }
-		    
-		    // 2. Now find files without Plex, or Orphaned in the name
-		    if ($handle = opendir($directory)) {
-		        while (($file = readdir($handle)) !== false) {
-		            try {
-		                if (is_file($directory . $file) && 
-		                    strpos($file, '**Plex**') === false && 
-		                    strpos($file, '**Orphaned**') === false) {
-		                    
-		                    // Check if file is writable
-		                    if (!is_writable($directory . $file)) {
-		                        logDebug("File is not writable: {$directory}{$file}");
-		                        continue;
-		                    }
-		                    
-		                    // This file doesn't have a server designation - mark it as orphaned
-		                    $baseFilename = pathinfo($file, PATHINFO_FILENAME);
-		                    $extension = pathinfo($file, PATHINFO_EXTENSION);
-		                    $newFilename = $baseFilename . ' **Orphaned**.' . $extension;
-		                    
-		                    logDebug("Marking file as orphaned", [
-		                        'old' => $file,
-		                        'new' => $newFilename
-		                    ]);
-		                    
-		                    // Rename the file
-		                    if (rename($directory . $file, $directory . $newFilename)) {
-		                        $results['unmarked']++;
-		                        $results['details'][] = [
-		                            'oldName' => $file,
-		                            'newName' => $newFilename,
-		                            'reason' => 'Missing server designation'
-		                        ];
-		                    } else {
-		                        logDebug("Failed to rename: {$directory}{$file}");
-		                    }
-		                }
-		            } catch (Exception $e) {
-		                logDebug("Error processing unmarked file {$file}: " . $e->getMessage());
-		                continue; // Skip this file and continue with others
-		            }
-		        }
-		        closedir($handle);
-		    }
-		} catch (Exception $e) {
-		    logDebug("Error in markOrphanedPosters: " . $e->getMessage());
 		}
 		
-		logDebug("Orphaned poster results", $results);
 		return $results;
 	}
 
@@ -1279,8 +1211,8 @@ try {
 							'batchComplete' => true,
 							'progress' => [
 								'processed' => $endIndex,
-								'total' => count($allMovies),
-								'percentage' => round(($endIndex / count($allMovies)) * 100),
+								'total' => count($allShows),
+								'percentage' => round(($endIndex / count($allShows)) * 100),
 								'isComplete' => $isComplete,
 								'nextIndex' => $isComplete ? null : $endIndex
 							],
@@ -1410,13 +1342,15 @@ try {
 								echo json_encode([
 									'success' => true,
 									'batchComplete' => true,
-									'progress' => [
-										'processed' => $endIndex,
-										'total' => count($allMovies),
-										'percentage' => round(($endIndex / count($allMovies)) * 100),
-										'isComplete' => $isComplete,
-										'nextIndex' => $isComplete ? null : $endIndex
-									],
+                                    'progress' => [
+                                        'processed' => $startIndex + 1,
+                                        'total' => count($shows),
+                                        'percentage' => round((($startIndex + 1) / count($shows)) * 100),
+                                        'isComplete' => ($startIndex + 1) >= count($shows),
+                                        'nextIndex' => ($startIndex + 1) >= count($shows) ? null : $startIndex + 1,
+                                        'currentShow' => $show['title'],
+                                        'seasonCount' => count($items)
+                                    ],
 									'results' => $batchResults,
 									'orphanedResults' => $orphanedResults,
 									'totalStats' => [
@@ -1435,8 +1369,8 @@ try {
 									'batchComplete' => true,
 									'progress' => [
 										'processed' => $endIndex,
-										'total' => count($allMovies),
-										'percentage' => round(($endIndex / count($allMovies)) * 100),
+										'total' => count($allSeasons),
+										'percentage' => round(($endIndex / count($allSeasons)) * 100),
 										'isComplete' => $isComplete,
 										'nextIndex' => $isComplete ? null : $endIndex
 									],
@@ -1548,8 +1482,8 @@ try {
 								'batchComplete' => true,
 								'progress' => [
 									'processed' => $endIndex,
-									'total' => count($allMovies),
-									'percentage' => round(($endIndex / count($allMovies)) * 100),
+									'total' => count($allSeasons),
+									'percentage' => round(($endIndex / count($allSeasons)) * 100),
 									'isComplete' => $isComplete,
 									'nextIndex' => $isComplete ? null : $endIndex
 								],
@@ -1625,7 +1559,8 @@ try {
 								
 								logDebug("Collections: Current batch imported IDs", [
 									'count' => count($allImportedIds),
-									'isArray' => is_array($allImportedIds)
+									'isArray' => is_array($allImportedIds),
+									'type' => $type // Log the current collection type
 								]);
 								
 								// Retrieve IDs from previous batches with proper null checks
@@ -1636,6 +1571,14 @@ try {
 										'total_count' => count($allImportedIds)
 									]);
 								}
+								
+								// Store the imported IDs by type in the session for future reference
+								if (!isset($_SESSION['all_imported_collections']) || !is_array($_SESSION['all_imported_collections'])) {
+									$_SESSION['all_imported_collections'] = [];
+								}
+								
+								// Store the current collection type's IDs
+								$_SESSION['all_imported_collections'][$type] = $allImportedIds;
 								
 								// Verify target directory exists
 								if (!is_dir($targetDir)) {
@@ -1648,15 +1591,17 @@ try {
 										$orphanedResults = ['orphaned' => 0, 'unmarked' => 0, 'details' => []];
 									} else {
 										logDebug("Collections: Created target directory");
-										// Process orphaned posters with proper checking
-										$orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, '**Plex**');
+										
+										// Only check orphaned posters for the CURRENT type
+										// Process orphaned posters with proper checking - only for the current type!
+										$orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, '**Plex**', $type);
 									}
 								} else {
-									// Process orphaned posters with proper checking
-									$orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, '**Plex**');
+									// Process orphaned posters with proper checking - only for the current type
+									$orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, '**Plex**', $type);
 								}
 								
-								// Clear the session
+								// Clear only the temporary session for the current import
 								unset($_SESSION['import_collection_ids']);
 							} else {
 								// Ensure we have an array in the session
@@ -1673,7 +1618,8 @@ try {
 								
 								logDebug("Collections: Stored IDs for next batch", [
 									'batch_count' => count($importedIds),
-									'session_total' => count($_SESSION['import_collection_ids'])
+									'session_total' => count($_SESSION['import_collection_ids']),
+									'type' => $type
 								]);
 							}
 							
