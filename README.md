@@ -31,19 +31,19 @@ Here's the updated version with the PWA line added:
 ```yaml
 services:
   posteria:
-    image: bozodev/posteria:dev
+    image: bozodev/posteria:latest
     container_name: posteria
     ports:
       - "1818:80"
     environment:
       - SITE_TITLE=Posteria
-      - AUTH_USERNAME=admin         	# Change this!
-  - AUTH_PASSWORD=chnagem    		# Change this!
-      - SESSION_DURATION=3600           # In seconds
+      - AUTH_USERNAME=admin                       # Change this!
+      - AUTH_PASSWORD=changeme                 	  # Change this!
+      - SESSION_DURATION=3600                     # In seconds
       - IMAGES_PER_PAGE=24
-      - MAX_FILE_SIZE=5242880           # In bytes
-      - PLEX_SERVER_URL=   		# Optional for Importing from Plex
-      - PLEX_TOKEN=             	# Optional for Importing from Plex
+      - MAX_FILE_SIZE=5242880                     # In bytes
+      - PLEX_SERVER_URL=   	  		  # Optional for Importing from Plex
+      - PLEX_TOKEN=              	          # Optional for Importing from Plex
     volumes:
       - ./posters/movies:/var/www/html/posters/movies
       - ./posters/tv-shows:/var/www/html/posters/tv-shows
