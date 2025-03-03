@@ -1263,21 +1263,45 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			z-index: 0;
 		}
 		
+		/* Plex Badge */
+		.plex-badge {
+			position: absolute;
+			top: 10px;
+			right: 10px;
+			background: black;
+			padding: 4px;
+			border-radius: 4px;
+			opacity: 0.9;
+			z-index: 0;
+			height: 30px;
+			width: auto;
+		}
+		
+		/* Jellyfin Badge */
+		.jellyfin-badge {
+			position: absolute;
+			top: 10px;
+			right: 10px;
+			background: black;
+			padding: 4px;
+			border-radius: 4px;
+			opacity: 0.9;
+			z-index: 0;
+			height: 30px;
+			width: auto;
+		}
+		
 		/* Orphaned Badge */
 		.orphaned-badge {
 			position: absolute;
-			bottom: 10px;
+			bottom: 0;
 			padding: 4px 8px;
-			border-radius: 4px;
-			font-size: 12px;
-			opacity: 0.9;
 			z-index: 0;
-			width: 80%;
-			justify-content: center;
+			width: 100%;
 			font-size: 1rem;
 			background: #8B0000;
 			color: var(--text-primary);
-			border: 1px solid #a83232;
+			justify-content: center;
 		}
 
 		/* Image Actions */
@@ -2808,7 +2832,15 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 										Orphaned
 									</div>
 
-				                
+									<div class="plex-badge" data-plex="<?php echo (strpos(strtolower($image['filename']), 'plex') !== false) ? 'true' : 'false'; ?>" style="display: none;" title="Plex">
+<svg viewBox="0 0 1000 1000" xmlns="http://www.w3.org/2000/svg"><path d="m298.8 502.3c0 81.7-58 143.3-133.7 143.3-35.1 0-60.1-10.2-82.4-33.9v52.7c0 20.3-4 38.5-22.3 54-20.8 17.6-49.2 11.5-54.6 10.2-4-.7-5.4-1.3-5.4-1.3v-366.1h76.9v29.7c21.6-27 47.3-38.5 87.2-38.5 78.3 0 134.3 61.4 134.3 149.9zm-72.9-3.4c0-43.2-33.1-76.3-76.3-76.3-36.4 0-76.3 33.8-76.3 75.7 0 42.5 33.8 77.7 76.3 77.7s76.3-33.9 76.3-77.1z" fill="#fff" fill-rule="evenodd"/><path d="m408.2 493.5c0 31.8 3.3 70.3 34.4 112.1.7.7 2 2.8 2 2.8-12.8 21.6-28.3 36.4-49.3 36.4-16.2 0-32.4-8.7-45.9-23.6-14.1-16.2-20.9-37.2-20.9-59.4v-291.8h79.1z" fill="#fff"/><path d="m799 636.1h-95.8l93.2-137.2-93.2-137.7h95.8l92.6 137.7z" fill="#ebaf00"/><g fill="#fff"><path d="m869.3 411.8 34.4-50.6h95.9l-83.1 122.2zm48 102.8c.6 2 28.3 46.5 49.3 70.9 15.5 18.2 27.7 29 27.7 29-6.8 8.1-24.4 29.7-49.3 30.4-23.6 0-43.9-12.1-59.5-36.5l-16.2-22.3z"/><path d="m718.1 557c-26.4 56-74.9 87.8-131 87.8-80.4 0-144.5-64.2-144.5-145.2 0-81.7 64.1-147.2 142.4-147.2 82.4 0 145.2 64.2 145.2 149.9 0 8.9-.7 14.3-2 18.2h-211.3c3.4 31.1 26.3 59.5 66.2 59.5 22.2 0 33-8.1 49.3-23zm-198.6-86.4h133.7c-6.1-30.4-32.4-53.4-67.5-53.4-34.4 0-59.4 21.6-66.2 53.4z" fill-rule="evenodd"/></g></svg>
+									</div>
+									
+									<div class="jellyfin-badge" data-jellyfin="<?php echo (strpos(strtolower($image['filename']), 'jellyfin') !== false) ? 'true' : 'false'; ?>" style="display: none;" title="Jellyfin">
+										<img src="./assets/images/jellyfin.png" />
+									</div>
+
+
 				                <div class="gallery-image-placeholder">
 				                    <div class="loading-spinner"></div>
 				                </div>
@@ -6997,6 +7029,8 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		    initializeImportFromPlexButtons();
 		    initializeImportFromJellyfinButtons();
 		    showOrphanedBadge();
+		    showPlexBadge();
+		    showJellyfinBadge();
 		}
 		
 		// Debounce function for resize handling
@@ -7553,6 +7587,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		});
 	
 		// =========== HANDLE ORPHANS ===========	
+		
 		function hideNonOrphanedDeleteButtons() {
 			document.querySelectorAll('.delete-btn').forEach(button => {
 				const isOrphaned = button.getAttribute('data-orphaned') === 'true';
@@ -7566,6 +7601,26 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			document.querySelectorAll('.orphaned-badge').forEach(button => {
 				const isOrphaned = button.getAttribute('data-orphaned') === 'true';
 				if (isOrphaned) {
+					button.style.display = 'flex';
+				}
+			});
+		}
+
+		// =========== HANDLE SERVER BADGES ===========	
+				
+		function showPlexBadge() {
+			document.querySelectorAll('.plex-badge').forEach(button => {
+				const isPlex = button.getAttribute('data-plex') === 'true';
+				if (isPlex) {
+					button.style.display = 'flex';
+				}
+			});
+		}
+		
+		function showJellyfinBadge() {
+			document.querySelectorAll('.jellyfin-badge').forEach(button => {
+				const isJellyfin = button.getAttribute('data-jellyfin') === 'true';
+				if (isJellyfin) {
 					button.style.display = 'flex';
 				}
 			});
@@ -7585,6 +7640,8 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		initImportFromJellyfinFeature();
 		hideNonOrphanedDeleteButtons();
 		showOrphanedBadge();
+		showPlexBadge();
+		showJellyfinBadge();
 		
 		
 		// Call truncation after images load and on resize
