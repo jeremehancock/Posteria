@@ -888,6 +888,31 @@ try {
 		$files = glob($targetDir . '/*');
 		$plexTag = '**Plex**';
 		
+		// Log what we're checking for debugging
+		logDebug("markOrphanedPosters checking", [
+		    'mediaType' => $mediaType,
+		    'showTitle' => $showTitle,
+		    'validIds' => count($validIds),
+		    'fileCount' => count($files)
+		]);
+		
+		// For seasons with show titles, prepare normalized values for comparison
+		$normalizedShowTitle = '';
+		if ($mediaType === 'seasons' && !empty($showTitle)) {
+		    // First, convert HTML entities to their corresponding characters
+		    $decodedTitle = html_entity_decode($showTitle, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+		    
+		    // Then, remove all non-alphanumeric characters except spaces
+		    $normalizedShowTitle = preg_replace('/[^a-zA-Z0-9\s]/', '', $decodedTitle);
+		    $normalizedShowTitle = trim(strtolower($normalizedShowTitle));
+		    
+		    logDebug("Using normalized show title for comparison", [
+		        'original' => $showTitle,
+		        'decoded' => $decodedTitle,
+		        'normalized' => $normalizedShowTitle
+		    ]);
+		}
+		
 		foreach ($files as $file) {
 		    if (!is_file($file)) {
 		        continue;
@@ -936,11 +961,25 @@ try {
 		        }
 		    } else if ($mediaType === 'seasons') {
 		        // For seasons, only process if they belong to the show we're currently handling
-		        if (!empty($showTitle)) {
-		            // If we have a show title, check if the filename contains it
-		            if (stripos($filename, $showTitle) === false) {
+		        if (!empty($normalizedShowTitle)) {
+		            // First decode HTML entities and then normalize the filename for comparison
+		            $decodedFilename = html_entity_decode($filename, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+		            $normalizedFilename = preg_replace('/[^a-zA-Z0-9\s]/', '', $decodedFilename);
+		            $normalizedFilename = trim(strtolower($normalizedFilename));
+		            
+		            // If we have a show title, check if the normalized filename contains it
+		            if (strpos($normalizedFilename, $normalizedShowTitle) === false) {
 		                // This season belongs to a different show, skip it
+		                logDebug("Skipping season - show title mismatch", [
+		                    'filename' => $filename,
+		                    'normalizedFilename' => $normalizedFilename,
+		                    'normalizedShowTitle' => $normalizedShowTitle
+		                ]);
 		                continue;
+		            } else {
+		                logDebug("Processing season file - title match found", [
+		                    'filename' => $filename
+		                ]);
 		            }
 		        }
 		    }
@@ -955,6 +994,12 @@ try {
 		            // Replace **Plex** with **Orphaned** in the filename
 		            $newFilename = str_replace($plexTag, $orphanedTag, $filename);
 		            $newPath = $targetDir . '/' . $newFilename;
+		            
+		            logDebug("Marking file as orphaned", [
+		                'oldName' => $filename,
+		                'newName' => $newFilename,
+		                'fileId' => $fileId
+		            ]);
 		            
 		            if (rename($file, $newPath)) {
 		                $results['orphaned']++;
