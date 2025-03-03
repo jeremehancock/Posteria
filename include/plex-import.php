@@ -1085,7 +1085,7 @@ try {
 							
 							// Process orphaned posters with proper checking
 							if (is_array($allImportedIds)) {
-								$orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, '**Plex**');
+							    $orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, '**Orphaned**');
 							} else {
 								logDebug("Error: allImportedIds is not an array", [
 									'type' => gettype($allImportedIds),
@@ -1193,7 +1193,7 @@ try {
 							
 							// Process orphaned posters with proper checking
 							if (is_array($allImportedIds)) {
-								$orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, '**Plex**');
+							    $orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, '**Orphaned**');
 							} else {
 								logDebug("Shows: Error: allImportedIds is not an array", [
 									'type' => gettype($allImportedIds),
@@ -1326,7 +1326,7 @@ try {
 									
 									// Process orphaned posters with proper checking
 									if (is_array($allImportedIds)) {
-										$orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, '**Plex**');
+									    $orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, '**Orphaned**');
 									} else {
 										logDebug("Seasons: Error: allImportedIds is not an array", [
 											'type' => gettype($allImportedIds),
@@ -1464,7 +1464,7 @@ try {
 								
 								// Process orphaned posters with proper checking
 								if (is_array($allImportedIds)) {
-									$orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, '**Plex**');
+								    $orphanedResults = markOrphanedPosters($targetDir, $allImportedIds, '**Orphaned**');
 								} else {
 									logDebug("Seasons: Error: allImportedIds is not an array", [
 										'type' => gettype($allImportedIds),
