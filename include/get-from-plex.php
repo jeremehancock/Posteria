@@ -1,6 +1,6 @@
 <?php
 # Posteria: A Media Poster Collection App
-# Import From Jellyfin Functionality (Single Poster)
+# Import From Plex Functionality (Single Poster)
 #
 # Developed by Jereme Hancock
 # https://github.com/jeremehancock/Posteria
@@ -61,7 +61,7 @@ function logDebug($message, $data = null) {
     if ($data !== null) {
         $logMessage .= "\nData: " . print_r($data, true);
     }
-    file_put_contents('import-from-jellyfin-debug.log', $logMessage . "\n\n", FILE_APPEND);
+    file_put_contents('import-from-plex-debug.log', $logMessage . "\n\n", FILE_APPEND);
 }
 
 try {
@@ -71,7 +71,7 @@ try {
     }
 
     // Log the request
-    logDebug("Import from Jellyfin request received", [
+    logDebug("Import from Plex request received", [
         'POST' => $_POST,
         'SESSION' => $_SESSION
     ]);
@@ -93,24 +93,17 @@ try {
         exit;
     }
 
-    // Check if auth_config and jellyfin_config exist
-    if (!isset($auth_config) || !isset($jellyfin_config)) {
+    // Check if auth_config and plex_config exist
+    if (!isset($auth_config) || !isset($plex_config)) {
         logDebug("Missing configuration variables");
         echo json_encode(['success' => false, 'error' => 'Configuration not properly loaded']);
         exit;
     }
 
-    // Check if Jellyfin API key is set
-    if (empty($jellyfin_config['api_key'])) {
-        logDebug("Jellyfin API key is not set");
-        echo json_encode(['success' => false, 'error' => 'Jellyfin API key is not configured. Please add your API key to config.php']);
-        exit;
-    }
-    
-    // Check if Jellyfin server URL is set
-    if (empty($jellyfin_config['server_url'])) {
-        logDebug("Jellyfin server URL is not set");
-        echo json_encode(['success' => false, 'error' => 'Jellyfin server URL is not configured. Please add the server URL to config.php']);
+    // Check if Plex token is set
+    if (empty($plex_config['token'])) {
+        logDebug("Plex token is not set");
+        echo json_encode(['success' => false, 'error' => 'Plex token is not configured. Please add your token to config.php']);
         exit;
     }
 
@@ -124,17 +117,19 @@ try {
     // Refresh session time
     $_SESSION['login_time'] = time();
 
-    // Helper Functions (reused from jellyfin-import.php with modifications)
-    function getJellyfinHeaders($apiKey) {
+    // Helper Functions (reused from plex-import.php)
+    function getPlexHeaders($token) {
         return [
             'Accept' => 'application/json',
-            'Authorization' => 'MediaBrowser Token="' . $apiKey . '"',
-            'Content-Type' => 'application/json'
+            'X-Plex-Token' => $token,
+            'X-Plex-Client-Identifier' => 'Posteria',
+            'X-Plex-Product' => 'Posteria',
+            'X-Plex-Version' => '1.0'
         ];
     }
 
     function makeApiRequest($url, $headers, $expectJson = true) {
-        global $jellyfin_config;
+        global $plex_config;
         
         logDebug("Making API request", [
             'url' => $url,
@@ -150,8 +145,8 @@ try {
             CURLOPT_HTTPHEADER => $headers,
             CURLOPT_SSL_VERIFYPEER => false,
             CURLOPT_SSL_VERIFYHOST => false,
-            CURLOPT_CONNECTTIMEOUT => $jellyfin_config['connect_timeout'] ?? 10,
-            CURLOPT_TIMEOUT => $jellyfin_config['request_timeout'] ?? 30,
+            CURLOPT_CONNECTTIMEOUT => $plex_config['connect_timeout'],
+            CURLOPT_TIMEOUT => $plex_config['request_timeout'],
             CURLOPT_VERBOSE => true
         ]);
         
@@ -193,14 +188,12 @@ try {
         return $response;
     }
 
-    // Get image data from Jellyfin
-    function getJellyfinImageData($serverUrl, $apiKey, $itemId, $imageType = 'Primary') {
+    // Get image data from Plex
+    function getPlexImageData($serverUrl, $token, $thumb) {
         try {
-            // Jellyfin's image API format with additional parameters
-            $url = rtrim($serverUrl, '/') . "/Items/{$itemId}/Images/{$imageType}?format=jpg&quality=90";
-            
+            $url = rtrim($serverUrl, '/') . $thumb;
             $headers = [];
-            foreach (getJellyfinHeaders($apiKey) as $key => $value) {
+            foreach (getPlexHeaders($token) as $key => $value) {
                 $headers[] = $key . ': ' . $value;
             }
             
@@ -212,8 +205,8 @@ try {
         }
     }
 
-    // Single poster import from Jellyfin
-    if (isset($_POST['action']) && $_POST['action'] === 'import_from_jellyfin') {
+    // Single poster import from Plex
+    if (isset($_POST['action']) && $_POST['action'] === 'import_from_plex') {
         if (!isset($_POST['filename'])) {
             echo json_encode(['success' => false, 'error' => 'Missing required parameters']);
             exit;
@@ -221,52 +214,66 @@ try {
         
         $filename = $_POST['filename'];
         
-        // Extract the itemId from the filename
-        // Format is typically "Title [itemId] Jellyfin.jpg"
+        // Extract the ratingKey from the filename
+        // Format is typically "Title [ratingKey] Plex.jpg"
         $matches = [];
         if (!preg_match('/\[([a-zA-Z0-9]+)\]/', $filename, $matches)) {
-            echo json_encode(['success' => false, 'error' => 'Could not extract itemId from filename']);
+            echo json_encode(['success' => false, 'error' => 'Could not extract ratingKey from filename']);
             exit;
         }
         
-        $itemId = $matches[1];
-        logDebug("Extracted itemId for import", ['itemId' => $itemId, 'filename' => $filename]);
+        $ratingKey = $matches[1];
+        logDebug("Extracted ratingKey for import", ['ratingKey' => $ratingKey, 'filename' => $filename]);
         
         // Determine the media type based on filename or directory
         $mediaType = isset($_POST['directory']) ? $_POST['directory'] : '';
         
-        // Jellyfin server URL
-        $jellyfinServerUrl = rtrim($jellyfin_config['server_url'], '/');
+        // Determine the endpoint based on the media type
+        $endpoint = '';
         
-        // Headers for the Jellyfin API request
+        // URL to get metadata from Plex
+        $plexServerUrl = rtrim($plex_config['server_url'], '/');
+        $metadataUrl = "{$plexServerUrl}/library/metadata/{$ratingKey}";
+        
+        // Headers for the Plex API request
         $headers = [];
-        foreach (getJellyfinHeaders($jellyfin_config['api_key']) as $key => $value) {
+        foreach (getPlexHeaders($plex_config['token']) as $key => $value) {
             $headers[] = $key . ': ' . $value;
         }
         
         try {
-            // Get the item metadata to verify it exists
-            $metadataUrl = "{$jellyfinServerUrl}/Items/{$itemId}";
+            // Get the item metadata to find the thumb URL
             $response = makeApiRequest($metadataUrl, $headers);
             $metadata = json_decode($response, true);
             
-            // Check if the item has an image
-            $imageType = 'Primary'; // Default for most items
-            
-            // For collections, we might need to use a different image type
-            if ($mediaType === 'collections' && !isset($metadata['ImageTags']['Primary'])) {
-                if (isset($metadata['ImageTags']['Thumb'])) {
-                    $imageType = 'Thumb';
-                } elseif (isset($metadata['ImageTags']['Backdrop'])) {
-                    $imageType = 'Backdrop';
+            if (!isset($metadata['MediaContainer']['Metadata'][0]['thumb'])) {
+                // For collections, try with collections endpoint
+                if ($mediaType === 'collections') {
+                    $collectionsUrl = "{$plexServerUrl}/library/collections/{$ratingKey}";
+                    $response = makeApiRequest($collectionsUrl, $headers);
+                    $metadata = json_decode($response, true);
                 }
+                
+                // If still no thumb, try with art instead of thumb
+                if (!isset($metadata['MediaContainer']['Metadata'][0]['thumb'])) {
+                    if (isset($metadata['MediaContainer']['Metadata'][0]['art'])) {
+                        $thumb = $metadata['MediaContainer']['Metadata'][0]['art'];
+                    } else {
+                        echo json_encode(['success' => false, 'error' => 'No poster found for this item in Plex']);
+                        exit;
+                    }
+                } else {
+                    $thumb = $metadata['MediaContainer']['Metadata'][0]['thumb'];
+                }
+            } else {
+                $thumb = $metadata['MediaContainer']['Metadata'][0]['thumb'];
             }
             
             // Get the poster image data
-            $imageResult = getJellyfinImageData($jellyfinServerUrl, $jellyfin_config['api_key'], $itemId, $imageType);
+            $imageResult = getPlexImageData($plexServerUrl, $plex_config['token'], $thumb);
             
             if (!$imageResult['success']) {
-                echo json_encode(['success' => false, 'error' => 'Failed to download poster from Jellyfin: ' . $imageResult['error']]);
+                echo json_encode(['success' => false, 'error' => 'Failed to download poster from Plex: ' . $imageResult['error']]);
                 exit;
             }
             
@@ -290,13 +297,13 @@ try {
             // Save the image file
             if (file_put_contents($targetPath, $imageResult['data'])) {
                 chmod($targetPath, 0644);
-                echo json_encode(['success' => true, 'message' => 'Poster successfully imported from Jellyfin']);
+                echo json_encode(['success' => true, 'message' => 'Poster successfully imported from Plex']);
             } else {
                 echo json_encode(['success' => false, 'error' => 'Failed to save poster file']);
             }
             
         } catch (Exception $e) {
-            echo json_encode(['success' => false, 'error' => 'Error importing from Jellyfin: ' . $e->getMessage()]);
+            echo json_encode(['success' => false, 'error' => 'Error importing from Plex: ' . $e->getMessage()]);
         }
         
         exit;

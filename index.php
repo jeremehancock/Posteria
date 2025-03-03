@@ -2914,15 +2914,9 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				                </div>
 				            </div>
 							<div class="gallery-caption" data-full-text="<?php echo htmlspecialchars(pathinfo($image['filename'], PATHINFO_FILENAME)); ?>">
-								<?php 
-								echo htmlspecialchars(
-									preg_replace(
-										'/\*\*(Plex|Jellyfin)\*\*/',
-										'($1)',
-										preg_replace('/\s*\[.*?\]\s*/', ' ', pathinfo($image['filename'], PATHINFO_FILENAME))
-									)
-								); 
-								?>
+								<?php echo htmlspecialchars(
+									preg_replace('/\[.*?\]/', '', str_replace(['**Plex**', '**Jellyfin**', 'Orphaned'], '', pathinfo($image['filename'], PATHINFO_FILENAME)))
+								); ?>
 							</div>
 				     	</div>
 				    <?php endforeach; ?>
