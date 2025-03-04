@@ -162,7 +162,7 @@ function getAllValidIds($mediaType) {
     if (isset($_SESSION['valid_plex_ids']) && isset($_SESSION['valid_plex_ids'][$mediaType])) {
         foreach ($_SESSION['valid_plex_ids'][$mediaType] as $libraryIds) {
             if (is_array($libraryIds)) {
-                $allIds = array_merge($allIds, $libraryIds);
+                $allIds = array_merge($allIds, array_values($libraryIds));
             }
         }
     }
