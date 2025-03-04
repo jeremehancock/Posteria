@@ -5,16 +5,16 @@ Posteria is a web-based media poster management system that allows you to organi
 ## Features
 Here's the updated version with the PWA line added:
 
-- 🖼️ Clean, modern interface for managing media posters
+- 🖥️ Clean, modern interface for managing media posters
 - 📁 Organized categories for Movies, TV Shows, TV Seasons, and Collections
 - 🔍 Fast, fuzzy search functionality
 - 📱 Mobile-responsive design
 - 📲 Installable as a PWA (Progressive Web App)
 - 🔒 Simple authentication system
 - ⚡ Easy poster upload from local files or URLs
-- 🎬 Import posters from Plex
-- 🎬 Export posters to Plex
-- 🔄 Move posters between categories
+- 📥 Import posters from Plex
+- 📤 Export posters to Plex
+- 🧹 Orphan Poster detection
 - 🎨 Support for JPG, JPEG, PNG, and WebP formats
 
 ### If you find this tool useful, consider helping me buy more hard drives!
@@ -23,6 +23,17 @@ Here's the updated version with the PWA line added:
 
 ## Screenshot
 ![Posteria](https://raw.githubusercontent.com/jeremehancock/Posteria/main/images/screenshot.png "Posteria")
+
+## Where to Find Posters
+
+Looking for high-quality posters for your media library? Here are some excellent resources:
+
+- **[The Poster Database](https://theposterdb.com/)** - A community-driven collection of custom posters with various styles and themes
+- **[The Movie Database (TMDB)](https://www.themoviedb.org/)** - Extensive library of official and fan-made artwork
+- **[The TV Database (TVDB)](https://www.thetvdb.com/)** - Comprehensive database for TV show posters and fanart
+- **[Mediux](https://mediux.pro/)** - Collection of professionally designed media artwork
+
+**Tip:** Posteria supports using Mediux YAML files in the URL uploader when changing posters, making it a convenient choice for managing your collection.
 
 ## Installation
 
