@@ -18,17 +18,8 @@ Here's the updated version with the PWA line added:
 - 🎨 Support for JPG, JPEG, PNG, and WebP formats
 
 ## Support this project
-<a href="https://www.buymeacoffee.com/jereme" target="_blank">
-<svg xmlns="http://www.w3.org/2000/svg" width="340" height="70" viewBox="0 0 340 70">
-  <!-- Background rectangle with rounded corners -->
-  <rect x="0" y="0" width="340" height="70" rx="12" ry="12" fill="#f5c542" />
-  
-  <!-- Single text element with emoji and text, explicitly centered -->
-  <text x="170" y="43" font-family="Arial, sans-serif" font-size="24" fill="black" text-anchor="middle">
-    🖥️ <tspan font-family="Bree, 'Bree Serif', sans-serif" font-weight="bold">Buy me more hard drives</tspan>
-  </text>
-</svg>
-</a>
+
+[![](https://jereme.dev/images/paypal-donate-button.png)](https://www.paypal.com/ncp/payment/FU85BL8345S7L)
 
 ## Screenshot
 ![Posteria](https://raw.githubusercontent.com/jeremehancock/Posteria/main/images/screenshot.png "Posteria")
