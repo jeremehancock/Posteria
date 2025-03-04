@@ -89,7 +89,8 @@ try {
         session_start();
     }
     
-    require_once './plex_id_storage.php';
+    require_once './plex-id-storage.php';
+    require_once './library-tracking.php';
 
     // Log the request
     logDebug("Request received", [
@@ -1155,6 +1156,21 @@ try {
 	}
 
     // API Endpoints
+    
+	if (isset($_POST['action']) && $_POST['action'] === 'get_plex_libraries') {
+		logDebug("Processing get_plex_libraries action");
+		$result = getPlexLibraries($plex_config['server_url'], $plex_config['token']);
+		
+		// ADD THIS CODE:
+		if ($result['success'] && !empty($result['data'])) {
+		    // Store all libraries for reference
+		    storeLibraryInfo($result['data'], 'all');
+		}
+		
+		echo json_encode($result);
+		logDebug("Response sent", $result);
+		exit;
+	}
 
     // Test Plex Connection
     if (isset($_POST['action']) && $_POST['action'] === 'test_plex_connection') {
@@ -1188,861 +1204,895 @@ try {
     }
 
 	// Import Plex Posters
-	if (isset($_POST['action']) && $_POST['action'] === 'import_plex_posters') {
-		if (!isset($_POST['type'], $_POST['libraryId'], $_POST['contentType'], $_POST['overwriteOption'])) {
-		    echo json_encode(['success' => false, 'error' => 'Missing required parameters']);
-		    exit;
-		}
-		
-		$type = $_POST['type']; // 'movies', 'shows', 'seasons', 'collections'
-		$libraryId = $_POST['libraryId'];
-		$contentType = $_POST['contentType']; // This will be the directory key
-		$overwriteOption = $_POST['overwriteOption']; // 'overwrite', 'copy', 'skip'
-		
-		// Set the current library ID in session for orphan detection
-		setCurrentLibraryId($libraryId);
-		
-		// IMPORTANT NEW CODE - Clear stored IDs for this library and type when starting a new import
-		// This ensures that removed items are properly detected as orphaned
-		if (isset($_POST['startIndex']) && (int)$_POST['startIndex'] === 0) {
-		    clearStoredIds($type, $libraryId);
-		    logDebug("Starting new import - cleared stored IDs for {$type}, library {$libraryId}");
-		}
-		
-		// Optional parameters
-		$showKey = isset($_POST['showKey']) ? $_POST['showKey'] : null; // For single show seasons import
-		$importAllSeasons = isset($_POST['importAllSeasons']) && $_POST['importAllSeasons'] === 'true'; // New parameter
-		
-		// Validate contentType maps to a directory
-		$directories = [
-		    'movies' => '../posters/movies/',
-		    'tv-shows' => '../posters/tv-shows/',
-		    'tv-seasons' => '../posters/tv-seasons/',
-		    'collections' => '../posters/collections/'
-		];
-		
-		if (!isset($directories[$contentType])) {
-		    echo json_encode(['success' => false, 'error' => 'Invalid content type']);
-		    exit;
-		}
-		
-		$targetDir = $directories[$contentType];
-		
-		// Ensure directory exists and is writable
-		if (!is_dir($targetDir)) {
-		    if (!mkdir($targetDir, 0755, true)) {
-		        echo json_encode(['success' => false, 'error' => 'Failed to create directory: ' . $targetDir]);
-		        exit;
-		    }
-		}
-		
-		if (!is_writable($targetDir)) {
-		    echo json_encode(['success' => false, 'error' => 'Directory is not writable: ' . $targetDir]);
-		    exit;
-		}
-		
-		// Start import process based on content type
-		$items = [];
-		$error = null;
-		$totalStats = [
-		    'successful' => 0,
-		    'skipped' => 0,
-		    'unchanged' => 0, // Added unchanged counter
-		    'failed' => 0,
-		    'errors' => []
-		];
-		
-		try {
-		    switch ($type) {
-		        case 'movies':
-		            // Handle batch processing
-		            if (isset($_POST['batchProcessing']) && $_POST['batchProcessing'] === 'true' && isset($_POST['startIndex'])) {
-		                $startIndex = (int)$_POST['startIndex'];
-		                $batchSize = $plex_config['import_batch_size'];
-		                
-		                // Get all movies using pagination
-		                $result = getAllPlexMovies($plex_config['server_url'], $plex_config['token'], $libraryId);
-		                if (!$result['success']) {
-		                    throw new Exception($result['error']);
-		                }
-		                $allMovies = $result['data'];
-		                
-		                // Process this batch
-		                $currentBatch = array_slice($allMovies, $startIndex, $batchSize);
-		                $endIndex = $startIndex + count($currentBatch);
-		                $isComplete = $endIndex >= count($allMovies);
-		                
-		                // Process the batch
-		                $batchResults = processBatch($currentBatch, $plex_config['server_url'], $plex_config['token'], $targetDir, $overwriteOption, $type);
-		                
-		                // Handle orphaned posters if this is the final batch
-		                $orphanedResults = null;
-		                if ($isComplete) {
-		                    // Safely get imported IDs from current batch
-		                    $allImportedIds = isset($batchResults['importedIds']) && is_array($batchResults['importedIds']) 
-		                        ? $batchResults['importedIds'] 
-		                        : [];
-		                    
-		                    logDebug("Current batch imported IDs", [
-		                        'count' => count($allImportedIds),
-		                        'isArray' => is_array($allImportedIds)
-		                    ]);
-		                    
-		                    // Retrieve IDs from previous batches with proper null checks
-		                    if (isset($_SESSION['import_movie_ids']) && is_array($_SESSION['import_movie_ids'])) {
-		                        $allImportedIds = array_merge($allImportedIds, $_SESSION['import_movie_ids']);
-		                        logDebug("Added IDs from session", [
-		                            'session_count' => count($_SESSION['import_movie_ids']),
-		                            'total_count' => count($allImportedIds)
-		                        ]);
-		                    }
-		                    
-							// Use the improved orphan detection with library ID and refresh mode = true
-							$orphanedResults = improvedMarkOrphanedPosters(
-								$targetDir, 
-								$allImportedIds, 
-								'**Orphaned**', 
-								'', 
-								'', 
-								'movies',
-								$libraryId,
-								true // This is the refresh mode parameter - true means replace IDs, not merge
-							);
-			
-							// Synchronize session data to persistent storage
-							syncSessionToStorage();
-							
-		                    // Clear the session
-		                    unset($_SESSION['import_movie_ids']);
-		                } else {
-		                    // Ensure we have an array in the session
-		                    if (!isset($_SESSION['import_movie_ids']) || !is_array($_SESSION['import_movie_ids'])) {
-		                        $_SESSION['import_movie_ids'] = [];
-		                    }
-		                    
-		                    // Ensure we're merging arrays, with proper null checks
-		                    $importedIds = isset($batchResults['importedIds']) && is_array($batchResults['importedIds']) 
-		                        ? $batchResults['importedIds'] 
-		                        : [];
-		                    
-		                    $_SESSION['import_movie_ids'] = array_merge($_SESSION['import_movie_ids'], $importedIds);
-		                    
-		                    logDebug("Stored IDs for next batch", [
-		                        'batch_count' => count($importedIds),
-		                        'session_total' => count($_SESSION['import_movie_ids'])
-		                    ]);
-		                }
+// Import Plex Posters
+if (isset($_POST['action']) && $_POST['action'] === 'import_plex_posters') {
+    if (!isset($_POST['type'], $_POST['libraryId'], $_POST['contentType'], $_POST['overwriteOption'])) {
+        echo json_encode(['success' => false, 'error' => 'Missing required parameters']);
+        exit;
+    }
+    
+    $type = $_POST['type']; // 'movies', 'shows', 'seasons', 'collections'
+    $libraryId = $_POST['libraryId'];
+    $contentType = $_POST['contentType']; // This will be the directory key
+    $overwriteOption = $_POST['overwriteOption']; // 'overwrite', 'copy', 'skip'
+    
+    // Set the current library ID in session for orphan detection
+    setCurrentLibraryId($libraryId);
+    
+    // IMPORTANT NEW CODE - Clear stored IDs for this library and type when starting a new import
+    // This ensures that removed items are properly detected as orphaned
+    if (isset($_POST['startIndex']) && (int)$_POST['startIndex'] === 0) {
+        clearStoredIds($type, $libraryId);
+        logDebug("Starting new import - cleared stored IDs for {$type}, library {$libraryId}");
+    }
+    
+    // Fetch all available libraries for this media type to track what libraries exist
+    $availableLibraries = [];
+    $librariesResult = getPlexLibraries($plex_config['server_url'], $plex_config['token']);
+    if ($librariesResult['success']) {
+        // Filter libraries based on media type
+        foreach ($librariesResult['data'] as $lib) {
+            if (($type === 'movies' && $lib['type'] === 'movie') ||
+                (($type === 'shows' || $type === 'seasons') && $lib['type'] === 'show') ||
+                ($type === 'collections' && in_array($lib['type'], ['movie', 'show']))) {
+                $availableLibraries[] = $lib;
+            }
+        }
+        
+        // Initialize the import session and handle missing libraries
+        $missingLibraryResult = initializeImportSession($type, $availableLibraries);
+        logDebug("Checked for missing libraries", [
+            'mediaType' => $type, 
+            'cleared' => count($missingLibraryResult['cleared']),
+            'details' => $missingLibraryResult['cleared']
+        ]);
+    }
+    
+    // Optional parameters
+    $showKey = isset($_POST['showKey']) ? $_POST['showKey'] : null; // For single show seasons import
+    $importAllSeasons = isset($_POST['importAllSeasons']) && $_POST['importAllSeasons'] === 'true'; // New parameter
+    
+    // Validate contentType maps to a directory
+    $directories = [
+        'movies' => '../posters/movies/',
+        'tv-shows' => '../posters/tv-shows/',
+        'tv-seasons' => '../posters/tv-seasons/',
+        'collections' => '../posters/collections/'
+    ];
+    
+    if (!isset($directories[$contentType])) {
+        echo json_encode(['success' => false, 'error' => 'Invalid content type']);
+        exit;
+    }
+    
+    $targetDir = $directories[$contentType];
+    
+    // Ensure directory exists and is writable
+    if (!is_dir($targetDir)) {
+        if (!mkdir($targetDir, 0755, true)) {
+            echo json_encode(['success' => false, 'error' => 'Failed to create directory: ' . $targetDir]);
+            exit;
+        }
+    }
+    
+    if (!is_writable($targetDir)) {
+        echo json_encode(['success' => false, 'error' => 'Directory is not writable: ' . $targetDir]);
+        exit;
+    }
+    
+    // Start import process based on content type
+    $items = [];
+    $error = null;
+    $totalStats = [
+        'successful' => 0,
+        'skipped' => 0,
+        'unchanged' => 0, // Added unchanged counter
+        'failed' => 0,
+        'errors' => []
+    ];
+    
+    try {
+        switch ($type) {
+            case 'movies':
+                // Handle batch processing
+                if (isset($_POST['batchProcessing']) && $_POST['batchProcessing'] === 'true' && isset($_POST['startIndex'])) {
+                    $startIndex = (int)$_POST['startIndex'];
+                    $batchSize = $plex_config['import_batch_size'];
+                    
+                    // Get all movies using pagination
+                    $result = getAllPlexMovies($plex_config['server_url'], $plex_config['token'], $libraryId);
+                    if (!$result['success']) {
+                        throw new Exception($result['error']);
+                    }
+                    $allMovies = $result['data'];
+                    
+                    // Process this batch
+                    $currentBatch = array_slice($allMovies, $startIndex, $batchSize);
+                    $endIndex = $startIndex + count($currentBatch);
+                    $isComplete = $endIndex >= count($allMovies);
+                    
+                    // Process the batch
+                    $batchResults = processBatch($currentBatch, $plex_config['server_url'], $plex_config['token'], $targetDir, $overwriteOption, $type);
+                    
+                    // Handle orphaned posters if this is the final batch
+                    $orphanedResults = null;
+                    if ($isComplete) {
+                        // Safely get imported IDs from current batch
+                        $allImportedIds = isset($batchResults['importedIds']) && is_array($batchResults['importedIds']) 
+                            ? $batchResults['importedIds'] 
+                            : [];
+                        
+                        logDebug("Current batch imported IDs", [
+                            'count' => count($allImportedIds),
+                            'isArray' => is_array($allImportedIds)
+                        ]);
+                        
+                        // Retrieve IDs from previous batches with proper null checks
+                        if (isset($_SESSION['import_movie_ids']) && is_array($_SESSION['import_movie_ids'])) {
+                            $allImportedIds = array_merge($allImportedIds, $_SESSION['import_movie_ids']);
+                            logDebug("Added IDs from session", [
+                                'session_count' => count($_SESSION['import_movie_ids']),
+                                'total_count' => count($allImportedIds)
+                            ]);
+                        }
+                        
+                        // Use the enhanced orphan detection that checks for missing libraries
+                        $orphanedResults = enhancedMarkOrphanedPosters(
+                            $targetDir, 
+                            $allImportedIds, 
+                            '**Orphaned**', 
+                            '', 
+                            '', 
+                            'movies',
+                            $libraryId,
+                            true, // This is the refresh mode parameter
+                            $availableLibraries // Pass the current available libraries
+                        );
+            
+                        // Synchronize session data to persistent storage
+                        syncSessionToStorage();
+                        
+                        // Clear the session
+                        unset($_SESSION['import_movie_ids']);
+                    } else {
+                        // Ensure we have an array in the session
+                        if (!isset($_SESSION['import_movie_ids']) || !is_array($_SESSION['import_movie_ids'])) {
+                            $_SESSION['import_movie_ids'] = [];
+                        }
+                        
+                        // Ensure we're merging arrays, with proper null checks
+                        $importedIds = isset($batchResults['importedIds']) && is_array($batchResults['importedIds']) 
+                            ? $batchResults['importedIds'] 
+                            : [];
+                        
+                        $_SESSION['import_movie_ids'] = array_merge($_SESSION['import_movie_ids'], $importedIds);
+                        
+                        logDebug("Stored IDs for next batch", [
+                            'batch_count' => count($importedIds),
+                            'session_total' => count($_SESSION['import_movie_ids'])
+                        ]);
+                    }
 
-		                // Respond with batch results and progress
-		                echo json_encode([
-		                    'success' => true,
-		                    'batchComplete' => true,
-		                    'progress' => [
-		                        'processed' => $endIndex,
-		                        'total' => count($allMovies),
-		                        'percentage' => round(($endIndex / count($allMovies)) * 100),
-		                        'isComplete' => $isComplete,
-		                        'nextIndex' => $isComplete ? null : $endIndex
-		                    ],
-		                    'results' => $batchResults,
-		                    'orphanedResults' => $orphanedResults,
-		                    'totalStats' => [
-		                        'successful' => $batchResults['successful'] ?? 0,
-		                        'skipped' => $batchResults['skipped'] ?? 0,
-		                        'unchanged' => $batchResults['unchanged'] ?? 0,
-		                        'failed' => $batchResults['failed'] ?? 0,
-		                        'orphaned' => $orphanedResults ? (($orphanedResults['orphaned'] ?? 0) + ($orphanedResults['unmarked'] ?? 0)) : 0
-		                    ]
-		                ]);
-		                exit;
-		            } else {
-		                // Process all movies at once
-		                $result = getAllPlexMovies($plex_config['server_url'], $plex_config['token'], $libraryId);
-		                if (!$result['success']) {
-		                    throw new Exception($result['error']);
-		                }
-		                $items = $result['data'];
-		            }
-		            break;
-		        
-		        case 'shows':
-		            // Handle batch processing
-		            if (isset($_POST['batchProcessing']) && $_POST['batchProcessing'] === 'true' && isset($_POST['startIndex'])) {
-		                $startIndex = (int)$_POST['startIndex'];
-		                $batchSize = $plex_config['import_batch_size'];
-		                
-		                // Get all shows using pagination
-		                $result = getAllPlexShows($plex_config['server_url'], $plex_config['token'], $libraryId);
-		                if (!$result['success']) {
-		                    throw new Exception($result['error']);
-		                }
-		                $allShows = $result['data'];
-		                
-		                // Process this batch
-		                $currentBatch = array_slice($allShows, $startIndex, $batchSize);
-		                $endIndex = $startIndex + count($currentBatch);
-		                $isComplete = $endIndex >= count($allShows);
-		                
-		                // Process the batch
-		                $batchResults = processBatch($currentBatch, $plex_config['server_url'], $plex_config['token'], $targetDir, $overwriteOption, $type);
-		                
-		                // Handle orphaned posters if this is the final batch
-		                $orphanedResults = null;
-		                if ($isComplete) {
-		                    // Safely get imported IDs from current batch
-		                    $allImportedIds = isset($batchResults['importedIds']) && is_array($batchResults['importedIds']) 
-		                        ? $batchResults['importedIds'] 
-		                        : [];
-		                    
-		                    logDebug("Shows: Current batch imported IDs", [
-		                        'count' => count($allImportedIds),
-		                        'isArray' => is_array($allImportedIds)
-		                    ]);
-		                    
-		                    // Retrieve IDs from previous batches with proper null checks
-		                    if (isset($_SESSION['import_show_ids']) && is_array($_SESSION['import_show_ids'])) {
-		                        $allImportedIds = array_merge($allImportedIds, $_SESSION['import_show_ids']);
-		                        logDebug("Shows: Added IDs from session", [
-		                            'session_count' => count($_SESSION['import_show_ids']),
-		                            'total_count' => count($allImportedIds)
-		                        ]);
-		                    }
-		                    
-							$orphanedResults = improvedMarkOrphanedPosters(
-								$targetDir, 
-								$allImportedIds, 
-								'**Orphaned**', 
-								'', 
-								'', 
-								'shows',
-								$libraryId,
-								true // Refresh mode parameter
-							);
+                    // Respond with batch results and progress
+                    echo json_encode([
+                        'success' => true,
+                        'batchComplete' => true,
+                        'progress' => [
+                            'processed' => $endIndex,
+                            'total' => count($allMovies),
+                            'percentage' => round(($endIndex / count($allMovies)) * 100),
+                            'isComplete' => $isComplete,
+                            'nextIndex' => $isComplete ? null : $endIndex
+                        ],
+                        'results' => $batchResults,
+                        'orphanedResults' => $orphanedResults,
+                        'totalStats' => [
+                            'successful' => $batchResults['successful'] ?? 0,
+                            'skipped' => $batchResults['skipped'] ?? 0,
+                            'unchanged' => $batchResults['unchanged'] ?? 0,
+                            'failed' => $batchResults['failed'] ?? 0,
+                            'orphaned' => $orphanedResults ? (($orphanedResults['orphaned'] ?? 0) + ($orphanedResults['unmarked'] ?? 0)) : 0
+                        ]
+                    ]);
+                    exit;
+                } else {
+                    // Process all movies at once
+                    $result = getAllPlexMovies($plex_config['server_url'], $plex_config['token'], $libraryId);
+                    if (!$result['success']) {
+                        throw new Exception($result['error']);
+                    }
+                    $items = $result['data'];
+                }
+                break;
+            
+            case 'shows':
+                // Handle batch processing
+                if (isset($_POST['batchProcessing']) && $_POST['batchProcessing'] === 'true' && isset($_POST['startIndex'])) {
+                    $startIndex = (int)$_POST['startIndex'];
+                    $batchSize = $plex_config['import_batch_size'];
+                    
+                    // Get all shows using pagination
+                    $result = getAllPlexShows($plex_config['server_url'], $plex_config['token'], $libraryId);
+                    if (!$result['success']) {
+                        throw new Exception($result['error']);
+                    }
+                    $allShows = $result['data'];
+                    
+                    // Process this batch
+                    $currentBatch = array_slice($allShows, $startIndex, $batchSize);
+                    $endIndex = $startIndex + count($currentBatch);
+                    $isComplete = $endIndex >= count($allShows);
+                    
+                    // Process the batch
+                    $batchResults = processBatch($currentBatch, $plex_config['server_url'], $plex_config['token'], $targetDir, $overwriteOption, $type);
+                    
+                    // Handle orphaned posters if this is the final batch
+                    $orphanedResults = null;
+                    if ($isComplete) {
+                        // Safely get imported IDs from current batch
+                        $allImportedIds = isset($batchResults['importedIds']) && is_array($batchResults['importedIds']) 
+                            ? $batchResults['importedIds'] 
+                            : [];
+                        
+                        logDebug("Shows: Current batch imported IDs", [
+                            'count' => count($allImportedIds),
+                            'isArray' => is_array($allImportedIds)
+                        ]);
+                        
+                        // Retrieve IDs from previous batches with proper null checks
+                        if (isset($_SESSION['import_show_ids']) && is_array($_SESSION['import_show_ids'])) {
+                            $allImportedIds = array_merge($allImportedIds, $_SESSION['import_show_ids']);
+                            logDebug("Shows: Added IDs from session", [
+                                'session_count' => count($_SESSION['import_show_ids']),
+                                'total_count' => count($allImportedIds)
+                            ]);
+                        }
+                        
+                        // Use the enhanced orphan detection that checks for missing libraries
+                        $orphanedResults = enhancedMarkOrphanedPosters(
+                            $targetDir, 
+                            $allImportedIds, 
+                            '**Orphaned**', 
+                            '', 
+                            '', 
+                            'shows',
+                            $libraryId,
+                            true, // Refresh mode parameter
+                            $availableLibraries // Pass the current available libraries
+                        );
 
-							// Synchronize session data to persistent storage
-							syncSessionToStorage();
-							
-		                    // Clear the session
-		                    unset($_SESSION['import_show_ids']);
-		                } else {
-		                    // Ensure we have an array in the session
-		                    if (!isset($_SESSION['import_show_ids']) || !is_array($_SESSION['import_show_ids'])) {
-		                        $_SESSION['import_show_ids'] = [];
-		                    }
-		                    
-		                    // Ensure we're merging arrays, with proper null checks
-		                    $importedIds = isset($batchResults['importedIds']) && is_array($batchResults['importedIds']) 
-		                        ? $batchResults['importedIds'] 
-		                        : [];
-		                    
-		                    $_SESSION['import_show_ids'] = array_merge($_SESSION['import_show_ids'], $importedIds);
-		                    
-		                    logDebug("Shows: Stored IDs for next batch", [
-		                        'batch_count' => count($importedIds),
-		                        'session_total' => count($_SESSION['import_show_ids'])
-		                    ]);
-		                }
+                        // Synchronize session data to persistent storage
+                        syncSessionToStorage();
+                        
+                        // Clear the session
+                        unset($_SESSION['import_show_ids']);
+                    } else {
+                        // Ensure we have an array in the session
+                        if (!isset($_SESSION['import_show_ids']) || !is_array($_SESSION['import_show_ids'])) {
+                            $_SESSION['import_show_ids'] = [];
+                        }
+                        
+                        // Ensure we're merging arrays, with proper null checks
+                        $importedIds = isset($batchResults['importedIds']) && is_array($batchResults['importedIds']) 
+                            ? $batchResults['importedIds'] 
+                            : [];
+                        
+                        $_SESSION['import_show_ids'] = array_merge($_SESSION['import_show_ids'], $importedIds);
+                        
+                        logDebug("Shows: Stored IDs for next batch", [
+                            'batch_count' => count($importedIds),
+                            'session_total' => count($_SESSION['import_show_ids'])
+                        ]);
+                    }
 
-		                // Respond with batch results and progress
-		                echo json_encode([
-		                    'success' => true,
-		                    'batchComplete' => true,
-		                    'progress' => [
-		                        'processed' => $endIndex,
-		                        'total' => count($allShows),
-		                        'percentage' => round(($endIndex / count($allShows)) * 100),
-		                        'isComplete' => $isComplete,
-		                        'nextIndex' => $isComplete ? null : $endIndex
-		                    ],
-		                    'results' => $batchResults,
-		                    'orphanedResults' => $orphanedResults,
-		                    'totalStats' => [
-		                        'successful' => $batchResults['successful'] ?? 0,
-		                        'skipped' => $batchResults['skipped'] ?? 0,
-		                        'unchanged' => $batchResults['unchanged'] ?? 0,
-		                        'failed' => $batchResults['failed'] ?? 0,
-		                        'orphaned' => $orphanedResults ? (($orphanedResults['orphaned'] ?? 0) + ($orphanedResults['unmarked'] ?? 0)) : 0
-		                    ]
-		                ]);
-		                exit;
-		            } else {
-		                // Process all shows at once
-		                $result = getAllPlexShows($plex_config['server_url'], $plex_config['token'], $libraryId);
-		                if (!$result['success']) {
-		                    throw new Exception($result['error']);
-		                }
-		                $items = $result['data'];
-		            }
-		            break;
-		        
-		        case 'seasons':
-		            // Check if we're importing all seasons
-		            $importAllSeasons = isset($_POST['importAllSeasons']) && $_POST['importAllSeasons'] === 'true';
-		            
-		            if ($importAllSeasons) {
-		                // Get all shows first
-		                $showsResult = getAllPlexShows($plex_config['server_url'], $plex_config['token'], $libraryId);
-		                if (!$showsResult['success']) {
-		                    throw new Exception($showsResult['error']);
-		                }
-		                $shows = $showsResult['data'];
-		                
-		                // Handle batch processing for shows to get all seasons
-		                if (isset($_POST['batchProcessing']) && $_POST['batchProcessing'] === 'true' && isset($_POST['startIndex'])) {
-		                    $startIndex = (int)$_POST['startIndex'];
-		                    
-		                    // If we're processing shows in batches and handling all shows' seasons
-		                    if ($startIndex < count($shows)) {
-		                        // Process seasons for this show
-		                        $show = $shows[$startIndex];
-		                        $seasonsResult = getAllPlexSeasons($plex_config['server_url'], $plex_config['token'], $show['ratingKey']);
-		                        
-		                        // Get running totals from previous batches if available
-		                        $totalStats['successful'] = isset($_POST['totalSuccessful']) ? (int)$_POST['totalSuccessful'] : 0;
-		                        $totalStats['skipped'] = isset($_POST['totalSkipped']) ? (int)$_POST['totalSkipped'] : 0;
-		                        $totalStats['unchanged'] = isset($_POST['totalUnchanged']) ? (int)$_POST['totalUnchanged'] : 0;
-		                        $totalStats['failed'] = isset($_POST['totalFailed']) ? (int)$_POST['totalFailed'] : 0;
-		                        $totalStats['skippedDetails'] = isset($_POST['skippedDetails']) ? json_decode($_POST['skippedDetails'], true) : [];
-		                        
-		                        if ($seasonsResult['success'] && !empty($seasonsResult['data'])) {
-		                            $items = $seasonsResult['data'];
-		                            // Process seasons for this show
-		                            $batchResults = processBatch($items, $plex_config['server_url'], $plex_config['token'], $targetDir, $overwriteOption, $type);
-		                            
-		                            // Update running totals
-		                            $totalStats['successful'] += $batchResults['successful'];
-		                            $totalStats['skipped'] += $batchResults['skipped'];
-		                            $totalStats['unchanged'] += $batchResults['unchanged']; // Added unchanged count
-		                            $totalStats['failed'] += $batchResults['failed'];
-		                            
-		                            if (!empty($batchResults['errors'])) {
-		                                $totalStats['errors'] = array_merge($totalStats['errors'], $batchResults['errors']);
-		                            }
-		                        } else {
-		                            $items = []; // No seasons for this show
-		                            $batchResults = [
-		                                'successful' => 0,
-		                                'skipped' => 0,
-		                                'unchanged' => 0,
-		                                'failed' => 0,
-		                                'errors' => [],
-		                                'importedIds' => []
-		                            ];
-		                        }
-		                        
-		                        // Check if this is the final show we're processing
-		                        $isComplete = ($startIndex + 1) >= count($shows);
-		                        
-		                        // Handle orphaned posters if this is the final batch
-		                        $orphanedResults = null;
-		                        if ($isComplete) {
-		                            // Safely get imported IDs from current batch
-		                            $allImportedIds = isset($batchResults['importedIds']) && is_array($batchResults['importedIds']) 
-		                                ? $batchResults['importedIds'] 
-		                                : [];
-		                            
-		                            logDebug("Seasons: Current batch imported IDs", [
-		                                'count' => count($allImportedIds),
-		                                'isArray' => is_array($allImportedIds)
-		                            ]);
-		                            
-		                            // Retrieve IDs from previous batches with proper null checks
-		                            if (isset($_SESSION['import_season_ids']) && is_array($_SESSION['import_season_ids'])) {
-		                                $allImportedIds = array_merge($allImportedIds, $_SESSION['import_season_ids']);
-		                                logDebug("Seasons: Added IDs from session", [
-		                                    'session_count' => count($_SESSION['import_season_ids']),
-		                                    'total_count' => count($allImportedIds)
-		                                ]);
-		                            }
-		                            
-									$orphanedResults = improvedMarkOrphanedPosters(
-										$targetDir, 
-										$allImportedIds, 
-										'**Orphaned**', 
-										'', 
-										'', 
-										'seasons',
-										$libraryId,
-										true // Refresh mode parameter
-									);
+                    // Respond with batch results and progress
+                    echo json_encode([
+                        'success' => true,
+                        'batchComplete' => true,
+                        'progress' => [
+                            'processed' => $endIndex,
+                            'total' => count($allShows),
+                            'percentage' => round(($endIndex / count($allShows)) * 100),
+                            'isComplete' => $isComplete,
+                            'nextIndex' => $isComplete ? null : $endIndex
+                        ],
+                        'results' => $batchResults,
+                        'orphanedResults' => $orphanedResults,
+                        'totalStats' => [
+                            'successful' => $batchResults['successful'] ?? 0,
+                            'skipped' => $batchResults['skipped'] ?? 0,
+                            'unchanged' => $batchResults['unchanged'] ?? 0,
+                            'failed' => $batchResults['failed'] ?? 0,
+                            'orphaned' => $orphanedResults ? (($orphanedResults['orphaned'] ?? 0) + ($orphanedResults['unmarked'] ?? 0)) : 0
+                        ]
+                    ]);
+                    exit;
+                } else {
+                    // Process all shows at once
+                    $result = getAllPlexShows($plex_config['server_url'], $plex_config['token'], $libraryId);
+                    if (!$result['success']) {
+                        throw new Exception($result['error']);
+                    }
+                    $items = $result['data'];
+                }
+                break;
+            
+            case 'seasons':
+                // Check if we're importing all seasons
+                $importAllSeasons = isset($_POST['importAllSeasons']) && $_POST['importAllSeasons'] === 'true';
+                
+                if ($importAllSeasons) {
+                    // Get all shows first
+                    $showsResult = getAllPlexShows($plex_config['server_url'], $plex_config['token'], $libraryId);
+                    if (!$showsResult['success']) {
+                        throw new Exception($showsResult['error']);
+                    }
+                    $shows = $showsResult['data'];
+                    
+                    // Handle batch processing for shows to get all seasons
+                    if (isset($_POST['batchProcessing']) && $_POST['batchProcessing'] === 'true' && isset($_POST['startIndex'])) {
+                        $startIndex = (int)$_POST['startIndex'];
+                        
+                        // If we're processing shows in batches and handling all shows' seasons
+                        if ($startIndex < count($shows)) {
+                            // Process seasons for this show
+                            $show = $shows[$startIndex];
+                            $seasonsResult = getAllPlexSeasons($plex_config['server_url'], $plex_config['token'], $show['ratingKey']);
+                            
+                            // Get running totals from previous batches if available
+                            $totalStats['successful'] = isset($_POST['totalSuccessful']) ? (int)$_POST['totalSuccessful'] : 0;
+                            $totalStats['skipped'] = isset($_POST['totalSkipped']) ? (int)$_POST['totalSkipped'] : 0;
+                            $totalStats['unchanged'] = isset($_POST['totalUnchanged']) ? (int)$_POST['totalUnchanged'] : 0;
+                            $totalStats['failed'] = isset($_POST['totalFailed']) ? (int)$_POST['totalFailed'] : 0;
+                            $totalStats['skippedDetails'] = isset($_POST['skippedDetails']) ? json_decode($_POST['skippedDetails'], true) : [];
+                            
+                            if ($seasonsResult['success'] && !empty($seasonsResult['data'])) {
+                                $items = $seasonsResult['data'];
+                                // Process seasons for this show
+                                $batchResults = processBatch($items, $plex_config['server_url'], $plex_config['token'], $targetDir, $overwriteOption, $type);
+                                
+                                // Update running totals
+                                $totalStats['successful'] += $batchResults['successful'];
+                                $totalStats['skipped'] += $batchResults['skipped'];
+                                $totalStats['unchanged'] += $batchResults['unchanged']; // Added unchanged count
+                                $totalStats['failed'] += $batchResults['failed'];
+                                
+                                if (!empty($batchResults['errors'])) {
+                                    $totalStats['errors'] = array_merge($totalStats['errors'], $batchResults['errors']);
+                                }
+                            } else {
+                                $items = []; // No seasons for this show
+                                $batchResults = [
+                                    'successful' => 0,
+                                    'skipped' => 0,
+                                    'unchanged' => 0,
+                                    'failed' => 0,
+                                    'errors' => [],
+                                    'importedIds' => []
+                                ];
+                            }
+                            
+                            // Check if this is the final show we're processing
+                            $isComplete = ($startIndex + 1) >= count($shows);
+                            
+                            // Handle orphaned posters if this is the final batch
+                            $orphanedResults = null;
+                            if ($isComplete) {
+                                // Safely get imported IDs from current batch
+                                $allImportedIds = isset($batchResults['importedIds']) && is_array($batchResults['importedIds']) 
+                                    ? $batchResults['importedIds'] 
+                                    : [];
+                                
+                                logDebug("Seasons: Current batch imported IDs", [
+                                    'count' => count($allImportedIds),
+                                    'isArray' => is_array($allImportedIds)
+                                ]);
+                                
+                                // Retrieve IDs from previous batches with proper null checks
+                                if (isset($_SESSION['import_season_ids']) && is_array($_SESSION['import_season_ids'])) {
+                                    $allImportedIds = array_merge($allImportedIds, $_SESSION['import_season_ids']);
+                                    logDebug("Seasons: Added IDs from session", [
+                                        'session_count' => count($_SESSION['import_season_ids']),
+                                        'total_count' => count($allImportedIds)
+                                    ]);
+                                }
+                                
+                                // Use the enhanced orphan detection that checks for missing libraries
+                                $orphanedResults = enhancedMarkOrphanedPosters(
+                                    $targetDir, 
+                                    $allImportedIds, 
+                                    '**Orphaned**', 
+                                    '', 
+                                    '', 
+                                    'seasons',
+                                    $libraryId,
+                                    true, // Refresh mode parameter
+                                    $availableLibraries // Pass the current available libraries
+                                );
 
-									// Synchronize session data to persistent storage
-									syncSessionToStorage();
-							
-		                            // Clear the session
-		                            unset($_SESSION['import_season_ids']);
-		                            if (isset($_SESSION['current_show_title'])) {
-		                                unset($_SESSION['current_show_title']);
-		                            }
-		                        } else {
-		                            // Ensure we have an array in the session
-		                            if (!isset($_SESSION['import_season_ids']) || !is_array($_SESSION['import_season_ids'])) {
-		                                $_SESSION['import_season_ids'] = [];
-		                            }
-		                            
-		                            // Ensure we're merging arrays, with proper null checks
-		                            $importedIds = isset($batchResults['importedIds']) && is_array($batchResults['importedIds']) 
-		                                ? $batchResults['importedIds'] 
-		                                : [];
-		                            
-		                            $_SESSION['import_season_ids'] = array_merge($_SESSION['import_season_ids'], $importedIds);
-		                            
-		                            logDebug("Seasons: Stored IDs for next batch", [
-		                                'batch_count' => count($importedIds),
-		                                'session_total' => count($_SESSION['import_season_ids'])
-		                            ]);
-		                        }
-		                        
-		                        // Return batch progress information for the controller
-		                        echo json_encode([
-		                            'success' => true,
-		                            'batchComplete' => true,
-		                            'progress' => [
-		                                'processed' => $startIndex + 1,
-		                                'total' => count($shows),
-		                                'percentage' => round((($startIndex + 1) / count($shows)) * 100),
-		                                'isComplete' => $isComplete,
-		                                'nextIndex' => $isComplete ? null : $startIndex + 1,
-		                                'currentShow' => $show['title'],
-		                                'seasonCount' => count($items)
-		                            ],
-		                            'results' => $batchResults,
-		                            'orphanedResults' => $orphanedResults,
-		                            'totalStats' => [
-		                                'successful' => $batchResults['successful'] ?? 0,
-		                                'skipped' => $batchResults['skipped'] ?? 0,
-		                                'unchanged' => $batchResults['unchanged'] ?? 0,
-		                                'failed' => $batchResults['failed'] ?? 0,
-		                                'orphaned' => $orphanedResults ? (($orphanedResults['orphaned'] ?? 0) + ($orphanedResults['unmarked'] ?? 0)) : 0
-		                            ]
-		                        ]);
-		                        exit;
-		                    } else {
-		                        // All done
-		                        echo json_encode([
-		                            'success' => true,
-		                            'batchComplete' => true,
-		                            'progress' => [
-		                                'processed' => count($shows),
-		                                'total' => count($shows),
-		                                'percentage' => 100,
-		                                'isComplete' => true,
-		                                'nextIndex' => null
-		                            ],
-		                            'results' => [
-		                                'successful' => 0,
-		                                'skipped' => 0,
-		                                'unchanged' => 0,
-		                                'failed' => 0,
-		                                'errors' => []
-		                            ],
-		                            'orphanedResults' => null,
-		                            'totalStats' => [
-		                                'successful' => isset($_POST['totalSuccessful']) ? (int)$_POST['totalSuccessful'] : 0,
-		                                'skipped' => isset($_POST['totalSkipped']) ? (int)$_POST['totalSkipped'] : 0,
-		                                'unchanged' => isset($_POST['totalUnchanged']) ? (int)$_POST['totalUnchanged'] : 0,
-		                                'failed' => isset($_POST['totalFailed']) ? (int)$_POST['totalFailed'] : 0,
-		                                'orphaned' => 0
-		                            ]
-		                        ]);
-		                        exit;
-		                    }
-		                } else {
-		                    // Non-batch processing or initial call - not recommended for large libraries
-		                    $allSeasons = [];
-		                    foreach ($shows as $show) {
-		                        $seasonsResult = getAllPlexSeasons($plex_config['server_url'], $plex_config['token'], $show['ratingKey']);
-		                        if ($seasonsResult['success'] && !empty($seasonsResult['data'])) {
-		                            $allSeasons = array_merge($allSeasons, $seasonsResult['data']);
-		                        }
-		                    }
-		                    $items = $allSeasons;
-		                }
-		            } else {
-		                // Just get seasons for one show (original behavior)
-		                if (empty($showKey)) {
-		                    throw new Exception('Show key is required for single-show seasons import');
-		                }
-		                
-		                // Get the show title based on the showKey
-		                $showTitle = '';
-		                $showDetailsUrl = rtrim($plex_config['server_url'], '/') . "/library/metadata/{$showKey}";
-		                $headers = [];
-		                foreach (getPlexHeaders($plex_config['token']) as $key => $value) {
-		                    $headers[] = $key . ': ' . $value;
-		                }
+                                // Synchronize session data to persistent storage
+                                syncSessionToStorage();
+                        
+                                // Clear the session
+                                unset($_SESSION['import_season_ids']);
+                                if (isset($_SESSION['current_show_title'])) {
+                                    unset($_SESSION['current_show_title']);
+                                }
+                            } else {
+                                // Ensure we have an array in the session
+                                if (!isset($_SESSION['import_season_ids']) || !is_array($_SESSION['import_season_ids'])) {
+                                    $_SESSION['import_season_ids'] = [];
+                                }
+                                
+                                // Ensure we're merging arrays, with proper null checks
+                                $importedIds = isset($batchResults['importedIds']) && is_array($batchResults['importedIds']) 
+                                    ? $batchResults['importedIds'] 
+                                    : [];
+                                
+                                $_SESSION['import_season_ids'] = array_merge($_SESSION['import_season_ids'], $importedIds);
+                                
+                                logDebug("Seasons: Stored IDs for next batch", [
+                                    'batch_count' => count($importedIds),
+                                    'session_total' => count($_SESSION['import_season_ids'])
+                                ]);
+                            }
+                            
+                            // Return batch progress information for the controller
+                            echo json_encode([
+                                'success' => true,
+                                'batchComplete' => true,
+                                'progress' => [
+                                    'processed' => $startIndex + 1,
+                                    'total' => count($shows),
+                                    'percentage' => round((($startIndex + 1) / count($shows)) * 100),
+                                    'isComplete' => $isComplete,
+                                    'nextIndex' => $isComplete ? null : $startIndex + 1,
+                                    'currentShow' => $show['title'],
+                                    'seasonCount' => count($items)
+                                ],
+                                'results' => $batchResults,
+                                'orphanedResults' => $orphanedResults,
+                                'totalStats' => [
+                                    'successful' => $batchResults['successful'] ?? 0,
+                                    'skipped' => $batchResults['skipped'] ?? 0,
+                                    'unchanged' => $batchResults['unchanged'] ?? 0,
+                                    'failed' => $batchResults['failed'] ?? 0,
+                                    'orphaned' => $orphanedResults ? (($orphanedResults['orphaned'] ?? 0) + ($orphanedResults['unmarked'] ?? 0)) : 0
+                                ]
+                            ]);
+                            exit;
+                        } else {
+                            // All done
+                            echo json_encode([
+                                'success' => true,
+                                'batchComplete' => true,
+                                'progress' => [
+                                    'processed' => count($shows),
+                                    'total' => count($shows),
+                                    'percentage' => 100,
+                                    'isComplete' => true,
+                                    'nextIndex' => null
+                                ],
+                                'results' => [
+                                    'successful' => 0,
+                                    'skipped' => 0,
+                                    'unchanged' => 0,
+                                    'failed' => 0,
+                                    'errors' => []
+                                ],
+                                'orphanedResults' => null,
+                                'totalStats' => [
+                                    'successful' => isset($_POST['totalSuccessful']) ? (int)$_POST['totalSuccessful'] : 0,
+                                    'skipped' => isset($_POST['totalSkipped']) ? (int)$_POST['totalSkipped'] : 0,
+                                    'unchanged' => isset($_POST['totalUnchanged']) ? (int)$_POST['totalUnchanged'] : 0,
+                                    'failed' => isset($_POST['totalFailed']) ? (int)$_POST['totalFailed'] : 0,
+                                    'orphaned' => 0
+                                ]
+                            ]);
+                            exit;
+                        }
+                    } else {
+                        // Non-batch processing or initial call - not recommended for large libraries
+                        $allSeasons = [];
+                        foreach ($shows as $show) {
+                            $seasonsResult = getAllPlexSeasons($plex_config['server_url'], $plex_config['token'], $show['ratingKey']);
+                            if ($seasonsResult['success'] && !empty($seasonsResult['data'])) {
+                                $allSeasons = array_merge($allSeasons, $seasonsResult['data']);
+                            }
+                        }
+                        $items = $allSeasons;
+                    }
+                } else {
+                    // Just get seasons for one show (original behavior)
+                    if (empty($showKey)) {
+                        throw new Exception('Show key is required for single-show seasons import');
+                    }
+                    
+                    // Get the show title based on the showKey
+                    $showTitle = '';
+                    $showDetailsUrl = rtrim($plex_config['server_url'], '/') . "/library/metadata/{$showKey}";
+                    $headers = [];
+                    foreach (getPlexHeaders($plex_config['token']) as $key => $value) {
+                        $headers[] = $key . ': ' . $value;
+                    }
 
-		                try {
-		                    $response = makeApiRequest($showDetailsUrl, $headers);
-		                    $data = json_decode($response, true);
-		                    
-		                    if (isset($data['MediaContainer']['Metadata'][0]['title'])) {
-		                        $showTitle = $data['MediaContainer']['Metadata'][0]['title'];
-		                        // Store in session for batch processing
-		                        $_SESSION['current_show_title'] = $showTitle;
-		                        logDebug("Retrieved show title for season import: {$showTitle}");
-		                    } else {
-		                        logDebug("Could not retrieve show title for showKey: {$showKey}");
-		                    }
-		                } catch (Exception $e) {
-		                    logDebug("Error retrieving show title: " . $e->getMessage());
-		                }
-		                
-		                if (isset($_POST['batchProcessing']) && $_POST['batchProcessing'] === 'true' && isset($_POST['startIndex'])) {
-		                    $startIndex = (int)$_POST['startIndex'];
-		                    $batchSize = $plex_config['import_batch_size'];
-		                    
-		                    // Get all seasons for this show
-		                    $result = getAllPlexSeasons($plex_config['server_url'], $plex_config['token'], $showKey);
-		                    if (!$result['success']) {
-		                        throw new Exception($result['error']);
-		                    }
-		                    $allSeasons = $result['data'];
-		                    
-		                    // Process this batch
-		                    $currentBatch = array_slice($allSeasons, $startIndex, $batchSize);
-		                    $endIndex = $startIndex + count($currentBatch);
-		                    $isComplete = $endIndex >= count($allSeasons);
-		                    
-		                    // Process the batch
-		                    $batchResults = processBatch($currentBatch, $plex_config['server_url'], $plex_config['token'], $targetDir, $overwriteOption);
-		                    
-		                    // Handle orphaned posters if this is the final batch
-		                    $orphanedResults = null;
-		                    if ($isComplete) {
-		                        // Safely get imported IDs from current batch
-		                        $allImportedIds = isset($batchResults['importedIds']) && is_array($batchResults['importedIds']) 
-		                            ? $batchResults['importedIds'] 
-		                            : [];
-		                        
-		                        logDebug("Seasons: Current batch imported IDs", [
-		                            'count' => count($allImportedIds),
-		                            'isArray' => is_array($allImportedIds)
-		                        ]);
-		                        
-		                        // Retrieve IDs from previous batches with proper null checks
-		                        if (isset($_SESSION['import_season_ids']) && is_array($_SESSION['import_season_ids'])) {
-		                            $allImportedIds = array_merge($allImportedIds, $_SESSION['import_season_ids']);
-		                            logDebug("Seasons: Added IDs from session", [
-		                                'session_count' => count($_SESSION['import_season_ids']),
-		                                'total_count' => count($allImportedIds)
-		                            ]);
-		                        }
-		                        
-								$orphanedResults = improvedMarkOrphanedPosters(
-									$targetDir, 
-									$allImportedIds, 
-									'**Orphaned**', 
-									'', 
-									$showTitle, 
-									'seasons',
-									$libraryId,
-									true // Refresh mode parameter
-								);
-		                        
-		                    	// Synchronize session data to persistent storage
-								syncSessionToStorage();
-								
-		                        // Clear the session
-		                        unset($_SESSION['import_season_ids']);
-		                        // Also clean up the show title after processing is complete
-		                        if (isset($_SESSION['current_show_title'])) {
-		                            unset($_SESSION['current_show_title']);
-		                        }
-		                    } else {
-		                        // Ensure we have an array in the session
-		                        if (!isset($_SESSION['import_season_ids']) || !is_array($_SESSION['import_season_ids'])) {
-		                            $_SESSION['import_season_ids'] = [];
-		                        }
-		                        
-		                        // Ensure we're merging arrays, with proper null checks
-		                        $importedIds = isset($batchResults['importedIds']) && is_array($batchResults['importedIds']) 
-		                            ? $batchResults['importedIds'] 
-		                            : [];
-		                        
-		                        $_SESSION['import_season_ids'] = array_merge($_SESSION['import_season_ids'], $importedIds);
-		                        
-		                        logDebug("Seasons: Stored IDs for next batch", [
-		                            'batch_count' => count($importedIds),
-		                            'session_total' => count($_SESSION['import_season_ids'])
-		                        ]);
-		                    }
+                    try {
+                        $response = makeApiRequest($showDetailsUrl, $headers);
+                        $data = json_decode($response, true);
+                        
+                        if (isset($data['MediaContainer']['Metadata'][0]['title'])) {
+                            $showTitle = $data['MediaContainer']['Metadata'][0]['title'];
+                            // Store in session for batch processing
+                            $_SESSION['current_show_title'] = $showTitle;
+                            logDebug("Retrieved show title for season import: {$showTitle}");
+                        } else {
+                            logDebug("Could not retrieve show title for showKey: {$showKey}");
+                        }
+                    } catch (Exception $e) {
+                        logDebug("Error retrieving show title: " . $e->getMessage());
+                    }
+                    
+                    if (isset($_POST['batchProcessing']) && $_POST['batchProcessing'] === 'true' && isset($_POST['startIndex'])) {
+                        $startIndex = (int)$_POST['startIndex'];
+                        $batchSize = $plex_config['import_batch_size'];
+                        
+                        // Get all seasons for this show
+                        $result = getAllPlexSeasons($plex_config['server_url'], $plex_config['token'], $showKey);
+                        if (!$result['success']) {
+                            throw new Exception($result['error']);
+                        }
+                        $allSeasons = $result['data'];
+                        
+                        // Process this batch
+                        $currentBatch = array_slice($allSeasons, $startIndex, $batchSize);
+                        $endIndex = $startIndex + count($currentBatch);
+                        $isComplete = $endIndex >= count($allSeasons);
+                        
+                        // Process the batch
+                        $batchResults = processBatch($currentBatch, $plex_config['server_url'], $plex_config['token'], $targetDir, $overwriteOption);
+                        
+                        // Handle orphaned posters if this is the final batch
+                        $orphanedResults = null;
+                        if ($isComplete) {
+                            // Safely get imported IDs from current batch
+                            $allImportedIds = isset($batchResults['importedIds']) && is_array($batchResults['importedIds']) 
+                                ? $batchResults['importedIds'] 
+                                : [];
+                            
+                            logDebug("Seasons: Current batch imported IDs", [
+                                'count' => count($allImportedIds),
+                                'isArray' => is_array($allImportedIds)
+                            ]);
+                            
+                            // Retrieve IDs from previous batches with proper null checks
+                            if (isset($_SESSION['import_season_ids']) && is_array($_SESSION['import_season_ids'])) {
+                                $allImportedIds = array_merge($allImportedIds, $_SESSION['import_season_ids']);
+                                logDebug("Seasons: Added IDs from session", [
+                                    'session_count' => count($_SESSION['import_season_ids']),
+                                    'total_count' => count($allImportedIds)
+                                ]);
+                            }
+                            
+                            // Use the enhanced orphan detection that checks for missing libraries
+                            $orphanedResults = enhancedMarkOrphanedPosters(
+                                $targetDir, 
+                                $allImportedIds, 
+                                '**Orphaned**', 
+                                '', 
+                                $showTitle, 
+                                'seasons',
+                                $libraryId,
+                                true, // Refresh mode parameter
+                                $availableLibraries // Pass the current available libraries
+                            );
+                            
+                            // Synchronize session data to persistent storage
+                            syncSessionToStorage();
+                            
+                            // Clear the session
+                            unset($_SESSION['import_season_ids']);
+                            // Also clean up the show title after processing is complete
+                            if (isset($_SESSION['current_show_title'])) {
+                                unset($_SESSION['current_show_title']);
+                            }
+                        } else {
+                            // Ensure we have an array in the session
+                            if (!isset($_SESSION['import_season_ids']) || !is_array($_SESSION['import_season_ids'])) {
+                                $_SESSION['import_season_ids'] = [];
+                            }
+                            
+                            // Ensure we're merging arrays, with proper null checks
+                            $importedIds = isset($batchResults['importedIds']) && is_array($batchResults['importedIds']) 
+                                ? $batchResults['importedIds'] 
+                                : [];
+                            
+                            $_SESSION['import_season_ids'] = array_merge($_SESSION['import_season_ids'], $importedIds);
+                            
+                            logDebug("Seasons: Stored IDs for next batch", [
+                                'batch_count' => count($importedIds),
+                                'session_total' => count($_SESSION['import_season_ids'])
+                            ]);
+                        }
 
-		                    // Respond with batch results and progress
-		                    echo json_encode([
-		                        'success' => true,
-		                        'batchComplete' => true,
-		                        'progress' => [
-		                            'processed' => $endIndex,
-		                            'total' => count($allSeasons),
-		                            'percentage' => round(($endIndex / count($allSeasons)) * 100),
-		                            'isComplete' => $isComplete,
-		                            'nextIndex' => $isComplete ? null : $endIndex
-		                        ],
-		                        'results' => $batchResults,
-		                        'orphanedResults' => $orphanedResults,
-		                        'totalStats' => [
-		                            'successful' => $batchResults['successful'] ?? 0,
-		                            'skipped' => $batchResults['skipped'] ?? 0,
-		                            'unchanged' => $batchResults['unchanged'] ?? 0,
-		                            'failed' => $batchResults['failed'] ?? 0,
-		                            'orphaned' => $orphanedResults ? (($orphanedResults['orphaned'] ?? 0) + ($orphanedResults['unmarked'] ?? 0)) : 0
-		                        ]
-		                    ]);
-		                    exit;
-		                } else {
-		                    // Get all seasons for this show
-		                    $result = getAllPlexSeasons($plex_config['server_url'], $plex_config['token'], $showKey);
-		                    if (!$result['success']) {
-		                        throw new Exception($result['error']);
-		                    }
-		                    $items = $result['data'];
-		                }
-		            }
-		            break;
-		        
-		        case 'collections':
-		            // Handle batch processing
-		            if (isset($_POST['batchProcessing']) && $_POST['batchProcessing'] === 'true' && isset($_POST['startIndex'])) {
-		                $startIndex = (int)$_POST['startIndex'];
-		                $batchSize = $plex_config['import_batch_size'];
-		                
-		                try {
-		                    // Get all collections using pagination
-		                    $result = getAllPlexCollections($plex_config['server_url'], $plex_config['token'], $libraryId);
-		                    if (!$result['success']) {
-		                        throw new Exception($result['error']);
-		                    }
-		                    
-		                    // Make sure we have an array of collections, never null
-		                    $allCollections = isset($result['data']) && is_array($result['data']) ? $result['data'] : [];
-		                    
-		                    // Get the library type (movie or show) to correctly label collections
-		                    $libraryType = '';
-		                    // First check if we already stored the library type in the session
-		                    if (isset($_SESSION['current_library_type'])) {
-		                        $libraryType = $_SESSION['current_library_type'];
-		                    } else {
-		                        // Otherwise, fetch the library details to determine its type
-		                        $librariesResult = getPlexLibraries($plex_config['server_url'], $plex_config['token']);
-		                        if ($librariesResult['success'] && !empty($librariesResult['data'])) {
-		                            foreach ($librariesResult['data'] as $lib) {
-		                                if ($lib['id'] == $libraryId) {
-		                                    $libraryType = $lib['type']; // 'movie' or 'show'
-		                                    // Store in session for subsequent batch calls
-		                                    $_SESSION['current_library_type'] = $libraryType;
-		                                    break;
-		                                }
-		                            }
-		                        }
-		                    }
-		                    
-		                    logDebug("Collections batch processing", [
-		                        'collections_count' => count($allCollections),
-		                        'startIndex' => $startIndex,
-		                        'batchSize' => $batchSize,
-		                        'libraryType' => $libraryType
-		                    ]);
-		                    
-		                    // Process this batch - make sure we don't go out of bounds
-		                    $currentBatch = [];
-		                    if ($startIndex < count($allCollections)) {
-		                        $currentBatch = array_slice($allCollections, $startIndex, $batchSize);
-		                    }
-		                    
-		                    $endIndex = $startIndex + count($currentBatch);
-		                    $isComplete = $endIndex >= count($allCollections);
-		                    
-		                    // Process the batch with library type information
-		                    $batchResults = processBatch($currentBatch, $plex_config['server_url'], $plex_config['token'], 
-		                                              $targetDir, $overwriteOption, $type, $libraryType);
-		                    
-		                    // Ensure batchResults is properly structured
-		                    if (!isset($batchResults['importedIds']) || !is_array($batchResults['importedIds'])) {
-		                        $batchResults['importedIds'] = [];
-		                    }
-		                    
-		                    // Create a collection-specific key for session storage that includes library type
-		                    $collectionSessionKey = 'import_collection_ids_' . $libraryType;
-		                    
-		                    // Handle orphaned posters if this is the final batch
-		                    $orphanedResults = null;
-		                    if ($isComplete) {
-		                        // Safely get imported IDs from current batch
-		                        $allImportedIds = isset($batchResults['importedIds']) && is_array($batchResults['importedIds']) 
-		                            ? $batchResults['importedIds'] 
-		                            : [];
-		                        
-		                        logDebug("Collections: Current batch imported IDs", [
-		                            'count' => count($allImportedIds),
-		                            'isArray' => is_array($allImportedIds),
-		                            'type' => $type,
-		                            'libraryType' => $libraryType
-		                        ]);
-		                        
-		                        // Retrieve IDs from previous batches with proper null checks - use type-specific key
-		                        if (isset($_SESSION[$collectionSessionKey]) && is_array($_SESSION[$collectionSessionKey])) {
-		                            $allImportedIds = array_merge($allImportedIds, $_SESSION[$collectionSessionKey]);
-		                            logDebug("Collections: Added IDs from session", [
-		                                'session_count' => count($_SESSION[$collectionSessionKey]),
-		                                'total_count' => count($allImportedIds),
-		                                'library_type' => $libraryType
-		                            ]);
-		                        }
-		                        
-								$orphanedResults = improvedMarkOrphanedPosters(
-									$targetDir, 
-									$allImportedIds, 
-									'**Orphaned**', 
-									$libraryType, 
-									'', 
-									'collections',
-									$libraryId,
-									true // Refresh mode parameter
-								);
-		                        
-		                       	// Synchronize session data to persistent storage
-								syncSessionToStorage();
-							
-		                        // Clear only the temporary session for the current import
-		                        unset($_SESSION[$collectionSessionKey]);
-		                        // Also clean up the library type after processing is complete
-		                        if (isset($_SESSION['current_library_type'])) {
-		                            unset($_SESSION['current_library_type']);
-		                        }
-		                    } else {
-		                        // Ensure we have an array in the session for this library type
-		                        if (!isset($_SESSION[$collectionSessionKey]) || !is_array($_SESSION[$collectionSessionKey])) {
-		                            $_SESSION[$collectionSessionKey] = [];
-		                        }
-		                        
-		                        // Ensure we're merging arrays, with proper null checks
-		                        $importedIds = isset($batchResults['importedIds']) && is_array($batchResults['importedIds']) 
-		                            ? $batchResults['importedIds'] 
-		                            : [];
-		                        
-		                        $_SESSION[$collectionSessionKey] = array_merge($_SESSION[$collectionSessionKey], $importedIds);
-		                        
-		                        logDebug("Collections: Stored IDs for next batch", [
-		                            'batch_count' => count($importedIds),
-		                            'session_total' => count($_SESSION[$collectionSessionKey]),
-		                            'type' => $type,
-		                            'libraryType' => $libraryType
-		                        ]);
-		                    }
-		                    
-		                    // Make sure these values are never null for the JSON response
-		                    if (!isset($orphanedResults) || !is_array($orphanedResults)) {
-		                        $orphanedResults = ['orphaned' => 0, 'unmarked' => 0, 'details' => []];
-		                    }
-		                    
-		                    // Make sure the progress values are valid
-		                    $totalCollections = count($allCollections);
-		                    $processedCount = $endIndex;
-		                    $percentage = $totalCollections > 0 ? round(($processedCount / $totalCollections) * 100) : 100;
-		                    
-		                    // Respond with batch results and progress - with extensive null checks
-		                    echo json_encode([
-		                        'success' => true,
-		                        'batchComplete' => true,
-		                        'progress' => [
-		                            'processed' => $processedCount,
-		                            'total' => $totalCollections,
-		                            'percentage' => $percentage,
-		                            'isComplete' => $isComplete,
-		                            'nextIndex' => $isComplete ? null : $endIndex
-		                        ],
-		                        'results' => $batchResults,
-		                        'orphanedResults' => $orphanedResults,
-		                        'totalStats' => [
-		                            'successful' => $batchResults['successful'] ?? 0,
-		                            'skipped' => $batchResults['skipped'] ?? 0,
-		                            'unchanged' => $batchResults['unchanged'] ?? 0,
-		                            'failed' => $batchResults['failed'] ?? 0,
-		                            'orphaned' => ($orphanedResults['orphaned'] ?? 0) + ($orphanedResults['unmarked'] ?? 0)
-		                        ]
-		                    ]);
-		                    exit;
-		                    
-		                } catch (Exception $e) {
-		                    // Log the error and provide detailed information
-		                    logDebug("Collections batch processing error", [
-		                        'error' => $e->getMessage(),
-		                        'trace' => $e->getTraceAsString()
-		                    ]);
-		                    
-		                    echo json_encode([
-		                        'success' => false,
-		                        'error' => 'Error processing collections: ' . $e->getMessage()
-		                    ]);
-		                    exit;
-		                }
-		            } else {
-		                // Process all collections at once
-		                $result = getAllPlexCollections($plex_config['server_url'], $plex_config['token'], $libraryId);
-		                if (!$result['success']) {
-		                    throw new Exception($result['error']);
-		                }
-		                
-		                // Get the library type (movie or show) for collection labeling
-		                $libraryType = '';
-		                $librariesResult = getPlexLibraries($plex_config['server_url'], $plex_config['token']);
-		                if ($librariesResult['success'] && !empty($librariesResult['data'])) {
-		                    foreach ($librariesResult['data'] as $lib) {
-		                        if ($lib['id'] == $libraryId) {
-		                            $libraryType = $lib['type']; // 'movie' or 'show'
-		                            break;
-		                        }
-		                    }
-		                }
-		                
-		                $items = $result['data'];
-		                
-		                // If we're not batch processing, we need to store the library type for processBatch
-		                $_SESSION['current_library_type'] = $libraryType;
-		            }
-		            break;
-		        
-		        default:
-		            throw new Exception('Invalid import type');
-		    }
-		    
-		    // This code will only execute for non-batch processing, which is not recommended for large libraries
-		    // Process all items
-		    $results = processBatch($items, $plex_config['server_url'], $plex_config['token'], $targetDir, $overwriteOption, $type);
-		    
-		    // For non-batch processing, also use improved orphan detection
-		    $orphanedResults = improvedMarkOrphanedPosters(
-		        $targetDir, 
-		        isset($results['importedIds']) ? $results['importedIds'] : [], 
-		        '**Orphaned**', 
-		        $libraryType ?? '', 
-		        $showTitle ?? '', 
-		        $type,
-		        $libraryId
-		    );
-		    
-		    echo json_encode([
-		        'success' => true,
-		        'complete' => true,
-		        'processed' => count($items),
-		        'results' => $results,
-		        'orphanedResults' => $orphanedResults,
-		        'totalStats' => [
-		            'successful' => $results['successful'],
-		            'skipped' => $results['skipped'],
-		            'unchanged' => $results['unchanged'],
-		            'failed' => $results['failed'],
-		            'orphaned' => ($orphanedResults['orphaned'] ?? 0) + ($orphanedResults['unmarked'] ?? 0)
-		        ]
-		    ]);
-		    exit;
-		    
-		} catch (Exception $e) {
-		    echo json_encode(['success' => false, 'error' => $e->getMessage()]);
-		    exit;
-		}
-	}
+                        // Respond with batch results and progress
+                        echo json_encode([
+                            'success' => true,
+                            'batchComplete' => true,
+                            'progress' => [
+                                'processed' => $endIndex,
+                                'total' => count($allSeasons),
+                                'percentage' => round(($endIndex / count($allSeasons)) * 100),
+                                'isComplete' => $isComplete,
+                                'nextIndex' => $isComplete ? null : $endIndex
+                            ],
+                            'results' => $batchResults,
+                            'orphanedResults' => $orphanedResults,
+                            'totalStats' => [
+                                'successful' => $batchResults['successful'] ?? 0,
+                                'skipped' => $batchResults['skipped'] ?? 0,
+                                'unchanged' => $batchResults['unchanged'] ?? 0,
+                                'failed' => $batchResults['failed'] ?? 0,
+                                'orphaned' => $orphanedResults ? (($orphanedResults['orphaned'] ?? 0) + ($orphanedResults['unmarked'] ?? 0)) : 0
+                            ]
+                        ]);
+                        exit;
+                    } else {
+                        // Get all seasons for this show
+                        $result = getAllPlexSeasons($plex_config['server_url'], $plex_config['token'], $showKey);
+                        if (!$result['success']) {
+                            throw new Exception($result['error']);
+                        }
+                        $items = $result['data'];
+                    }
+                }
+                break;
+            
+            case 'collections':
+                // Handle batch processing
+                if (isset($_POST['batchProcessing']) && $_POST['batchProcessing'] === 'true' && isset($_POST['startIndex'])) {
+                    $startIndex = (int)$_POST['startIndex'];
+                    $batchSize = $plex_config['import_batch_size'];
+                    
+                    try {
+                        // Get all collections using pagination
+                        $result = getAllPlexCollections($plex_config['server_url'], $plex_config['token'], $libraryId);
+                        if (!$result['success']) {
+                            throw new Exception($result['error']);
+                        }
+                        
+                        // Make sure we have an array of collections, never null
+                        $allCollections = isset($result['data']) && is_array($result['data']) ? $result['data'] : [];
+                        
+                        // Get the library type (movie or show) to correctly label collections
+                        $libraryType = '';
+                        // First check if we already stored the library type in the session
+                        if (isset($_SESSION['current_library_type'])) {
+                            $libraryType = $_SESSION['current_library_type'];
+                        } else {
+                            // Otherwise, fetch the library details to determine its type
+                            $librariesResult = getPlexLibraries($plex_config['server_url'], $plex_config['token']);
+                            if ($librariesResult['success'] && !empty($librariesResult['data'])) {
+                                foreach ($librariesResult['data'] as $lib) {
+                                    if ($lib['id'] == $libraryId) {
+                                        $libraryType = $lib['type']; // 'movie' or 'show'
+                                        // Store in session for subsequent batch calls
+                                        $_SESSION['current_library_type'] = $libraryType;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        
+                        logDebug("Collections batch processing", [
+                            'collections_count' => count($allCollections),
+                            'startIndex' => $startIndex,
+                            'batchSize' => $batchSize,
+                            'libraryType' => $libraryType
+                        ]);
+                        
+                        // Process this batch - make sure we don't go out of bounds
+                        $currentBatch = [];
+                        if ($startIndex < count($allCollections)) {
+                            $currentBatch = array_slice($allCollections, $startIndex, $batchSize);
+                        }
+                        
+                        $endIndex = $startIndex + count($currentBatch);
+                        $isComplete = $endIndex >= count($allCollections);
+                        
+                        // Process the batch with library type information
+                        $batchResults = processBatch($currentBatch, $plex_config['server_url'], $plex_config['token'], 
+                                                  $targetDir, $overwriteOption, $type, $libraryType);
+                        
+                        // Ensure batchResults is properly structured
+                        if (!isset($batchResults['importedIds']) || !is_array($batchResults['importedIds'])) {
+                            $batchResults['importedIds'] = [];
+                        }
+                        
+                        // Create a collection-specific key for session storage that includes library type
+                        $collectionSessionKey = 'import_collection_ids_' . $libraryType;
+                        
+                        // Handle orphaned posters if this is the final batch
+                        $orphanedResults = null;
+                        if ($isComplete) {
+                            // Safely get imported IDs from current batch
+                            $allImportedIds = isset($batchResults['importedIds']) && is_array($batchResults['importedIds']) 
+                                ? $batchResults['importedIds'] 
+                                : [];
+                            
+                            logDebug("Collections: Current batch imported IDs", [
+                                'count' => count($allImportedIds),
+                                'isArray' => is_array($allImportedIds),
+                                'type' => $type,
+                                'libraryType' => $libraryType
+                            ]);
+                            
+                            // Retrieve IDs from previous batches with proper null checks - use type-specific key
+                            if (isset($_SESSION[$collectionSessionKey]) && is_array($_SESSION[$collectionSessionKey])) {
+                                $allImportedIds = array_merge($allImportedIds, $_SESSION[$collectionSessionKey]);
+                                logDebug("Collections: Added IDs from session", [
+                                    'session_count' => count($_SESSION[$collectionSessionKey]),
+                                    'total_count' => count($allImportedIds),
+                                    'library_type' => $libraryType
+                                ]);
+                            }
+                            
+                            // Use the enhanced orphan detection that checks for missing libraries
+                            $orphanedResults = enhancedMarkOrphanedPosters(
+                                $targetDir, 
+                                $allImportedIds, 
+                                '**Orphaned**', 
+                                $libraryType, 
+                                '', 
+                                'collections',
+                                $libraryId,
+                                true, // Refresh mode parameter
+                                $availableLibraries // Pass the current available libraries
+                            );
+                            
+                            // Synchronize session data to persistent storage
+                            syncSessionToStorage();
+                        
+                            // Clear only the temporary session for the current import
+                            unset($_SESSION[$collectionSessionKey]);
+                            // Also clean up the library type after processing is complete
+                            if (isset($_SESSION['current_library_type'])) {
+                                unset($_SESSION['current_library_type']);
+                            }
+                        } else {
+                            // Ensure we have an array in the session for this library type
+                            if (!isset($_SESSION[$collectionSessionKey]) || !is_array($_SESSION[$collectionSessionKey])) {
+                                $_SESSION[$collectionSessionKey] = [];
+                            }
+                            
+                            // Ensure we're merging arrays, with proper null checks
+                            $importedIds = isset($batchResults['importedIds']) && is_array($batchResults['importedIds']) 
+                                ? $batchResults['importedIds'] 
+                                : [];
+                            
+                            $_SESSION[$collectionSessionKey] = array_merge($_SESSION[$collectionSessionKey], $importedIds);
+                            
+                            logDebug("Collections: Stored IDs for next batch", [
+                                'batch_count' => count($importedIds),
+                                'session_total' => count($_SESSION[$collectionSessionKey]),
+                                'type' => $type,
+                                'libraryType' => $libraryType
+                            ]);
+                        }
+                        
+                        // Make sure these values are never null for the JSON response
+                        if (!isset($orphanedResults) || !is_array($orphanedResults)) {
+                            $orphanedResults = ['orphaned' => 0, 'unmarked' => 0, 'details' => []];
+                        }
+                        
+                        // Make sure the progress values are valid
+                        $totalCollections = count($allCollections);
+                        $processedCount = $endIndex;
+                        $percentage = $totalCollections > 0 ? round(($processedCount / $totalCollections) * 100) : 100;
+                        
+                        // Respond with batch results and progress - with extensive null checks
+                        echo json_encode([
+                            'success' => true,
+                            'batchComplete' => true,
+                            'progress' => [
+                                'processed' => $processedCount,
+                                'total' => $totalCollections,
+                                'percentage' => $percentage,
+                                'isComplete' => $isComplete,
+                                'nextIndex' => $isComplete ? null : $endIndex
+                            ],
+                            'results' => $batchResults,
+                            'orphanedResults' => $orphanedResults,
+                            'totalStats' => [
+                                'successful' => $batchResults['successful'] ?? 0,
+                                'skipped' => $batchResults['skipped'] ?? 0,
+                                'unchanged' => $batchResults['unchanged'] ?? 0,
+                                'failed' => $batchResults['failed'] ?? 0,
+                                'orphaned' => ($orphanedResults['orphaned'] ?? 0) + ($orphanedResults['unmarked'] ?? 0)
+                            ]
+                        ]);
+                        exit;
+                        
+                    } catch (Exception $e) {
+                        // Log the error and provide detailed information
+                        logDebug("Collections batch processing error", [
+                            'error' => $e->getMessage(),
+                            'trace' => $e->getTraceAsString()
+                        ]);
+                        
+                        echo json_encode([
+                            'success' => false,
+                            'error' => 'Error processing collections: ' . $e->getMessage()
+                        ]);
+                        exit;
+                    }
+                } else {
+                    // Process all collections at once
+                    $result = getAllPlexCollections($plex_config['server_url'], $plex_config['token'], $libraryId);
+                    if (!$result['success']) {
+                        throw new Exception($result['error']);
+                    }
+                    
+                    // Get the library type (movie or show) for collection labeling
+                    $libraryType = '';
+                    $librariesResult = getPlexLibraries($plex_config['server_url'], $plex_config['token']);
+                    if ($librariesResult['success'] && !empty($librariesResult['data'])) {
+                        foreach ($librariesResult['data'] as $lib) {
+                            if ($lib['id'] == $libraryId) {
+                                $libraryType = $lib['type']; // 'movie' or 'show'
+                                break;
+                            }
+                        }
+                    }
+                    
+                    $items = $result['data'];
+                    
+                    // If we're not batch processing, we need to store the library type for processBatch
+                    $_SESSION['current_library_type'] = $libraryType;
+                }
+                break;
+            
+            default:
+                throw new Exception('Invalid import type');
+        }
+        
+        // This code will only execute for non-batch processing, which is not recommended for large libraries
+        // Process all items
+        $results = processBatch($items, $plex_config['server_url'], $plex_config['token'], $targetDir, $overwriteOption, $type);
+        
+        // For non-batch processing, also use enhanced orphan detection
+        $orphanedResults = enhancedMarkOrphanedPosters(
+            $targetDir, 
+            isset($results['importedIds']) ? $results['importedIds'] : [], 
+            '**Orphaned**', 
+            $libraryType ?? '', 
+            $showTitle ?? '', 
+            $type,
+            $libraryId,
+            true,
+            $availableLibraries // Pass the current available libraries
+        );
+        
+        echo json_encode([
+            'success' => true,
+            'complete' => true,
+            'processed' => count($items),
+            'results' => $results,
+            'orphanedResults' => $orphanedResults,
+            'totalStats' => [
+                'successful' => $results['successful'],
+                'skipped' => $results['skipped'],
+                'unchanged' => $results['unchanged'],
+                'failed' => $results['failed'],
+                'orphaned' => ($orphanedResults['orphaned'] ?? 0) + ($orphanedResults['unmarked'] ?? 0)
+            ]
+        ]);
+        exit;
+        
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+        exit;
+    }
+}
 
     // Default response if no action matched
     logDebug("No matching action found");
