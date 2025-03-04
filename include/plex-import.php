@@ -88,6 +88,8 @@ try {
     if (!session_id()) {
         session_start();
     }
+    
+    require_once './plex_id_storage.php';
 
     // Log the request
     logDebug("Request received", [
@@ -139,6 +141,9 @@ try {
 
     // Refresh session time
     $_SESSION['login_time'] = time();
+    
+    // Initialize session data from persistent storage
+	initializeSessionFromStorage();
 
     // Helper Functions
     function sanitizeFilename($filename) {
@@ -863,129 +868,132 @@ try {
 	}
 	
 	/**
-	 * Clear stored IDs for a specific media type and library
+	 * Main function to handle the detection and marking of orphaned posters
+	 * for any media type at the end of a batch import process.
 	 * 
 	 * @param string $mediaType Type of media (movies, shows, seasons, collections)
-	 * @param string $libraryId The Plex library ID
-	 * @return bool Success indicator
+	 * @param string $libraryId The library ID being processed
+	 * @param array $importedIds IDs imported in the current session
+	 * @param string $targetDir Directory to check for orphaned posters
+	 * @param string $showTitle Optional - for seasons, only process files for this show
+	 * @param string $libraryType Optional - for collections, the library type (movie/show)
+	 * @return array Results with count of orphaned files
 	 */
-	function clearStoredIds($mediaType, $libraryId = null) {
-		if (!isset($_SESSION['valid_plex_ids'])) {
-		    return true; // Nothing to clear
-		}
+	function handleOrphanedPosters($mediaType, $libraryId, $importedIds, $targetDir, $showTitle = '', $libraryType = '') {
+		// First, store the imported IDs in persistent storage
+		storeValidIds($importedIds, $mediaType, $libraryId, true); // Replace mode = true
 		
-		if ($libraryId === null) {
-		    // Clear all IDs for this media type
-		    if (isset($_SESSION['valid_plex_ids'][$mediaType])) {
-		        unset($_SESSION['valid_plex_ids'][$mediaType]);
-		        logDebug("Cleared all stored IDs for media type: {$mediaType}");
-		    }
-		} else {
-		    // Clear only IDs for this specific library
-		    if (isset($_SESSION['valid_plex_ids'][$mediaType][$libraryId])) {
-		        unset($_SESSION['valid_plex_ids'][$mediaType][$libraryId]);
-		        logDebug("Cleared stored IDs for media type: {$mediaType}, library: {$libraryId}");
-		    }
-		}
+		// Synchronize session to storage to ensure persistence
+		syncSessionToStorage();
 		
-		return true;
+		// Now detect and mark orphaned posters
+		$orphanedResults = improvedMarkOrphanedPosters(
+		    $targetDir,
+		    $importedIds,
+		    '**Orphaned**',
+		    $libraryType,
+		    $showTitle,
+		    $mediaType,
+		    $libraryId,
+		    true // Refresh mode = true
+		);
+		
+		return $orphanedResults;
+	}
+
+	/**
+	 * Main function to handle the detection and marking of orphaned posters
+	 * for any media type at the end of a batch import process.
+	 * 
+	 * @param string $mediaType Type of media (movies, shows, seasons, collections)
+	 * @param string $libraryId The library ID being processed
+	 * @param array $importedIds IDs imported in the current session
+	 * @param string $targetDir Directory to check for orphaned posters
+	 * @param string $showTitle Optional - for seasons, only process files for this show
+	 * @param string $libraryType Optional - for collections, the library type (movie/show)
+	 * @return array Results with count of orphaned files
+	 */
+	function handleOrphanedPosters($mediaType, $libraryId, $importedIds, $targetDir, $showTitle = '', $libraryType = '') {
+		// First, store the imported IDs in persistent storage
+		storeValidIds($importedIds, $mediaType, $libraryId, true); // Replace mode = true
+		
+		// Synchronize session to storage to ensure persistence
+		syncSessionToStorage();
+		
+		// Now detect and mark orphaned posters
+		$orphanedResults = improvedMarkOrphanedPosters(
+		    $targetDir,
+		    $importedIds,
+		    '**Orphaned**',
+		    $libraryType,
+		    $showTitle,
+		    $mediaType,
+		    $libraryId,
+		    true // Refresh mode = true
+		);
+		
+		return $orphanedResults;
 	}
 	
 	/**
-	 * Modified store function that can replace existing IDs instead of merging
-	 * 
-	 * @param array $newIds Array of IDs that were just imported
-	 * @param string $mediaType Type of media (movies, shows, seasons, collections)
-	 * @param string $libraryId The Plex library ID these items came from
-	 * @param bool $replaceExisting Whether to replace existing IDs (true) or merge with them (false)
+	 * Handle orphaned detection at the end of movie batch processing
 	 */
-	function storeValidIds($newIds, $mediaType, $libraryId, $replaceExisting = false) {
-		if (!isset($_SESSION['valid_plex_ids'])) {
-		    $_SESSION['valid_plex_ids'] = [];
-		}
-		
-		if (!isset($_SESSION['valid_plex_ids'][$mediaType])) {
-		    $_SESSION['valid_plex_ids'][$mediaType] = [];
-		}
-		
-		// If replace mode, clear existing IDs for this library first
-		if ($replaceExisting && isset($_SESSION['valid_plex_ids'][$mediaType][$libraryId])) {
-		    unset($_SESSION['valid_plex_ids'][$mediaType][$libraryId]);
-		}
-		
-		// Store or update IDs for this specific library
-		$_SESSION['valid_plex_ids'][$mediaType][$libraryId] = $newIds;
-		
-		logDebug("Stored valid IDs", [
-		    'mediaType' => $mediaType,
-		    'libraryId' => $libraryId,
-		    'newCount' => count($newIds),
-		    'replaceMode' => $replaceExisting ? 'Yes' : 'No',
-		    'totalLibraries' => count($_SESSION['valid_plex_ids'][$mediaType])
-		]);
-		
-		return true;
+	function handleMovieOrphanedDetection($libraryId, $allImportedIds) {
+		$targetDir = '../posters/movies/';
+		return handleOrphanedPosters('movies', $libraryId, $allImportedIds, $targetDir);
 	}
 
 	/**
-	 * Get all valid IDs for a media type across all libraries
-	 * 
-	 * @param string $mediaType Type of media (movies, shows, seasons, collections)
-	 * @return array Array of all valid IDs for this media type
+	 * Handle orphaned detection at the end of TV show batch processing
 	 */
-	function getAllValidIds($mediaType) {
-		if (!isset($_SESSION['valid_plex_ids']) || !isset($_SESSION['valid_plex_ids'][$mediaType])) {
-		    return [];
-		}
-		
-		$allIds = [];
-		foreach ($_SESSION['valid_plex_ids'][$mediaType] as $libraryIds) {
-		    if (is_array($libraryIds)) {
-		        $allIds = array_merge($allIds, $libraryIds);
-		    }
-		}
-		
-		logDebug("Retrieved all valid IDs", [
-		    'mediaType' => $mediaType,
-		    'totalIdCount' => count($allIds),
-		    'libraryCount' => count($_SESSION['valid_plex_ids'][$mediaType])
-		]);
-		
-		return $allIds;
+	function handleShowOrphanedDetection($libraryId, $allImportedIds) {
+		$targetDir = '../posters/tv-shows/';
+		return handleOrphanedPosters('shows', $libraryId, $allImportedIds, $targetDir);
 	}
 
 	/**
-	 * Get IDs that belong to specific libraries
-	 * 
-	 * @param string $mediaType Type of media (movies, shows, seasons, collections)
-	 * @param string $libraryId Specific library ID to get IDs for (optional)
-	 * @return array IDs for the specified library or all libraries
+	 * Handle orphaned detection at the end of season batch processing
 	 */
-	function getLibrarySpecificIds($mediaType, $libraryId = null) {
-		if (!isset($_SESSION['valid_plex_ids']) || !isset($_SESSION['valid_plex_ids'][$mediaType])) {
-		    return [];
-		}
-		
-		if ($libraryId !== null && isset($_SESSION['valid_plex_ids'][$mediaType][$libraryId])) {
-		    return $_SESSION['valid_plex_ids'][$mediaType][$libraryId];
-		}
-		
-		return getAllValidIds($mediaType);
+	function handleSeasonOrphanedDetection($libraryId, $allImportedIds, $showTitle = '') {
+		$targetDir = '../posters/tv-seasons/';
+		return handleOrphanedPosters('seasons', $libraryId, $allImportedIds, $targetDir, $showTitle);
 	}
 
 	/**
-	 * Marks orphaned poster files in the specified directory, improved to handle multiple libraries
-	 * with refresh mode capability
+	 * Handle orphaned detection at the end of collection batch processing
+	 */
+	function handleCollectionOrphanedDetection($libraryId, $allImportedIds, $libraryType) {
+		$targetDir = '../posters/collections/';
+		return handleOrphanedPosters('collections', $libraryId, $allImportedIds, $targetDir, '', $libraryType);
+	}
+
+	/**
+	 * Ensure session is cleared properly after processing completes
+	 */
+	function cleanupAfterImport($mediaType) {
+		// Clean up session variables for this media type
+		if (isset($_SESSION['import_' . $mediaType . '_ids'])) {
+		    unset($_SESSION['import_' . $mediaType . '_ids']);
+		}
+		
+		// Also clean up show title and library type if needed
+		if (isset($_SESSION['current_show_title'])) {
+		    unset($_SESSION['current_show_title']);
+		}
+		
+		if (isset($_SESSION['current_library_type'])) {
+		    unset($_SESSION['current_library_type']);
+		}
+		
+		// Synchronize changes to persistent storage
+		syncSessionToStorage();
+	}
+
+	/**
+	 * Improved function to detect orphaned files more consistently
 	 * 
-	 * @param string $targetDir Directory to check for orphaned posters
-	 * @param array $currentImportIds IDs from the current import session
-	 * @param string $orphanedTag Tag to replace **Plex** with in orphaned filenames
-	 * @param string $libraryType The library type (movie/show) for collections
-	 * @param string $showTitle The show title for seasons processing
-	 * @param string $mediaType The type of media being processed (movies, shows, seasons, collections)
-	 * @param string $libraryId The ID of the library being processed
-	 * @param bool $refreshMode Whether to clear existing stored IDs for this library before processing
-	 * @return array Results with counts and details of orphaned files
+	 * This replaces the existing implementation to ensure all media types
+	 * are handled the same way and orphaned detection works across libraries.
 	 */
 	function improvedMarkOrphanedPosters($targetDir, $currentImportIds, $orphanedTag = '**Orphaned**', 
 		                                 $libraryType = '', $showTitle = '', $mediaType = '', 
@@ -1009,20 +1017,16 @@ try {
 		// Get ALL valid IDs for this media type across ALL libraries
 		$allValidIds = getAllValidIds($mediaType);
 		
+		// Log the state for debugging
+		logDebug("Orphaned detection for {$mediaType} - library {$libraryId}", [
+		    'importedIdsCount' => count($currentImportIds),
+		    'validIdsCount' => count($allValidIds),
+		    'refreshMode' => $refreshMode ? 'Replace' : 'Merge'
+		]);
+		
 		// Get all files in the directory
 		$files = glob($targetDir . '/*');
 		$plexTag = '**Plex**';
-		
-		// Log what we're checking for debugging
-		logDebug("improvedMarkOrphanedPosters checking", [
-		    'mediaType' => $mediaType,
-		    'libraryId' => $libraryId,
-		    'showTitle' => $showTitle,
-		    'refreshMode' => $refreshMode ? 'Yes' : 'No',
-		    'currentImportIdsCount' => count($currentImportIds),
-		    'allValidIdsCount' => count($allValidIds),
-		    'fileCount' => count($files)
-		]);
 		
 		// For seasons with show titles, prepare normalized values for comparison
 		$normalizedShowTitle = '';
@@ -1112,7 +1116,8 @@ try {
 		                'oldName' => $filename,
 		                'newName' => $newFilename,
 		                'fileId' => $fileId,
-		                'reason' => $refreshMode ? 'refresh mode' : 'not in valid IDs'
+		                'mediaType' => $mediaType,
+		                'libraryId' => $libraryId
 		            ]);
 		            
 		            if (rename($file, $newPath)) {
@@ -1151,16 +1156,6 @@ try {
 	function setCurrentLibraryId($libraryId) {
 		$_SESSION['current_library_id'] = $libraryId;
 		logDebug("Set current library ID: " . $libraryId);
-	}
-
-	/**
-	 * Reset stored IDs for testing or troubleshooting
-	 */
-	function resetStoredIds() {
-		if (isset($_SESSION['valid_plex_ids'])) {
-		    unset($_SESSION['valid_plex_ids']);
-		}
-		logDebug("Reset all stored valid IDs");
 	}
 
     // API Endpoints
@@ -1318,6 +1313,9 @@ try {
 								true // This is the refresh mode parameter - true means replace IDs, not merge
 							);
 			
+							// Synchronize session data to persistent storage
+							syncSessionToStorage();
+							
 		                    // Clear the session
 		                    unset($_SESSION['import_movie_ids']);
 		                } else {
@@ -1424,7 +1422,10 @@ try {
 								$libraryId,
 								true // Refresh mode parameter
 							);
-		                    
+
+							// Synchronize session data to persistent storage
+							syncSessionToStorage();
+							
 		                    // Clear the session
 		                    unset($_SESSION['import_show_ids']);
 		                } else {
@@ -1568,7 +1569,10 @@ try {
 										$libraryId,
 										true // Refresh mode parameter
 									);
-		                            
+
+									// Synchronize session data to persistent storage
+									syncSessionToStorage();
+							
 		                            // Clear the session
 		                            unset($_SESSION['import_season_ids']);
 		                            if (isset($_SESSION['current_show_title'])) {
@@ -1740,6 +1744,9 @@ try {
 									true // Refresh mode parameter
 								);
 		                        
+		                    	// Synchronize session data to persistent storage
+								syncSessionToStorage();
+								
 		                        // Clear the session
 		                        unset($_SESSION['import_season_ids']);
 		                        // Also clean up the show title after processing is complete
@@ -1898,6 +1905,9 @@ try {
 									true // Refresh mode parameter
 								);
 		                        
+		                       	// Synchronize session data to persistent storage
+								syncSessionToStorage();
+							
 		                        // Clear only the temporary session for the current import
 		                        unset($_SESSION[$collectionSessionKey]);
 		                        // Also clean up the library type after processing is complete
