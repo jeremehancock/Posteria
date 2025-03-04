@@ -84,11 +84,14 @@ The Docker container uses the following volume mounts:
 
 1. Access the web interface at `http://your-server:1818`
 2. Log in using your configured credentials
-3. Upload posters via the upload button:
-   - Support for local file upload
-   - Support for direct URL upload
-4. Import posters from your Plex Media Server
-5. Export posters to your Plex Media Server
+3. Import posters form Plex
+4. Change posters:
+	- Support for local file upload
+	- Support for direct URL upload
+5. Posters are automatically updated on Plex
+6. Bulk export options also available
+7. As you add more media to Plex just re-import to add new posters
+8. Orphaned poster detection
 
 ## Security Considerations
 
