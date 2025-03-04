@@ -1786,14 +1786,81 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			100% { transform: rotate(360deg); }
 		}
 
-		/* ==========================================================================
-		   18. Plex Integration
-		   ========================================================================== */
-		/* Handled in other sections for better organization */
 
 		/* ==========================================================================
-		   19. Media Queries
+		   19. Footer
 		   ========================================================================== */
+		.footer {
+			margin-top: 15px;
+			padding: 30px 20px;
+		}
+
+		.footer-content {
+			max-width: 1200px;
+			margin: 0 auto;
+			display: flex;
+			flex-direction: row-reverse;
+			justify-content: center;
+			align-items: center;
+			gap: 10px;
+		}
+
+		.copyright {
+			color: var(--text-secondary);
+			font-size: 14px;
+			letter-spacing: 0.02em;
+		}
+
+		.footer-links {
+			display: flex;
+			gap: 24px;
+			justify-content: center;
+		}
+
+		.footer-link {
+			color: var(--text-secondary);
+			transition: all 0.3s ease;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			padding: 8px;
+			border-radius: 50%;
+			background: var(--bg-tertiary);
+		}
+
+		.footer-link:hover {
+			color: var(--accent-primary);
+			transform: translateY(-3px);
+			box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+		}
+
+		.footer-icon {
+			width: 20px;
+			height: 20px;
+		}
+		/* ==========================================================================
+		   20. Media Queries
+		   ========================================================================== */
+		   
+		@media (max-width: 480px) {
+			.footer {
+				padding: 20px 15px;
+			}
+			
+			.footer-content {
+				gap: 15px;
+			}
+			
+			.footer-links {
+				gap: 16px;
+			}
+			
+			.footer-link {
+				width: 36px;
+				height: 36px;
+			}
+		}
+
 		@media (hover: none) {
 			.gallery-item:hover {
 				transform: none;
@@ -2669,6 +2736,28 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		    </div>
 		</div>
 	</div>
+	
+	<!-- Footer -->
+	<footer class="footer">
+		<div class="footer-content">
+			<div class="footer-links">
+				<a href="https://github.com/jeremehancock/Posteria" target="_blank" class="footer-link" title="GitHub Repository">
+					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="footer-icon">
+						<path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
+					</svg>
+				</a>
+			</div>
+			<div class="copyright">
+		        <script>
+		            const startYear = 2025; 
+		            const today = new Date();
+		            const currentYear = today.getFullYear();
+		            document.write('© ' + (currentYear === startYear ? startYear : startYear + '-' + currentYear));
+		        </script>
+		        Posteria. MIT License.
+			</div>
+		</div>
+	</footer>
 <script>
 	document.addEventListener('DOMContentLoaded', function() {
 		// =========== GLOBAL VARIABLES & STATE ===========
