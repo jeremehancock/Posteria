@@ -533,6 +533,17 @@ try {
                 exit;
             }
             
+            // Add .jpg extension to api.mediux.pro URLs if extension is missing
+            if (strpos($url, 'api.mediux.pro') !== false) {
+                $urlPath = parse_url($url, PHP_URL_PATH);
+                $urlExt = strtolower(pathinfo($urlPath, PATHINFO_EXTENSION));
+                
+                // If URL doesn't already have an extension, add .jpg
+                if (empty($urlExt)) {
+                    $url .= '.jpg';
+                }
+            }
+            
             // Get file info from URL
             $urlExt = strtolower(pathinfo(parse_url($url, PHP_URL_PATH), PATHINFO_EXTENSION));
             
