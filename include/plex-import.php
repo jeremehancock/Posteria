@@ -863,19 +863,54 @@ try {
 	}
 	
 	/**
-	 * Store imported IDs persistently to prevent incorrect orphan marking
+	 * Clear stored IDs for a specific media type and library
+	 * 
+	 * @param string $mediaType Type of media (movies, shows, seasons, collections)
+	 * @param string $libraryId The Plex library ID
+	 * @return bool Success indicator
+	 */
+	function clearStoredIds($mediaType, $libraryId = null) {
+		if (!isset($_SESSION['valid_plex_ids'])) {
+		    return true; // Nothing to clear
+		}
+		
+		if ($libraryId === null) {
+		    // Clear all IDs for this media type
+		    if (isset($_SESSION['valid_plex_ids'][$mediaType])) {
+		        unset($_SESSION['valid_plex_ids'][$mediaType]);
+		        logDebug("Cleared all stored IDs for media type: {$mediaType}");
+		    }
+		} else {
+		    // Clear only IDs for this specific library
+		    if (isset($_SESSION['valid_plex_ids'][$mediaType][$libraryId])) {
+		        unset($_SESSION['valid_plex_ids'][$mediaType][$libraryId]);
+		        logDebug("Cleared stored IDs for media type: {$mediaType}, library: {$libraryId}");
+		    }
+		}
+		
+		return true;
+	}
+	
+	/**
+	 * Modified store function that can replace existing IDs instead of merging
 	 * 
 	 * @param array $newIds Array of IDs that were just imported
 	 * @param string $mediaType Type of media (movies, shows, seasons, collections)
 	 * @param string $libraryId The Plex library ID these items came from
+	 * @param bool $replaceExisting Whether to replace existing IDs (true) or merge with them (false)
 	 */
-	function storeValidIds($newIds, $mediaType, $libraryId) {
+	function storeValidIds($newIds, $mediaType, $libraryId, $replaceExisting = false) {
 		if (!isset($_SESSION['valid_plex_ids'])) {
 		    $_SESSION['valid_plex_ids'] = [];
 		}
 		
 		if (!isset($_SESSION['valid_plex_ids'][$mediaType])) {
 		    $_SESSION['valid_plex_ids'][$mediaType] = [];
+		}
+		
+		// If replace mode, clear existing IDs for this library first
+		if ($replaceExisting && isset($_SESSION['valid_plex_ids'][$mediaType][$libraryId])) {
+		    unset($_SESSION['valid_plex_ids'][$mediaType][$libraryId]);
 		}
 		
 		// Store or update IDs for this specific library
@@ -885,6 +920,7 @@ try {
 		    'mediaType' => $mediaType,
 		    'libraryId' => $libraryId,
 		    'newCount' => count($newIds),
+		    'replaceMode' => $replaceExisting ? 'Yes' : 'No',
 		    'totalLibraries' => count($_SESSION['valid_plex_ids'][$mediaType])
 		]);
 		
@@ -939,6 +975,7 @@ try {
 
 	/**
 	 * Marks orphaned poster files in the specified directory, improved to handle multiple libraries
+	 * with refresh mode capability
 	 * 
 	 * @param string $targetDir Directory to check for orphaned posters
 	 * @param array $currentImportIds IDs from the current import session
@@ -947,10 +984,12 @@ try {
 	 * @param string $showTitle The show title for seasons processing
 	 * @param string $mediaType The type of media being processed (movies, shows, seasons, collections)
 	 * @param string $libraryId The ID of the library being processed
+	 * @param bool $refreshMode Whether to clear existing stored IDs for this library before processing
 	 * @return array Results with counts and details of orphaned files
 	 */
 	function improvedMarkOrphanedPosters($targetDir, $currentImportIds, $orphanedTag = '**Orphaned**', 
-		                                 $libraryType = '', $showTitle = '', $mediaType = '', $libraryId = '') {
+		                                 $libraryType = '', $showTitle = '', $mediaType = '', 
+		                                 $libraryId = '', $refreshMode = true) {
 		$results = [
 		    'orphaned' => 0,
 		    'unmarked' => 0,
@@ -963,7 +1002,8 @@ try {
 
 		// First, store the current import IDs for future reference
 		if (!empty($currentImportIds) && !empty($libraryId)) {
-		    storeValidIds($currentImportIds, $mediaType, $libraryId);
+		    // In refresh mode, we replace instead of merge
+		    storeValidIds($currentImportIds, $mediaType, $libraryId, $refreshMode);
 		}
 		
 		// Get ALL valid IDs for this media type across ALL libraries
@@ -978,6 +1018,7 @@ try {
 		    'mediaType' => $mediaType,
 		    'libraryId' => $libraryId,
 		    'showTitle' => $showTitle,
+		    'refreshMode' => $refreshMode ? 'Yes' : 'No',
 		    'currentImportIdsCount' => count($currentImportIds),
 		    'allValidIdsCount' => count($allValidIds),
 		    'fileCount' => count($files)
@@ -1061,7 +1102,7 @@ try {
 		    if (preg_match('/\[([a-f0-9]+)\]/', $filename, $idMatch)) {
 		        $fileId = $idMatch[1];
 		        
-		        // *** KEY CHANGE: Check against ALL valid IDs, not just current import ***
+		        // Check against ALL valid IDs, not just current import
 		        if (!in_array($fileId, $allValidIds)) {
 		            // Replace **Plex** with **Orphaned** in the filename
 		            $newFilename = str_replace($plexTag, $orphanedTag, $filename);
@@ -1070,7 +1111,8 @@ try {
 		            logDebug("Marking file as orphaned", [
 		                'oldName' => $filename,
 		                'newName' => $newFilename,
-		                'fileId' => $fileId
+		                'fileId' => $fileId,
+		                'reason' => $refreshMode ? 'refresh mode' : 'not in valid IDs'
 		            ]);
 		            
 		            if (rename($file, $newPath)) {
@@ -1089,12 +1131,17 @@ try {
 		return $results;
 	}
 
+	/**
+	 * Integration function - Replace existing markOrphanedPosters calls with this one
+	 * This wrapper ensures backward compatibility while using the improved logic
+	 */
 	function markOrphanedPosters($targetDir, $validIds, $orphanedTag = '**Orphaned**', 
 		                        $libraryType = '', $showTitle = '', $mediaType = '') {
 		// Get libraryId from session - this should be set during the import process
 		$libraryId = isset($_SESSION['current_library_id']) ? $_SESSION['current_library_id'] : '';
 		
-		return improvedMarkOrphanedPosters($targetDir, $validIds, $orphanedTag, $libraryType, $showTitle, $mediaType, $libraryId);
+		// Default to refresh mode = true for backward compatibility
+		return improvedMarkOrphanedPosters($targetDir, $validIds, $orphanedTag, $libraryType, $showTitle, $mediaType, $libraryId, true);
 	}
 	
 	/**
@@ -1163,6 +1210,13 @@ try {
 		
 		// Set the current library ID in session for orphan detection
 		setCurrentLibraryId($libraryId);
+		
+		// IMPORTANT NEW CODE - Clear stored IDs for this library and type when starting a new import
+		// This ensures that removed items are properly detected as orphaned
+		if (isset($_POST['startIndex']) && (int)$_POST['startIndex'] === 0) {
+		    clearStoredIds($type, $libraryId);
+		    logDebug("Starting new import - cleared stored IDs for {$type}, library {$libraryId}");
+		}
 		
 		// Optional parameters
 		$showKey = isset($_POST['showKey']) ? $_POST['showKey'] : null; // For single show seasons import
@@ -1252,17 +1306,18 @@ try {
 		                        ]);
 		                    }
 		                    
-		                    // Use the improved orphan detection with library ID
-		                    $orphanedResults = improvedMarkOrphanedPosters(
-		                        $targetDir, 
-		                        $allImportedIds, 
-		                        '**Orphaned**', 
-		                        '', 
-		                        '', 
-		                        'movies',
-		                        $libraryId
-		                    );
-		                    
+							// Use the improved orphan detection with library ID and refresh mode = true
+							$orphanedResults = improvedMarkOrphanedPosters(
+								$targetDir, 
+								$allImportedIds, 
+								'**Orphaned**', 
+								'', 
+								'', 
+								'movies',
+								$libraryId,
+								true // This is the refresh mode parameter - true means replace IDs, not merge
+							);
+			
 		                    // Clear the session
 		                    unset($_SESSION['import_movie_ids']);
 		                } else {
@@ -1359,16 +1414,16 @@ try {
 		                        ]);
 		                    }
 		                    
-		                    // Use the improved orphan detection with library ID
-		                    $orphanedResults = improvedMarkOrphanedPosters(
-		                        $targetDir, 
-		                        $allImportedIds, 
-		                        '**Orphaned**', 
-		                        '', 
-		                        '', 
-		                        'shows',
-		                        $libraryId
-		                    );
+							$orphanedResults = improvedMarkOrphanedPosters(
+								$targetDir, 
+								$allImportedIds, 
+								'**Orphaned**', 
+								'', 
+								'', 
+								'shows',
+								$libraryId,
+								true // Refresh mode parameter
+							);
 		                    
 		                    // Clear the session
 		                    unset($_SESSION['import_show_ids']);
@@ -1503,16 +1558,16 @@ try {
 		                                ]);
 		                            }
 		                            
-		                            // Use the improved orphan detection with library ID
-		                            $orphanedResults = improvedMarkOrphanedPosters(
-		                                $targetDir, 
-		                                $allImportedIds, 
-		                                '**Orphaned**', 
-		                                '', 
-		                                '', 
-		                                'seasons',
-		                                $libraryId
-		                            );
+									$orphanedResults = improvedMarkOrphanedPosters(
+										$targetDir, 
+										$allImportedIds, 
+										'**Orphaned**', 
+										'', 
+										'', 
+										'seasons',
+										$libraryId,
+										true // Refresh mode parameter
+									);
 		                            
 		                            // Clear the session
 		                            unset($_SESSION['import_season_ids']);
@@ -1674,16 +1729,16 @@ try {
 		                            ]);
 		                        }
 		                        
-		                        // Use the improved orphan detection with library ID
-		                        $orphanedResults = improvedMarkOrphanedPosters(
-		                            $targetDir, 
-		                            $allImportedIds, 
-		                            '**Orphaned**', 
-		                            '', 
-		                            $showTitle, 
-		                            'seasons',
-		                            $libraryId
-		                        );
+								$orphanedResults = improvedMarkOrphanedPosters(
+									$targetDir, 
+									$allImportedIds, 
+									'**Orphaned**', 
+									'', 
+									$showTitle, 
+									'seasons',
+									$libraryId,
+									true // Refresh mode parameter
+								);
 		                        
 		                        // Clear the session
 		                        unset($_SESSION['import_season_ids']);
@@ -1832,16 +1887,16 @@ try {
 		                            ]);
 		                        }
 		                        
-		                        // Use the improved orphan detection with library ID and library type
-		                        $orphanedResults = improvedMarkOrphanedPosters(
-		                            $targetDir, 
-		                            $allImportedIds, 
-		                            '**Orphaned**', 
-		                            $libraryType, 
-		                            '', 
-		                            'collections',
-		                            $libraryId
-		                        );
+								$orphanedResults = improvedMarkOrphanedPosters(
+									$targetDir, 
+									$allImportedIds, 
+									'**Orphaned**', 
+									$libraryType, 
+									'', 
+									'collections',
+									$libraryId,
+									true // Refresh mode parameter
+								);
 		                        
 		                        // Clear only the temporary session for the current import
 		                        unset($_SESSION[$collectionSessionKey]);
