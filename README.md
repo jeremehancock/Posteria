@@ -17,12 +17,9 @@ Here's the updated version with the PWA line added:
 - 🧹 Orphan Poster detection
 - 🎨 Support for JPG, JPEG, PNG, and WebP formats
 
-## Support this project
+### If you find this tool useful, consider helping me buy more hard drives!
 
-<a href="https://www.buymeacoffee.com/jereme" target="_blank" style="display: inline-flex; align-items: center; background-color: #f5c542; padding: 15px 30px; border-radius: 12px; text-decoration: none; transition: all 0.2s ease; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2); min-width: 320px; justify-content: center;" onmouseover="this.style.backgroundColor='#ffd04c'; this.style.transform='scale(1.02)'" onmouseout="this.style.backgroundColor='#f5c542'; this.style.transform='scale(1)'">
-  <span style="margin-right: 15px; font-size: 26px;">🖥️</span>
-  <span style="color: #000000; font-size: 24px; font-weight: bold; font-family: 'Bree', 'Bree Serif', sans-serif;">Buy me more hard drives</span>
-</a>
+[![](https://jereme.dev/images/paypal-donate-button.png)](https://www.paypal.com/ncp/payment/FU85BL8345S7L)
 
 ## Screenshot
 ![Posteria](https://raw.githubusercontent.com/jeremehancock/Posteria/main/images/screenshot.png "Posteria")
