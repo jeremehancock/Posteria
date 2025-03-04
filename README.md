@@ -19,7 +19,8 @@ Here's the updated version with the PWA line added:
 
 ## Support this project
 
-[![](https://jereme.dev/images/paypal-donate-button.png)](https://www.paypal.com/ncp/payment/FU85BL8345S7L)
+[![Donate](https://raw.githubusercontent.com/jeremehancock/Posteria/main/images/donate.png)](https://www.buymeacoffee.com/jereme)
+
 
 ## Screenshot
 ![Posteria](https://raw.githubusercontent.com/jeremehancock/Posteria/main/images/screenshot.png "Posteria")
