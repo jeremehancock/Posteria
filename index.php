@@ -6229,6 +6229,29 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
             }
         }
         
+        // Get title from filename
+        const filenameElement = document.getElementById('changePosterFilename');
+        if (!filenameElement) return;
+        
+        const filename = filenameElement.textContent;
+        let title = filename.replace('Changing poster:', '').trim();
+        title = title.replace(/\([^)]*\)/g, '').trim(); // Remove content in parentheses
+        title = title.replace(/\[[^\]]*\]/g, '').trim(); // Remove content in brackets
+        
+        // Determine if this is a movie or TV show by checking directory or context
+        const directoryInput = document.getElementById('urlChangePosterDirectory');
+        let directory = '';
+        
+        if (directoryInput) {
+            directory = directoryInput.value;
+        }
+        
+        // Check if it's a TV season or collection - don't show TMDB button for these
+        if (directory === 'tv-seasons' || directory === 'collections') {
+            console.log("Poster is for TV Season or Collection - not showing TMDB button");
+            return;
+        }
+        
         // Create the search button
         const searchButton = document.createElement('button');
         searchButton.type = 'button'; // Prevent form submission
@@ -6244,15 +6267,6 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
         // Add the button after the URL input container
         const container = urlForm.querySelector('.url-input-container');
         container.insertAdjacentElement('afterend', searchButton);
-        
-        // Get title from filename
-        const filenameElement = document.getElementById('changePosterFilename');
-        if (!filenameElement) return;
-        
-        const filename = filenameElement.textContent;
-        let title = filename.replace('Changing poster:', '').trim();
-        title = title.replace(/\([^)]*\)/g, '').trim(); // Remove content in parentheses
-        title = title.replace(/\[[^\]]*\]/g, '').trim(); // Remove content in brackets
         
         // Add click handler for search button
         searchButton.addEventListener('click', function() {
