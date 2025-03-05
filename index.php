@@ -4632,7 +4632,6 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				}
 				
 				if (!plexExportModal) {
-				    console.error("Plex Export Modal not found");
 				    return;
 				}
 				
@@ -5249,7 +5248,6 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		function initImportFromPlexFeature() {
 		    const modal = document.getElementById('importFromPlexModal');
 		    if (!modal) {
-		        console.error("Import from Plex modal not found");
 		        return;
 		    }
 		    
@@ -6206,7 +6204,6 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
             if (urlInput) {
                 // Add event listener for manual URL entry with both input and change events
                 const checkUrl = function() {
-                    console.log("Input changed to:", this.value);
                     handleManualUrlInput(this.value);
                 };
                 
@@ -6215,14 +6212,12 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
                 urlInput.addEventListener('paste', function(e) {
                     // Short delay after paste to ensure value is updated
                     setTimeout(() => {
-                        console.log("Paste detected, value:", this.value);
                         handleManualUrlInput(this.value);
                     }, 100);
                 });
                 
                 // Check if there's already a value in the input
                 if (urlInput.value) {
-                    console.log("Initial value:", urlInput.value);
                     setTimeout(() => {
                         handleManualUrlInput(urlInput.value);
                     }, 300);
@@ -6249,7 +6244,6 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
         
         // Check if it's a TV season or collection - don't show TMDB button for these
         if (directory === 'tv-seasons' || directory === 'collections') {
-            console.log("Poster is for TV Season or Collection - not showing TMDB button");
             return;
         }
         
@@ -6291,15 +6285,11 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
             return;
         }
         
-        console.log("Manual URL input:", url);
-        
         // Special handling for mediux.pro URLs
         if (url.includes('api.mediux.pro')) {
-            console.log("Mediux URL detected, showing preview");
             // If it doesn't end with an image extension, append .jpg
             if (!url.match(/\.(jpg|jpeg|png|webp|gif)($|\?)/i)) {
                 url = url + '.jpg';
-                console.log("Modified URL:", url);
             }
             showManualUrlPreview(url);
             return;
@@ -6310,8 +6300,6 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
         const hasValidExtension = validExtensions.some(ext => 
             url.toLowerCase().endsWith(ext) || url.toLowerCase().includes(ext + '?')
         );
-        
-        console.log("Has valid extension:", hasValidExtension);
         
         if (hasValidExtension) {
             showManualUrlPreview(url);

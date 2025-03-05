@@ -26,10 +26,10 @@ Here's the updated version with the PWA line added:
 
 ## Where to Find Posters
 
-Looking for high-quality posters for your media library? Here are some excellent resources:
+Looking for high-quality posters for your media library? Posteria now fully integrates with TMDB for automatic poster fetching! Here are some excellent resources:
 
+- **[The Movie Database (TMDB)](https://www.themoviedb.org/)** - Extensive library of official and fan-made artwork, now fully integrated with Posteria for automatic poster fetching
 - **[The Poster Database](https://theposterdb.com/)** - A community-driven collection of custom posters with various styles and themes
-- **[The Movie Database (TMDB)](https://www.themoviedb.org/)** - Extensive library of official and fan-made artwork
 - **[The TV Database (TVDB)](https://www.thetvdb.com/)** - Comprehensive database for TV show posters and fanart
 - **[Mediux](https://mediux.pro/)** - Collection of professionally designed media artwork
 
