@@ -43,6 +43,7 @@ COPY include/get-from-plex.php /var/www/html/include/
 COPY include/change-poster.php /var/www/html/include/
 COPY include/plex-id-storage.php /var/www/html/include/
 COPY include/library-tracking.php /var/www/html/include/
+COPY include/fetch-tmdb.php /var/www/html/include/
 COPY include/config.php /var/www/html/include/
 
 # Copy assets directory

@@ -435,10 +435,13 @@ try {
         
         // Create a backup of the original file
         $backupFilePath = $originalFilePath . '.backup';
-        if (!copy($originalFilePath, $backupFilePath)) {
-            echo json_encode(['success' => false, 'error' => 'Failed to create backup of original file']);
-            exit;
-        }
+		// Try to create a backup of the original file, but continue if it fails
+		$backupFilePath = $originalFilePath . '.backup';
+		$backupCreated = @copy($originalFilePath, $backupFilePath);
+		// If backup fails, just log it but continue
+		if (!$backupCreated) {
+			error_log('Warning: Failed to create backup of ' . $originalFilePath);
+		}
         
         // Get the original file extension
         $originalExt = strtolower(pathinfo($originalFilename, PATHINFO_EXTENSION));
