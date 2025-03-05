@@ -49,14 +49,24 @@ if (empty($_POST['query']) || empty($_POST['type'])) {
 // Get the query and type from POST
 $query = trim($_POST['query']);
 $type = trim($_POST['type']);
-$apiKey = 'medulla'; // API key for TMDB
 
-// Build the API URL based on type
-$apiUrl = 'https://jereme.dev/test/?';
+function generateClientInfoHeader() {
+    $payload = [
+        'name' => 'Posteria',         
+        'ts' => round(microtime(true) * 1000), 
+        'v' => '1.0',                 
+        'platform' => 'php'           
+    ];
+    
+    // Convert to JSON and encode as Base64
+    return base64_encode(json_encode($payload));
+}
+
+$apiUrl = 'https://posteria.app/api/tmdb/fetch/?';
 if ($type === 'movie') {
-    $apiUrl .= 'movie=' . urlencode($query) . '&key=' . $apiKey;
+    $apiUrl .= 'movie=' . urlencode($query);
 } elseif ($type === 'tv') {
-    $apiUrl .= 'q=' . urlencode($query) . '&type=tv&key=' . $apiKey;
+    $apiUrl .= 'q=' . urlencode($query) . '&type=tv';
 } else {
     echo json_encode([
         'success' => false,
@@ -65,7 +75,6 @@ if ($type === 'movie') {
     exit;
 }
 
-// Make the API request
 $ch = curl_init();
 curl_setopt_array($ch, [
     CURLOPT_URL => $apiUrl,
@@ -74,7 +83,11 @@ curl_setopt_array($ch, [
     CURLOPT_SSL_VERIFYPEER => false,
     CURLOPT_SSL_VERIFYHOST => false,
     CURLOPT_USERAGENT => 'Posteria/1.0',
-    CURLOPT_TIMEOUT => 30
+    CURLOPT_TIMEOUT => 30,
+    CURLOPT_HTTPHEADER => [
+        'Content-Type: application/json',
+        'X-Client-Info: ' . generateClientInfoHeader()
+    ]
 ]);
 
 $response = curl_exec($ch);
@@ -91,7 +104,6 @@ if ($response === false) {
     exit;
 }
 
-// Check HTTP status code
 if ($httpCode !== 200) {
     echo json_encode([
         'success' => false,
@@ -100,10 +112,8 @@ if ($httpCode !== 200) {
     exit;
 }
 
-// Parse the JSON response
 $data = json_decode($response, true);
 
-// Validate the response
 if (json_last_error() !== JSON_ERROR_NONE) {
     echo json_encode([
         'success' => false,
@@ -112,7 +122,6 @@ if (json_last_error() !== JSON_ERROR_NONE) {
     exit;
 }
 
-// Check if the API returned an error
 if (isset($data['success']) && $data['success'] === false) {
     echo json_encode([
         'success' => false,
@@ -121,7 +130,6 @@ if (isset($data['success']) && $data['success'] === false) {
     exit;
 }
 
-// Check if we have results
 if (empty($data['results']) || !is_array($data['results'])) {
     echo json_encode([
         'success' => false,
@@ -130,10 +138,8 @@ if (empty($data['results']) || !is_array($data['results'])) {
     exit;
 }
 
-// Return the first result
 $result = $data['results'][0];
 
-// Extract the title
 $title = '';
 if ($type === 'movie') {
     $title = $result['title'] ?? 'Unknown Movie';
@@ -149,13 +155,11 @@ if ($type === 'movie') {
     }
 }
 
-// Extract the poster URL (get the largest available)
 $posterUrl = null;
 if (!empty($result['poster']) && is_array($result['poster'])) {
     $posterUrl = $result['poster']['original'] ?? $result['poster']['large'] ?? $result['poster']['medium'] ?? $result['poster']['small'] ?? null;
 }
 
-// If no poster found, return error
 if (empty($posterUrl)) {
     echo json_encode([
         'success' => false,
@@ -164,7 +168,6 @@ if (empty($posterUrl)) {
     exit;
 }
 
-// Return success with the poster URL and title
 echo json_encode([
     'success' => true,
     'posterUrl' => $posterUrl,

@@ -6121,6 +6121,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
             display: flex;
             align-items: center;
             justify-content: center;
+            margin-bottom: 9px;
         }
         
         .tmdb-poster-preview img {
@@ -6261,7 +6262,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
                 <circle cx="11" cy="11" r="8"></circle>
                 <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
             </svg>
-            TMDB Search
+            Get TMDB Poster
         `;
         
         // Add the button after the URL input container
