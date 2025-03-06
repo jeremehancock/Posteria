@@ -63,33 +63,6 @@ function checkForUpdates() {
         return 0; // Versions are equal
     }
     
-    // Only check for updates every 24 hours to avoid hammering the API
-    $cacheFile = __DIR__ . '/../cache/version_check.json';
-    $cacheDir = dirname($cacheFile);
-    $checkInterval = 86400; // 24 hours in seconds
-    
-    // Make sure cache directory exists
-    if (!is_dir($cacheDir)) {
-        @mkdir($cacheDir, 0755, true);
-    }
-    
-    // If cache file exists and is recent, check if the cached current version matches
-    if (file_exists($cacheFile)) {
-        $cacheData = @file_get_contents($cacheFile);
-        if ($cacheData) {
-            $cacheData = @json_decode($cacheData, true);
-            // Only use cache if the timestamp is recent AND the cached current version 
-            // matches the running current version
-            if ($cacheData && 
-                isset($cacheData['timestamp']) && 
-                (time() - $cacheData['timestamp'] < $checkInterval) &&
-                isset($cacheData['currentVersion']) && 
-                $cacheData['currentVersion'] === POSTERIA_VERSION) {
-                return $cacheData;
-            }
-        }
-    }
-    
     // Safe URL fetch with timeout and error handling
     try {
         // Try to fetch the latest version from GitHub safely
@@ -138,11 +111,6 @@ function checkForUpdates() {
                     $result['updateAvailable'] = true;
                     $result['latestVersion'] = $latestVersion;
                 }
-                
-                // Save result to cache with current version number
-                $result['timestamp'] = time();
-                $result['currentVersion'] = POSTERIA_VERSION;
-                @file_put_contents($cacheFile, json_encode($result));
             }
         }
     } catch (Exception $e) {
