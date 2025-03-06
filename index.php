@@ -3015,8 +3015,8 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		        <p>Your poster collection and settings will be preserved during updates as they're stored in the mounted volumes.</p>
 		        <div class="modal-actions">
 		            <button type="button" class="modal-button cancel" id="closeUpdateModal">Close</button>
-		            <a href="https://github.com/jeremehancock/Posteria" target="_blank" class="modal-button" style="text-decoration: none;">
-		                View on GitHub
+		            <a href="https://github.com/jeremehancock/Posteria/blob/main/changelog" target="_blank" class="modal-button" style="text-decoration: none;">
+		                View Changelog
 		            </a>
 		        </div>
 		    </div>
@@ -6500,7 +6500,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 </script>
 
 <script>
-// TMDB integration for the Change Poster Upload from URL tab
+// TMDB integration for the Change Poster Upload from URL tab with clickable preview
 (function() {
     // Add our CSS styles
     const style = document.createElement('style');
@@ -6560,6 +6560,74 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
             align-items: center;
             justify-content: center;
             margin-bottom: 9px;
+            cursor: pointer; /* Show it's clickable */
+            position: relative; /* For the zoom icon overlay */
+        }
+        
+        .tmdb-poster-preview:after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.6);
+            opacity: 0;
+            transition: opacity 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .tmdb-poster-preview:before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 2;
+            opacity: 0;
+            transition: all 0.2s;
+            background: rgba(229, 160, 13, 0.9);
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+        }
+        
+        /* Add SVG magnifying glass icon */
+        .tmdb-poster-preview:after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.6);
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        
+        /* Icon inside the circle */
+        .tmdb-poster-icon {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 24px;
+            height: 24px;
+            z-index: 3;
+            opacity: 0;
+            transition: all 0.2s;
+        }
+        
+        .tmdb-poster-preview:hover:after,
+        .tmdb-poster-preview:hover:before,
+        .tmdb-poster-preview:hover .tmdb-poster-icon {
+            opacity: 1;
         }
         
         .tmdb-poster-preview img {
@@ -6592,6 +6660,66 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
             margin-bottom: 15px;
         }
         
+        /* Preview Modal */
+        .image-preview-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            z-index: 1100; /* Higher than other modals */
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .image-preview-modal.show {
+            opacity: 1;
+        }
+        
+        .image-preview-content {
+            position: relative;
+            max-width: 80%;
+            max-height: 80%;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.5);
+        }
+        
+        .image-preview-content img {
+            display: block;
+            max-width: 100%;
+            max-height: 80vh;
+            margin: 0 auto;
+        }
+        
+        .image-preview-close {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            border: none;
+            font-size: 24px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            transition: all 0.2s;
+        }
+        
+        .image-preview-close:hover {
+            background: var(--bg-tertiary);
+            transform: scale(1.1);
+        }
+        
         /* Mobile responsiveness */
         @media (max-width: 480px) {
             .url-input-container {
@@ -6612,9 +6740,80 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
                 font-size: 14px;
                 padding: 10px;
             }
+            
+            .image-preview-content {
+                max-width: 90%;
+            }
         }
     `;
     document.head.appendChild(style);
+    
+    // Create image preview modal
+    function createImagePreviewModal() {
+        // Check if modal already exists
+        if (document.getElementById('imagePreviewModal')) return;
+        
+        const modal = document.createElement('div');
+        modal.id = 'imagePreviewModal';
+        modal.className = 'image-preview-modal';
+        modal.innerHTML = `
+            <div class="image-preview-content">
+                <img id="imagePreviewImg" src="" alt="Preview">
+            </div>
+            <button class="image-preview-close">×</button>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        // Close button handler
+        const closeBtn = modal.querySelector('.image-preview-close');
+        closeBtn.addEventListener('click', function() {
+            hideImagePreviewModal();
+        });
+        
+        // Click outside to close
+        modal.addEventListener('click', function(e) {
+            if (e.target === modal) {
+                hideImagePreviewModal();
+            }
+        });
+        
+        // Escape key to close
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && modal.classList.contains('show')) {
+                hideImagePreviewModal();
+            }
+        });
+    }
+    
+    // Show the image preview modal
+    function showImagePreviewModal(imageUrl) {
+        // Create modal if it doesn't exist
+        createImagePreviewModal();
+        
+        // Get the modal elements
+        const modal = document.getElementById('imagePreviewModal');
+        const img = document.getElementById('imagePreviewImg');
+        
+        // Set the image source
+        img.src = imageUrl;
+        
+        // Show the modal
+        modal.style.display = 'flex';
+        modal.offsetHeight; // Force reflow
+        modal.classList.add('show');
+    }
+    
+    // Hide the image preview modal
+    function hideImagePreviewModal() {
+        const modal = document.getElementById('imagePreviewModal');
+        if (!modal) return;
+        
+        modal.classList.remove('show');
+        setTimeout(() => {
+            modal.style.display = 'none';
+        }, 300);
+    }
     
     // Add TMDB search button to the URL form
     function addTMDBButton() {
@@ -6736,7 +6935,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
         }
         
         // Check if URL has an image extension
-        const validExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
+        const validExtensions = ['.jpg', '.jpeg', '.png', '.webp'];
         const hasValidExtension = validExtensions.some(ext => 
             url.toLowerCase().endsWith(ext) || url.toLowerCase().includes(ext + '?')
         );
@@ -6777,12 +6976,26 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
             preview.remove(); // Remove preview if image fails to load
         };
         
-        // Add image to preview
+        // Add SVG magnifying glass icon
+        const icon = document.createElement('div');
+        icon.className = 'tmdb-poster-icon';
+        icon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>`;
+        
+        // Add image and icon to preview
         preview.appendChild(img);
+        preview.appendChild(icon);
         container.appendChild(preview);
         
         // Set the src after appending to DOM
         img.src = url;
+        
+        // Add click handler to open larger preview
+        preview.addEventListener('click', function() {
+            showImagePreviewModal(url);
+        });
     }
     
     // Remove any existing preview
@@ -6951,6 +7164,9 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
                 
                 if (mutation.target.style.display === 'none') {
                     cleanupTMDB();
+                    
+                    // Also hide image preview if it's open
+                    hideImagePreviewModal();
                 }
             }
         });
@@ -6985,6 +7201,9 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
     
     // Initialize
     function initialize() {
+        // Create the image preview modal
+        createImagePreviewModal();
+        
         // Check if URL tab is active
         const urlTab = document.querySelector('.upload-tab-btn[data-tab="url"]');
         if (urlTab && urlTab.classList.contains('active')) {
