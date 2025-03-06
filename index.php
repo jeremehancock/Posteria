@@ -3015,7 +3015,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		        <p>Your poster collection and settings will be preserved during updates as they're stored in the mounted volumes.</p>
 		        <div class="modal-actions">
 		            <button type="button" class="modal-button cancel" id="closeUpdateModal">Close</button>
-		            <a href="https://github.com/jeremehancock/Posteria/blob/main/changelog" target="_blank" class="modal-button" style="text-decoration: none;">
+		            <a href="https://github.com/jeremehancock/Posteria/blob/main/changelog.md" target="_blank" class="modal-button" style="text-decoration: none;">
 		                View Changelog
 		            </a>
 		        </div>
