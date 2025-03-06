@@ -294,111 +294,217 @@ try {
             ];
         }
     }
+    
+	// Function to remove Overlay label by executing the bash script
+	function removeOverlayLabel($ratingKey, $mediaType) {
+		global $plex_config;
+		
+		// Check if the feature is enabled
+		if (empty($plex_config['remove_overlay_label'])) {
+		    return [
+		        'success' => false,
+		        'error' => 'Overlay label removal is disabled in configuration'
+		    ];
+		}
+		
+		try {
+		    // Define the path to the script - adjust this to match your actual path
+		    $scriptPath = __DIR__ . '/remove-overlay-label.sh';
+		    
+		    // Check if the script exists
+		    if (!file_exists($scriptPath)) {
+		        return [
+		            'success' => false,
+		            'error' => 'Overlay label removal script not found at: ' . $scriptPath
+		        ];
+		    }
+		    
+		    // Ensure the script is executable
+		    if (!is_executable($scriptPath)) {
+		        chmod($scriptPath, 0755);
+		    }
+		    
+		    // Ensure Plex server URL doesn't have trailing slash
+		    $plexServerUrl = rtrim($plex_config['server_url'], '/');
+		    
+		    // Build the command to execute
+		    $command = escapeshellcmd($scriptPath) . ' ' . 
+		               escapeshellarg($ratingKey) . ' ' . 
+		               escapeshellarg($plexServerUrl) . ' ' . 
+		               escapeshellarg($plex_config['token']) . ' 2>&1';
+		    
+		    // Execute the script and capture output
+		    $output = [];
+		    $returnCode = 0;
+		    exec($command, $output, $returnCode);
+		    
+		    // Log the complete output
+		    $outputStr = implode("\n", $output);
+		    logDebug("Overlay label removal output: " . $outputStr);
+		    
+		    // Check return code
+		    if ($returnCode === 0) {
+		        return [
+		            'success' => true,
+		            'message' => 'Overlay label successfully removed',
+		            'output' => $outputStr
+		        ];
+		    } else {
+		        return [
+		            'success' => false,
+		            'error' => 'Failed to remove Overlay label: ' . $outputStr,
+		            'output' => $outputStr
+		        ];
+		    }
+		} catch (Exception $e) {
+		    logDebug("Exception while removing Overlay label: " . $e->getMessage());
+		    return [
+		        'success' => false,
+		        'error' => 'Error removing Overlay label: ' . $e->getMessage()
+		    ];
+		}
+	}
 
-    // Helper function to send updated poster to Plex
-    function sendToPlex($filename, $directory) {
-        global $plex_config, $directories;
-        
-        // Check if Plex integration is configured
-        if (empty($plex_config) || empty($plex_config['token']) || empty($plex_config['server_url'])) {
-            return [
-                'success' => false, 
-                'error' => 'Plex integration is not configured'
-            ];
-        }
-        
-        try {
-            // Build the full file path
-            $filePath = $directories[$directory] . $filename;
-            
-            // Check if the file exists
-            if (!file_exists($filePath)) {
-                return [
-                    'success' => false,
-                    'error' => 'File not found: ' . $filePath
-                ];
-            }
-            
-            // Extract ratingKey from filename - assuming format "Title [ratingKey] Plex.ext"
-            $matches = [];
-            if (!preg_match('/\[([^\]]+)\]/', $filename, $matches)) {
-                return [
-                    'success' => false, 
-                    'error' => 'Could not extract ratingKey from filename'
-                ];
-            }
-            
-            $ratingKey = $matches[1];
-            
-            // Determine media type based on directory
-            $mediaType = '';
-            switch ($directory) {
-                case 'movies':
-                    $mediaType = 'movie';
-                    break;
-                case 'tv-shows':
-                    $mediaType = 'show';
-                    break;
-                case 'tv-seasons':
-                    $mediaType = 'season';
-                    break;
-                case 'collections':
-                    $mediaType = 'collection';
-                    break;
-                default:
-                    return [
-                        'success' => false, 
-                        'error' => 'Unsupported media type'
-                    ];
-            }
-            
-            // Read the image file
-            $imageData = file_get_contents($filePath);
-            if ($imageData === false) {
-                return [
-                    'success' => false, 
-                    'error' => 'Failed to read image file'
-                ];
-            }
-            
-            // Construct URL for poster upload
-            $plexServerUrl = rtrim($plex_config['server_url'], '/');
-            
-            // Handle collections differently
-            if ($mediaType === 'collection') {
-                return sendCollectionPosterToPlex($plexServerUrl, $ratingKey, $imageData, $plex_config['token']);
-            } else {
-                // For movies, shows, and seasons
-                $uploadUrl = "{$plexServerUrl}/library/metadata/{$ratingKey}/posters";
-                
-                // Create headers for the Plex API request
-                $headers = getPlexHeaders($plex_config['token']);
-                
-                // Add content type for image upload
-                $headers[] = 'Content-Type: image/jpeg';
-                
-                // Make the API request
-                $response = makeApiRequest($uploadUrl, $headers, 'POST', $imageData);
-                
-                if ($response !== false) {
-                    return [
-                        'success' => true, 
-                        'message' => 'Poster successfully sent to Plex'
-                    ];
-                } else {
-                    return [
-                        'success' => false, 
-                        'error' => 'Failed to upload poster to Plex'
-                    ];
-                }
-            }
-        } catch (Exception $e) {
-            return [
-                'success' => false, 
-                'error' => 'Error sending to Plex: ' . $e->getMessage()
-            ];
-        }
-    }
+	// Helper function to send updated poster to Plex
+	function sendToPlex($filename, $directory) {
+		global $plex_config, $directories;
+		
+		// Check if Plex integration is configured
+		if (empty($plex_config) || empty($plex_config['token']) || empty($plex_config['server_url'])) {
+		    return [
+		        'success' => false, 
+		        'error' => 'Plex integration is not configured'
+		    ];
+		}
+		
+		try {
+		    // Build the full file path
+		    $filePath = $directories[$directory] . $filename;
+		    
+		    // Check if the file exists
+		    if (!file_exists($filePath)) {
+		        return [
+		            'success' => false,
+		            'error' => 'File not found: ' . $filePath
+		        ];
+		    }
+		    
+		    // Extract ratingKey from filename - assuming format "Title [ratingKey] Plex.ext"
+		    $matches = [];
+		    if (!preg_match('/\[([^\]]+)\]/', $filename, $matches)) {
+		        return [
+		            'success' => false, 
+		            'error' => 'Could not extract ratingKey from filename'
+		        ];
+		    }
+		    
+		    $ratingKey = $matches[1];
+		    
+		    // Determine media type based on directory
+		    $mediaType = '';
+		    switch ($directory) {
+		        case 'movies':
+		            $mediaType = 'movie';
+		            break;
+		        case 'tv-shows':
+		            $mediaType = 'show';
+		            break;
+		        case 'tv-seasons':
+		            $mediaType = 'season';
+		            break;
+		        case 'collections':
+		            $mediaType = 'collection';
+		            break;
+		        default:
+		            return [
+		                'success' => false, 
+		                'error' => 'Unsupported media type'
+		            ];
+		    }
+		    
+		    // Read the image file
+		    $imageData = file_get_contents($filePath);
+		    if ($imageData === false) {
+		        return [
+		            'success' => false, 
+		            'error' => 'Failed to read image file'
+		        ];
+		    }
+		    
+		    // Construct URL for poster upload
+		    $plexServerUrl = rtrim($plex_config['server_url'], '/');
+		    
+		    // Upload result
+		    $uploadResult = [];
+		    
+		    // Handle collections differently
+		    if ($mediaType === 'collection') {
+		        $uploadResult = sendCollectionPosterToPlex($plexServerUrl, $ratingKey, $imageData, $plex_config['token']);
+		    } else {
+		        // For movies, shows, and seasons
+		        $uploadUrl = "{$plexServerUrl}/library/metadata/{$ratingKey}/posters";
+		        
+		        // Create headers for the Plex API request
+		        $headers = getPlexHeaders($plex_config['token']);
+		        
+		        // Add content type for image upload
+		        $headers[] = 'Content-Type: image/jpeg';
+		        
+		        // Make the API request
+		        $response = makeApiRequest($uploadUrl, $headers, 'POST', $imageData);
+		        
+		        if ($response !== false) {
+		            $uploadResult = [
+		                'success' => true, 
+		                'message' => 'Poster successfully sent to Plex'
+		            ];
+		        } else {
+		            $uploadResult = [
+		                'success' => false, 
+		                'error' => 'Failed to upload poster to Plex'
+		            ];
+		        }
+		    }
+		    
+		    // If poster upload was successful and remove_overlay_label is enabled, try to remove the Overlay label
+		    $labelResult = [
+		        'success' => false,
+		        'attempted' => false
+		    ];
+		    
+		    if ($uploadResult['success'] && !empty($plex_config['remove_overlay_label'])) {
+		        logDebug("Attempting to remove Overlay label for item: $ratingKey ($mediaType)");
+		        $labelResult = removeOverlayLabel($ratingKey, $mediaType);
+		        $labelResult['attempted'] = true;
+		    }
+		    
+		    // Return combined result
+		    $result = $uploadResult;
+		    
+		    // Add label removal info if attempted
+		    if ($labelResult['attempted']) {
+		        $result['label_removal'] = $labelResult['success'];
+		        $result['label_message'] = isset($labelResult['message']) ? $labelResult['message'] : '';
+		        $result['label_error'] = isset($labelResult['error']) ? $labelResult['error'] : '';
+		        
+		        // Append label removal status to the message
+		        if ($labelResult['success']) {
+		            $result['message'] .= ". Overlay label was also removed.";
+		        } else {
+		            $result['message'] .= ". However, failed to remove Overlay label: " . 
+		                (isset($labelResult['error']) ? $labelResult['error'] : 'Unknown error');
+		        }
+		    }
+		    
+		    return $result;
+		    
+		} catch (Exception $e) {
+		    return [
+		        'success' => false, 
+		        'error' => 'Error sending to Plex: ' . $e->getMessage()
+		    ];
+		}
+	}
 
     // MAIN CHANGE POSTER FUNCTIONALITY
     if (isset($_POST['action']) && $_POST['action'] === 'change_poster') {
@@ -648,12 +754,15 @@ try {
             }
             
             // Return response with Plex update status
-            echo json_encode([
-                'success' => true,
-                'plexUpdated' => $plexResult['success'],
-                'plexMessage' => isset($plexResult['message']) ? $plexResult['message'] : '',
-                'plexError' => isset($plexResult['error']) ? $plexResult['error'] : ''
-            ]);
+			echo json_encode([
+				'success' => true,
+				'plexUpdated' => $plexResult['success'],
+				'plexMessage' => isset($plexResult['message']) ? $plexResult['message'] : '',
+				'plexError' => isset($plexResult['error']) ? $plexResult['error'] : '',
+				'labelRemoved' => isset($plexResult['label_removal']) ? $plexResult['label_removal'] : false,
+				'labelMessage' => isset($plexResult['label_message']) ? $plexResult['label_message'] : '',
+				'labelError' => isset($plexResult['label_error']) ? $plexResult['label_error'] : ''
+			]);
         } else {
             // If replacement fails, restore from backup
             if (file_exists($backupFilePath)) {
