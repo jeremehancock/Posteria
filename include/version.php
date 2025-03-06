@@ -73,13 +73,18 @@ function checkForUpdates() {
         @mkdir($cacheDir, 0755, true);
     }
     
-    // If cache file exists and is recent, use cached data
+    // If cache file exists and is recent, check if the cached current version matches
     if (file_exists($cacheFile)) {
         $cacheData = @file_get_contents($cacheFile);
         if ($cacheData) {
             $cacheData = @json_decode($cacheData, true);
-            if ($cacheData && isset($cacheData['timestamp']) && 
-                (time() - $cacheData['timestamp'] < $checkInterval)) {
+            // Only use cache if the timestamp is recent AND the cached current version 
+            // matches the running current version
+            if ($cacheData && 
+                isset($cacheData['timestamp']) && 
+                (time() - $cacheData['timestamp'] < $checkInterval) &&
+                isset($cacheData['currentVersion']) && 
+                $cacheData['currentVersion'] === POSTERIA_VERSION) {
                 return $cacheData;
             }
         }
@@ -134,8 +139,9 @@ function checkForUpdates() {
                     $result['latestVersion'] = $latestVersion;
                 }
                 
-                // Save result to cache
+                // Save result to cache with current version number
                 $result['timestamp'] = time();
+                $result['currentVersion'] = POSTERIA_VERSION;
                 @file_put_contents($cacheFile, json_encode($result));
             }
         }
