@@ -2199,6 +2199,17 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			}
 		}
     </style>
+	<script>
+	  // This small snippet of CSS will prevent the button flash
+	  document.write(`
+	  <style>
+		/* Initially hide the buttons until JavaScript decides what to show */
+		.orphan-button.delete-btn:not(.initialized) {
+		  display: none !important;
+		}
+	  </style>
+	  `);
+	</script>
 </head>
 
 <body>
@@ -6229,12 +6240,18 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		// =========== HANDLE ORPHANS ===========	
 		
 		function hideNonOrphanedDeleteButtons() {
-			document.querySelectorAll('.delete-btn').forEach(button => {
-				const isOrphaned = button.getAttribute('data-orphaned') === 'true';
-				if (!isOrphaned) {
-					button.style.display = 'none';
-				}
-			});
+		  document.querySelectorAll('.delete-btn').forEach(button => {
+			const isOrphaned = button.getAttribute('data-orphaned') === 'true';
+			// Add initialized class to all buttons
+			button.classList.add('initialized');
+			
+			if (!isOrphaned) {
+			  button.style.display = 'none';
+			} else {
+			  // Make sure orphaned buttons are visible
+			  button.style.display = 'flex';
+			}
+		  });
 		}
 		
 		function showOrphanedBadge() {
