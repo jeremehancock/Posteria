@@ -6728,7 +6728,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
             
             .url-input-container .upload-input-group {
                 flex: 0 1 auto;
-                width: calc(100% - 110px);
+                width: 100%;
             }
             
             .tmdb-poster-preview, .tmdb-loading {

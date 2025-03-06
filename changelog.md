@@ -10,3 +10,7 @@
 
 ### Changed
 - Updated Version Upgrade modal with link to this Changelog
+
+## [1.1.0]
+### Fixed
+- Upload from URL input mobile issue
