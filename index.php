@@ -2097,7 +2097,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			}
 			
 			.site-name svg {
-				height: 50px;
+				height: 75px;
 			}
 			
 			.search-input, 
@@ -2179,7 +2179,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			}
 			
 			.site-name svg {
-				height: 50px;
+				height: 75px;
 			}
 
 			.header-content {
