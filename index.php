@@ -55,6 +55,9 @@ $site_title = getEnvWithFallback('SITE_TITLE', 'Posteria');
 // Include configuration file
 require_once './include/config.php';
 
+// Include version checker
+require_once './include/version.php';
+
 /**
  * Application Configuration
  */
@@ -1984,6 +1987,39 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			height: 20px;
 		}
 		
+		/* Update badge */
+		.update-available {
+			color: var(--text-secondary);
+			text-decoration: none;
+			position: relative;
+			padding-right: 5px;
+		}
+
+		.update-available:hover {
+			color: var(--accent-primary);
+		}
+
+		.update-badge {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			background: var(--accent-primary);
+			color: var(--bg-primary);
+			width: 16px;
+			height: 16px;
+			font-size: 12px;
+			border-radius: 50%;
+			margin-left: 5px;
+			font-weight: bold;
+			animation: pulse 2s infinite;
+		}
+
+		@keyframes pulse {
+			0% { transform: scale(1); }
+			50% { transform: scale(1.1); }
+			100% { transform: scale(1); }
+		}
+		
 		/* ==========================================================================
 		   20. Media Queries
 		   ========================================================================== */
@@ -2959,17 +2995,45 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		</div>
 	</div>
 	
+	<!-- Update Available Modal -->
+	<div id="updateModal" class="modal">
+		<div class="modal-content" style="max-width: 600px;">
+		    <div class="modal-header">
+		        <h3>Update Available</h3>
+		        <button type="button" class="modal-close-btn">×</button>
+		    </div>
+		    <div class="modal-body">
+		        <div style="margin-bottom: 20px; padding: 15px; background: rgba(255, 159, 67, 0.1); border: 1px solid var(--accent-primary); border-radius: 6px;">
+		            <p style="margin: 0;">A new version of Posteria is available! <span id="updateVersionInfo"></span></p>
+		        </div>
+		        <h4>Upgrade Instructions:</h4>
+		        <ol style="margin-left: 20px; line-height: 1.6;">
+		            <li>Navigate to your Posteria directory</li>
+		            <li>Run <code style="background: var(--bg-tertiary); padding: 2px 5px; border-radius: 3px;">docker-compose pull</code> to download the latest image</li>
+		            <li>Run <code style="background: var(--bg-tertiary); padding: 2px 5px; border-radius: 3px;">docker-compose up -d</code> to restart with the new version</li>
+		        </ol>
+		        <p>Your poster collection and settings will be preserved during updates as they're stored in the mounted volumes.</p>
+		        <div class="modal-actions">
+		            <button type="button" class="modal-button cancel" id="closeUpdateModal">Close</button>
+		            <a href="https://github.com/jeremehancock/Posteria" target="_blank" class="modal-button" style="text-decoration: none;">
+		                View on GitHub
+		            </a>
+		        </div>
+		    </div>
+		</div>
+	</div>
+	
 	<!-- Footer -->
 	<footer class="footer">
 		<div class="footer-content">
-			<div class="footer-links">
-				<a href="https://github.com/jeremehancock/Posteria" target="_blank" class="footer-link" title="GitHub Repository">
-					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="footer-icon">
-						<path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
-					</svg>
-				</a>
-			</div>
-			<div class="copyright">
+		    <div class="footer-links">
+		        <a href="https://github.com/jeremehancock/Posteria" target="_blank" class="footer-link" title="GitHub Repository">
+		            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="footer-icon">
+		                <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
+		            </svg>
+		        </a>
+		    </div>
+		    <div class="copyright">
 		        <script>
 		            const startYear = 2025; 
 		            const today = new Date();
@@ -2977,9 +3041,25 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		            document.write('© ' + (currentYear === startYear ? startYear : startYear + '-' + currentYear));
 		        </script>
 		        Posteria. MIT License.
-			</div>
+		        
+		        <?php 
+		        // Check for updates
+		        $updateInfo = checkForUpdates();
+		        if ($updateInfo['updateAvailable']): 
+		        ?>
+		            <span style="margin-left: 10px;">
+		                <a href="#" id="showUpdateModal" class="update-available" title="Update Available">
+		                    v<?php echo POSTERIA_VERSION; ?> 
+		                    <span class="update-badge">!</span>
+		                </a>
+		            </span>
+		        <?php else: ?>
+		            <span style="margin-left: 10px;">v<?php echo POSTERIA_VERSION; ?></span>
+		        <?php endif; ?>
+		    </div>
 		</div>
 	</footer>
+
 <script>
 	document.addEventListener('DOMContentLoaded', function() {
 		// =========== GLOBAL VARIABLES & STATE ===========
@@ -6263,87 +6343,137 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			});
 		}
 		
-function initDeleteOrphans() {
-    // Get elements
-    const deleteOrphansButton = document.getElementById('showDeleteOrphansModal');
-    const deleteOrphansModal = document.getElementById('deleteOrphansModal');
-    const closeDeleteOrphansButton = deleteOrphansModal?.querySelector('.modal-close-btn');
-    const cancelDeleteOrphansButton = document.getElementById('cancelDeleteOrphans');
-    const deleteOrphansForm = document.getElementById('deleteOrphansForm');
-    
-    // Don't initialize if elements aren't found
-    if (!deleteOrphansButton || !deleteOrphansModal) return;
-    
-    // Show modal handler
-    deleteOrphansButton.addEventListener('click', function() {
-        showModal(deleteOrphansModal);
-    });
-    
-    // Close modal handlers
-    if (closeDeleteOrphansButton) {
-        closeDeleteOrphansButton.addEventListener('click', function() {
-            hideModal(deleteOrphansModal);
-        });
-    }
-    
-    if (cancelDeleteOrphansButton) {
-        cancelDeleteOrphansButton.addEventListener('click', function() {
-            hideModal(deleteOrphansModal);
-        });
-    }
-    
-    // Click outside to close
-    deleteOrphansModal.addEventListener('click', function(e) {
-        if (e.target === deleteOrphansModal) {
-            hideModal(deleteOrphansModal);
-        }
-    });
-    
-    // Handle form submission - simple implementation
-    if (deleteOrphansForm) {
-        deleteOrphansForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            // Show a loading notification
-            const notification = showNotification('Deleting orphaned posters...', 'loading');
-            
-            // Simple AJAX request
-            const formData = new FormData(deleteOrphansForm);
-            
-            fetch(window.location.href, {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                // Remove loading notification
-                notification.remove();
-                
-                if (data.success) {
-                    // Show success and reload
-                    showNotification(`Deleted ${data.deleted} orphaned posters.`, 'success');
-                    setTimeout(function() {
-                        window.location.reload();
-                    }, 1500);
-                    
-                    // Hide modal
-                    hideModal(deleteOrphansModal);
-                } else {
-                    // Show error
-                    showNotification(`Error: ${data.error || 'Delete failed'}`, 'error');
-                }
-            })
-            .catch(error => {
-                // Remove loading notification
-                notification.remove();
-                
-                // Show error
-                showNotification('Error: Could not complete the deletion.', 'error');
-                console.error('Delete error:', error);
-            });
-        });
-    }
-}
+	function initDeleteOrphans() {
+		// Get elements
+		const deleteOrphansButton = document.getElementById('showDeleteOrphansModal');
+		const deleteOrphansModal = document.getElementById('deleteOrphansModal');
+		const closeDeleteOrphansButton = deleteOrphansModal?.querySelector('.modal-close-btn');
+		const cancelDeleteOrphansButton = document.getElementById('cancelDeleteOrphans');
+		const deleteOrphansForm = document.getElementById('deleteOrphansForm');
+		
+		// Don't initialize if elements aren't found
+		if (!deleteOrphansButton || !deleteOrphansModal) return;
+		
+		// Show modal handler
+		deleteOrphansButton.addEventListener('click', function() {
+		    showModal(deleteOrphansModal);
+		});
+		
+		// Close modal handlers
+		if (closeDeleteOrphansButton) {
+		    closeDeleteOrphansButton.addEventListener('click', function() {
+		        hideModal(deleteOrphansModal);
+		    });
+		}
+		
+		if (cancelDeleteOrphansButton) {
+		    cancelDeleteOrphansButton.addEventListener('click', function() {
+		        hideModal(deleteOrphansModal);
+		    });
+		}
+		
+		// Click outside to close
+		deleteOrphansModal.addEventListener('click', function(e) {
+		    if (e.target === deleteOrphansModal) {
+		        hideModal(deleteOrphansModal);
+		    }
+		});
+		
+		// Handle form submission - simple implementation
+		if (deleteOrphansForm) {
+		    deleteOrphansForm.addEventListener('submit', function(e) {
+		        e.preventDefault();
+		        
+		        // Show a loading notification
+		        const notification = showNotification('Deleting orphaned posters...', 'loading');
+		        
+		        // Simple AJAX request
+		        const formData = new FormData(deleteOrphansForm);
+		        
+		        fetch(window.location.href, {
+		            method: 'POST',
+		            body: formData
+		        })
+		        .then(response => response.json())
+		        .then(data => {
+		            // Remove loading notification
+		            notification.remove();
+		            
+		            if (data.success) {
+		                // Show success and reload
+		                showNotification(`Deleted ${data.deleted} orphaned posters.`, 'success');
+		                setTimeout(function() {
+		                    window.location.reload();
+		                }, 1500);
+		                
+		                // Hide modal
+		                hideModal(deleteOrphansModal);
+		            } else {
+		                // Show error
+		                showNotification(`Error: ${data.error || 'Delete failed'}`, 'error');
+		            }
+		        })
+		        .catch(error => {
+		            // Remove loading notification
+		            notification.remove();
+		            
+		            // Show error
+		            showNotification('Error: Could not complete the deletion.', 'error');
+		            console.error('Delete error:', error);
+		        });
+		    });
+		}
+	}
+	
+	// =========== VERSION UPDATE NOTIFICATION ===========
+
+	// Initialize update notification
+	function initUpdateNotification() {
+		const updateLink = document.getElementById('showUpdateModal');
+		const updateModal = document.getElementById('updateModal');
+		const closeUpdateModalBtn = document.getElementById('closeUpdateModal');
+		const closeUpdateBtn = updateModal?.querySelector('.modal-close-btn');
+		
+		if (updateLink && updateModal) {
+		    // Show update modal when clicking the version link
+		    updateLink.addEventListener('click', function(e) {
+		        e.preventDefault();
+		        
+		        // Set version info in the modal
+		        const versionSpan = document.getElementById('updateVersionInfo');
+		        if (versionSpan) {
+		            <?php if ($updateInfo['updateAvailable']): ?>
+		            versionSpan.textContent = "(Current: v<?php echo POSTERIA_VERSION; ?>, Latest: v<?php echo $updateInfo['latestVersion']; ?>)";
+		            <?php else: ?>
+		            versionSpan.textContent = "(Current: v<?php echo POSTERIA_VERSION; ?>)";
+		            <?php endif; ?>
+		        }
+		        
+		        showModal(updateModal);
+		    });
+		    
+		    // Close modal with close button
+		    if (closeUpdateBtn) {
+		        closeUpdateBtn.addEventListener('click', function() {
+		            hideModal(updateModal);
+		        });
+		    }
+		    
+		    // Close modal with cancel button
+		    if (closeUpdateModalBtn) {
+		        closeUpdateModalBtn.addEventListener('click', function() {
+		            hideModal(updateModal);
+		        });
+		    }
+		    
+		    // Close when clicking outside the modal
+		    updateModal.addEventListener('click', function(e) {
+		        if (e.target === updateModal) {
+		            hideModal(updateModal);
+		        }
+		    });
+		}
+	}
 
 		// =========== INITIALIZATION ===========
 		
@@ -6357,6 +6487,7 @@ function initDeleteOrphans() {
 		hideNonOrphanedDeleteButtons();
 		showOrphanedBadge();
 		initDeleteOrphans();
+		initUpdateNotification();
 		
 		// Call truncation after images load and on resize
 		document.querySelectorAll('.gallery-image').forEach(img => {
