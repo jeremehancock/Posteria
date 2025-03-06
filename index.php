@@ -341,6 +341,59 @@ if (isset($_SESSION['login_time']) && (time() - $_SESSION['login_time']) > $auth
  * File Management Handlers
  */
 
+// Handle delete all orphans request
+if (isLoggedIn() && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'delete_all_orphans') {
+	header('Content-Type: application/json');
+	
+	// Prepare response
+	$response = [
+		'success' => false,
+		'deleted' => 0,
+		'failed' => 0,
+		'errors' => []
+	];
+	
+	// Get all images
+	$allImages = getImageFiles($config, '');
+	$orphanedImages = [];
+	
+	// Filter orphaned images
+	foreach ($allImages as $image) {
+		if (strpos(strtolower($image['filename']), '**plex**') === false) {
+		    $orphanedImages[] = $image;
+		}
+	}
+	
+	// Begin deletion
+	foreach ($orphanedImages as $image) {
+		$filename = $image['filename'];
+		$directory = $image['directory'];
+		$filepath = $config['directories'][$directory] . $filename;
+		
+		// Security check: Ensure the file is within allowed directory
+		if (!isValidFilename($filename) || !file_exists($filepath)) {
+		    $response['failed']++;
+		    $response['errors'][] = 'Invalid file: ' . $filename;
+		    continue;
+		}
+		
+		if (unlink($filepath)) {
+		    $response['deleted']++;
+		} else {
+		    $response['failed']++;
+		    $response['errors'][] = 'Failed to delete: ' . $filename;
+		}
+	}
+	
+	// Set success flag if at least one file was deleted
+	if ($response['deleted'] > 0) {
+		$response['success'] = true;
+	}
+	
+	echo json_encode($response);
+	exit;
+}
+
 // Handle file move
 if (isLoggedIn() && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'move') {
     header('Content-Type: application/json');
@@ -832,8 +885,24 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			transform: translateY(-2px);
 		}
 
-		/* Modal Buttons */
 		.modal-button {
+			padding: 12px 24px;
+			border-radius: 6px;
+			font-weight: 600;
+			cursor: pointer;
+			transition: all 0.2s ease;
+			font-size: 14px;
+			border: none;
+			background: linear-gradient(45deg, var(--accent-primary), #ff9f43);
+			color: #1f1f1f;
+			height: 44px;
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			box-sizing: border-box;
+		}
+		
+		.orphan-button {
 			padding: 12px 24px;
 			border-radius: 6px;
 			font-weight: 600;
@@ -872,6 +941,35 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			background: #8B0000;
 			color: var(--text-primary);
 			border: 1px solid #a83232;
+		}
+		
+		.orphan-button.delete-btn {
+			background: #8B0000;
+			color: var(--text-primary);
+			border: 1px solid #a83232;
+			padding: 10px;
+			width: 70%;
+		}
+		
+		.delete {
+			background: #8B0000;
+			color: var(--text-primary);
+			border: 1px solid #a83232;
+			padding: 10px;
+			border-radius: 6px;
+		}
+		
+		.orphan-button svg {
+			margin-right: 8px;
+		}
+		
+		.delete:hover {
+			transform: translateY(-2px);
+			cursor: pointer;
+		}
+		
+		.orphan-button.delete-btn:hover {
+			transform: translateY(-2px);
 		}
 
 		.modal-button.delete:hover,
@@ -1262,8 +1360,36 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			opacity: 0.9;
 			z-index: 0;
 		}
-		
-		/* Orphaned Badge */
+
+		/* Delete Orphans Button */
+		.delete-orphans-btn {
+			display: inline-flex;
+			align-items: center;
+			gap: 8px;
+			padding: 12px;
+			border-radius: 8px;
+			cursor: pointer;
+			font-weight: 600;
+			transition: all 0.2s;
+			text-decoration: none;
+			border: none;
+			height: 44px;
+			box-sizing: border-box;
+			background: linear-gradient(45deg, var(--accent-primary), #ff9f43);
+			color: #1f1f1f;
+		}
+
+		.delete-orphans-btn:hover {
+			background: linear-gradient(45deg, #f5b025, #ffa953);
+			transform: translateY(-2px);
+		}
+
+		.delete-orphans-icon {
+			width: 20px;
+			height: 20px;
+		}
+
+		/* Make orphaned badge more prominent */
 		.orphaned-badge {
 			position: absolute;
 			bottom: 0;
@@ -1274,6 +1400,24 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			background: #8B0000;
 			color: var(--text-primary);
 			justify-content: center;
+		}
+
+		/* Delete progress styles */
+		#deleteOrphansProgress {
+			margin-top: 20px;
+		}
+
+		/* Media query adjustments for the button */
+		@media (max-width: 768px) {
+			.delete-orphans-btn {
+				height: 40px;
+			}
+		}
+
+		@media (max-width: 480px) {
+			.delete-orphans-btn {
+				height: 38px;
+			}
 		}
 
 		/* Image Actions */
@@ -1290,7 +1434,6 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			opacity: 0;
 			transition: opacity 0.3s ease;
 			flex-direction: column;
-			padding-top: 5px;
 		}
 
 		/* Desktop hover behavior */
@@ -1840,6 +1983,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			width: 20px;
 			height: 20px;
 		}
+		
 		/* ==========================================================================
 		   20. Media Queries
 		   ========================================================================== */
@@ -1961,9 +2105,17 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			.filter-button {
 				height: 32px;
 			}
+			
+			.orphan-button.delete-btn {
+				width: 87%;
+			}
 		}
 
 		@media (max-width: 480px) {
+			.orphan-button.delete-btn {
+				width: 87%;
+			}
+			
 			.site-title {
 				display: none;
 			}
@@ -2293,6 +2445,26 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				</button>
 			</div>
 		<?php endif; ?>
+		
+        <?php
+        // Check if there are any orphaned files
+        $hasOrphans = false;
+        $allImages = getImageFiles($config, '');
+        foreach ($allImages as $image) {
+            if (strpos(strtolower($image['filename']), '**plex**') === false) {
+                $hasOrphans = true;
+                break;
+            }
+        }
+        
+        if ($hasOrphans): 
+        ?>
+		<div>
+			<button class="delete" id="showDeleteOrphansModal" title="Delete All Orphan Posters">
+				<svg height="20px" width="20px" xmlns="http://www.w3.org/2000/svg" shape-rendering="geometricPrecision" text-rendering="geometricPrecision" image-rendering="optimizeQuality" fill-rule="evenodd" clip-rule="evenodd" viewBox="0 0 456 511.82"><path fill="#fff" d="M48.42 140.13h361.99c17.36 0 29.82 9.78 28.08 28.17l-30.73 317.1c-1.23 13.36-8.99 26.42-25.3 26.42H76.34c-13.63-.73-23.74-9.75-25.09-24.14L20.79 168.99c-1.74-18.38 9.75-28.86 27.63-28.86zM24.49 38.15h136.47V28.1c0-15.94 10.2-28.1 27.02-28.1h81.28c17.3 0 27.65 11.77 27.65 28.01v10.14h138.66c.57 0 1.11.07 1.68.13 10.23.93 18.15 9.02 18.69 19.22.03.79.06 1.39.06 2.17v42.76c0 5.99-4.73 10.89-10.62 11.19-.54 0-1.09.03-1.63.03H11.22c-5.92 0-10.77-4.6-11.19-10.38 0-.72-.03-1.47-.03-2.23v-39.5c0-10.93 4.21-20.71 16.82-23.02 2.53-.45 5.09-.37 7.67-.37zm83.78 208.38c-.51-10.17 8.21-18.83 19.53-19.31 11.31-.49 20.94 7.4 21.45 17.57l8.7 160.62c.51 10.18-8.22 18.84-19.53 19.32-11.32.48-20.94-7.4-21.46-17.57l-8.69-160.63zm201.7-1.74c.51-10.17 10.14-18.06 21.45-17.57 11.32.48 20.04 9.14 19.53 19.31l-8.66 160.63c-.52 10.17-10.14 18.05-21.46 17.57-11.31-.48-20.04-9.14-19.53-19.32l8.67-160.62zm-102.94.87c0-10.23 9.23-18.53 20.58-18.53 11.34 0 20.58 8.3 20.58 18.53v160.63c0 10.23-9.24 18.53-20.58 18.53-11.35 0-20.58-8.3-20.58-18.53V245.66z"/></svg>
+			</button>
+		</div>
+        <?php endif; ?>
         <?php endif; ?>
         <a href="?action=logout" class="logout-button" title="Logout">
             <svg class="logout-icon" xmlns="http://www.w3.org/2000/svg" viewBox="-2 -2 28 28" fill="none" stroke="currentColor" stroke-width="2" style="margin-left: 5px;">
@@ -2316,6 +2488,46 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 <?php endif; ?>
 			</div>
 		</header>
+
+	<div id="deleteOrphansModal" class="modal">
+		<div class="modal-content">
+		    <div class="modal-header">
+		        <h3>Delete All Orphan Posters</h3>
+		        <button type="button" class="modal-close-btn">×</button>
+		    </div>
+		    <div class="modal-body">
+		        <?php
+		        // Count orphaned files
+		        $orphanCount = 0;
+		        $allImages = getImageFiles($config, '');
+		        foreach ($allImages as $image) {
+		            if (strpos(strtolower($image['filename']), '**plex**') === false) {
+		                $orphanCount++;
+		            }
+		        }
+		        ?>
+		        <p>Are you sure you want to delete all orphaned posters? This action cannot be undone.</p>
+		        <div style="margin: 20px 0; padding: 15px; background: rgba(255, 159, 67, 0.1); border: 1px solid var(--accent-primary); border-radius: 6px;">
+		            <p style="margin: 0;">This will delete <?php echo $orphanCount; ?> orphaned posters.</p>
+		        </div>
+		        <div id="deleteOrphansProgress" style="display: none;">
+		            <div style="height: 8px; background: #333; border-radius: 4px; margin: 16px 0; overflow: hidden;">
+		                <div id="deleteOrphansProgressBar" style="height: 100%; width: 0%; background: linear-gradient(45deg, var(--accent-primary), #ff9f43); transition: width 0.3s;"></div>
+		            </div>
+		            <div id="deleteOrphansProgressText" style="text-align: center; margin-top: 8px; color: var(--text-secondary);">
+		                Processing 0 of <?php echo $orphanCount; ?> files
+		            </div>
+		        </div>
+		        <form id="deleteOrphansForm" method="POST">
+		            <input type="hidden" name="action" value="delete_all_orphans">
+		            <div class="modal-actions">
+		                <button type="button" class="modal-button cancel" id="cancelDeleteOrphans">Cancel</button>
+		                <button type="submit" class="modal-button delete">Delete All</button>
+		            </div>
+		        </form>
+		    </div>
+		</div>
+	</div>
 		
 	<!-- Plex Import Modal -->
 	<div id="plexImportModal" class="modal">
@@ -2684,14 +2896,11 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 										</button>
 										<?php endif; ?>
 										
-										<button class="overlay-action-button delete-btn" 
+										<button class="orphan-button delete-btn"
 												data-filename="<?php echo htmlspecialchars($image['filename']); ?>"
 												data-dirname="<?php echo htmlspecialchars($image['directory']); ?>"
 												data-orphaned="<?php echo (strpos(strtolower($image['filename']), '**plex**') === false) ? 'true' : 'false'; ?>">
-											<svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-												<polyline points="3 6 5 6 21 6"></polyline>
-												<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-											</svg>
+				<svg height="16px" width="16px" xmlns="http://www.w3.org/2000/svg" shape-rendering="geometricPrecision" text-rendering="geometricPrecision" image-rendering="optimizeQuality" fill-rule="evenodd" clip-rule="evenodd" viewBox="0 0 456 511.82"><path fill="#fff" d="M48.42 140.13h361.99c17.36 0 29.82 9.78 28.08 28.17l-30.73 317.1c-1.23 13.36-8.99 26.42-25.3 26.42H76.34c-13.63-.73-23.74-9.75-25.09-24.14L20.79 168.99c-1.74-18.38 9.75-28.86 27.63-28.86zM24.49 38.15h136.47V28.1c0-15.94 10.2-28.1 27.02-28.1h81.28c17.3 0 27.65 11.77 27.65 28.01v10.14h138.66c.57 0 1.11.07 1.68.13 10.23.93 18.15 9.02 18.69 19.22.03.79.06 1.39.06 2.17v42.76c0 5.99-4.73 10.89-10.62 11.19-.54 0-1.09.03-1.63.03H11.22c-5.92 0-10.77-4.6-11.19-10.38 0-.72-.03-1.47-.03-2.23v-39.5c0-10.93 4.21-20.71 16.82-23.02 2.53-.45 5.09-.37 7.67-.37zm83.78 208.38c-.51-10.17 8.21-18.83 19.53-19.31 11.31-.49 20.94 7.4 21.45 17.57l8.7 160.62c.51 10.18-8.22 18.84-19.53 19.32-11.32.48-20.94-7.4-21.46-17.57l-8.69-160.63zm201.7-1.74c.51-10.17 10.14-18.06 21.45-17.57 11.32.48 20.04 9.14 19.53 19.31l-8.66 160.63c-.52 10.17-10.14 18.05-21.46 17.57-11.31-.48-20.04-9.14-19.53-19.32l8.67-160.62zm-102.94.87c0-10.23 9.23-18.53 20.58-18.53 11.34 0 20.58 8.3 20.58 18.53v160.63c0 10.23-9.24 18.53-20.58 18.53-11.35 0-20.58-8.3-20.58-18.53V245.66z"/></svg>
 											Delete Orphan
 										</button>
 									<?php endif; ?>
@@ -2719,7 +2928,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		<div id="deleteModal" class="modal">
 		    <div class="modal-content">
 		        <div class="modal-header">
-		            <h3>Confirm Deletion</h3>
+		            <h3>Delete Poster</h3>
 		            <button type="button" class="modal-close-btn">×</button>
 		        </div>
 		        <p>Are you sure you want to delete this poster? This action cannot be undone.</p>
@@ -6036,6 +6245,88 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				}
 			});
 		}
+		
+function initDeleteOrphans() {
+    // Get elements
+    const deleteOrphansButton = document.getElementById('showDeleteOrphansModal');
+    const deleteOrphansModal = document.getElementById('deleteOrphansModal');
+    const closeDeleteOrphansButton = deleteOrphansModal?.querySelector('.modal-close-btn');
+    const cancelDeleteOrphansButton = document.getElementById('cancelDeleteOrphans');
+    const deleteOrphansForm = document.getElementById('deleteOrphansForm');
+    
+    // Don't initialize if elements aren't found
+    if (!deleteOrphansButton || !deleteOrphansModal) return;
+    
+    // Show modal handler
+    deleteOrphansButton.addEventListener('click', function() {
+        showModal(deleteOrphansModal);
+    });
+    
+    // Close modal handlers
+    if (closeDeleteOrphansButton) {
+        closeDeleteOrphansButton.addEventListener('click', function() {
+            hideModal(deleteOrphansModal);
+        });
+    }
+    
+    if (cancelDeleteOrphansButton) {
+        cancelDeleteOrphansButton.addEventListener('click', function() {
+            hideModal(deleteOrphansModal);
+        });
+    }
+    
+    // Click outside to close
+    deleteOrphansModal.addEventListener('click', function(e) {
+        if (e.target === deleteOrphansModal) {
+            hideModal(deleteOrphansModal);
+        }
+    });
+    
+    // Handle form submission - simple implementation
+    if (deleteOrphansForm) {
+        deleteOrphansForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // Show a loading notification
+            const notification = showNotification('Deleting orphaned posters...', 'loading');
+            
+            // Simple AJAX request
+            const formData = new FormData(deleteOrphansForm);
+            
+            fetch(window.location.href, {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Remove loading notification
+                notification.remove();
+                
+                if (data.success) {
+                    // Show success and reload
+                    showNotification(`Deleted ${data.deleted} orphaned posters.`, 'success');
+                    setTimeout(function() {
+                        window.location.reload();
+                    }, 1500);
+                    
+                    // Hide modal
+                    hideModal(deleteOrphansModal);
+                } else {
+                    // Show error
+                    showNotification(`Error: ${data.error || 'Delete failed'}`, 'error');
+                }
+            })
+            .catch(error => {
+                // Remove loading notification
+                notification.remove();
+                
+                // Show error
+                showNotification('Error: Could not complete the deletion.', 'error');
+                console.error('Delete error:', error);
+            });
+        });
+    }
+}
 
 		// =========== INITIALIZATION ===========
 		
@@ -6048,7 +6339,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		initImportFromPlexFeature();
 		hideNonOrphanedDeleteButtons();
 		showOrphanedBadge();
-		
+		initDeleteOrphans();
 		
 		// Call truncation after images load and on resize
 		document.querySelectorAll('.gallery-image').forEach(img => {
@@ -6082,9 +6373,10 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
             width: auto;
             height: 44px;
         }
-        
+
         .tmdb-search-btn:hover {
             background: #333;
+            transform: translateY(-2px);
         }
         
         .tmdb-search-btn svg {
