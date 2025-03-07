@@ -12,6 +12,7 @@ Here's the updated version with the PWA line added:
 - 📲 Installable as a PWA (Progressive Web App)
 - 🔒 Simple authentication system
 - ⚡ Easy poster upload from local files or URLs
+- 🎬 Grab posters directly from TMDB
 - 📥 Import posters from Plex
 - 📤 Export posters to Plex
 - 🧹 Orphan Poster detection
