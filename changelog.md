@@ -14,3 +14,7 @@
 ## [1.1.0]
 ### Fixed
 - Upload from URL input mobile issue
+
+## [1.1.1]
+### Added
+- Added poster preview for Upload from Disk option
