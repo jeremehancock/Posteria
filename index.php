@@ -1583,6 +1583,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 
 		.upload-modal .modal-header {
 			padding: 20px 24px;
+			padding-right: 20px;
 		}
 
 		.upload-tabs {
