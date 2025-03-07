@@ -7482,6 +7482,12 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		        };
 		        
 		        reader.readAsDataURL(file);
+		        
+		        // Important: Keep the file name element empty
+		        const fileNameElement = this.parentElement.querySelector('.file-name');
+		        if (fileNameElement) {
+		            fileNameElement.textContent = '';
+		        }
 		    } else {
 		        // No file selected, hide preview
 		        previewContainer.style.display = 'none';
