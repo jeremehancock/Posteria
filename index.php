@@ -970,12 +970,18 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				height: 38px;
 				padding-top: 8px
 			}
+			.custom-tooltip {
+				display: none !important;
+			}
 		}
 
 		@media (max-width: 480px) {
 			.delete {
 				height: 38px;
 				padding-top: 8px
+			}
+			.custom-tooltip {
+				display: none !important;
 			}
 		}
 		
@@ -2514,7 +2520,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
     <div class="auth-actions">
         <?php if ((!empty($plex_config['token']) && !empty($plex_config['server_url']))): ?>
         <div>
-            <button class="upload-trigger-button" id="showPlexImportModal">
+            <button class="upload-trigger-button" id="showPlexImportModal" title="Import Posters from Plex">
                 <svg class="upload-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
                     <polyline points="8 7 3 12 8 17"></polyline>
@@ -2529,7 +2535,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		if ($totalImagesCount > 0): 
 		?>
 			<div>
-				<button class="upload-trigger-button" id="showPlexExportModal">
+				<button class="upload-trigger-button" id="showPlexExportModal" title="Export Posters to Plex">
 					<svg class="upload-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 					    <path d="M9 3h-4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4"></path>
 					    <polyline points="16 7 21 12 16 17"></polyline>
@@ -5970,7 +5976,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		            truncated = text.slice(0, start) + '...';
 		            caption.textContent = truncated;
 		            caption.title = text; // Use native title for tooltip
-		            caption.style.cursor = 'help';
+		            caption.style.cursor = 'pointer';
 		        }
 		    });
 		}
@@ -7841,6 +7847,320 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		    });
 		}
 	});
+</script>
+
+<script>
+/**
+ * Custom Tooltip Implementation for Posteria
+ * 
+ * This script adds a custom tooltip system to replace native title attributes
+ * with more attractive, customizable tooltips.
+ */
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Create tooltip element
+    const tooltip = document.createElement('div');
+    tooltip.className = 'custom-tooltip';
+    tooltip.style.display = 'none';
+    document.body.appendChild(tooltip);
+
+    // Add CSS for tooltips
+    const tooltipStyle = document.createElement('style');
+    tooltipStyle.textContent = `
+        .custom-tooltip {
+            position: fixed;
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            max-width: 300px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+            z-index: 1000;
+            pointer-events: none;
+            transition: opacity 0.2s;
+            opacity: 0;
+            border: 1px solid var(--border-color);
+            word-wrap: break-word;
+            line-height: 1.4;
+        }
+        
+        /* Arrow indicator for the tooltip */
+        .custom-tooltip:after {
+            content: '';
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background: var(--bg-tertiary);
+        }
+        
+        /* Bottom arrow (when tooltip is above the element) */
+        .custom-tooltip.tooltip-top:after {
+            bottom: -5px;
+            left: 50%;
+            transform: translateX(-50%) rotate(45deg);
+            border-right: 1px solid var(--border-color);
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        /* Top arrow (when tooltip is below the element) */
+        .custom-tooltip.tooltip-bottom:after {
+            top: -5px;
+            left: 50%;
+            transform: translateX(-50%) rotate(45deg);
+            border-left: 1px solid var(--border-color);
+            border-top: 1px solid var(--border-color);
+        }
+        
+        /* Left arrow (when tooltip is to the right of the element) */
+        .custom-tooltip.tooltip-left:after {
+            top: 50%;
+            left: -5px;
+            transform: translateY(-50%) rotate(45deg);
+            border-left: 1px solid var(--border-color);
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        /* Right arrow (when tooltip is to the left of the element) */
+        .custom-tooltip.tooltip-right:after {
+            top: 50%;
+            right: -5px;
+            transform: translateY(-50%) rotate(45deg);
+            border-right: 1px solid var(--border-color);
+            border-top: 1px solid var(--border-color);
+        }
+        
+        .custom-tooltip.visible {
+            opacity: 1;
+        }
+        
+        /* Add tooltip trigger class */
+        .tooltip-trigger {
+            cursor: pointer;
+            position: relative;
+        }
+    `;
+    document.head.appendChild(tooltipStyle);
+
+    // Function to position the tooltip
+    function positionTooltip(target, tooltip) {
+        const rect = target.getBoundingClientRect();
+        const tooltipRect = tooltip.getBoundingClientRect();
+        
+        // Get viewport dimensions
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        
+        // Calculate center positions
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        
+        // Calculate available space in each direction
+        const spaceAbove = rect.top;
+        const spaceBelow = viewportHeight - rect.bottom;
+        const spaceLeft = rect.left;
+        const spaceRight = viewportWidth - rect.right;
+        
+        // Determine the preferred position (top, right, bottom, left)
+        // Start by removing all position classes
+        tooltip.classList.remove('tooltip-top', 'tooltip-bottom', 'tooltip-left', 'tooltip-right');
+        
+        let top, left;
+        
+        // First try vertical positioning (above or below) as it's usually more natural
+        if (spaceBelow >= tooltipRect.height + 10 || (spaceBelow > spaceAbove && spaceAbove < tooltipRect.height + 10)) {
+            // Position below the element
+            top = rect.bottom + 10;
+            left = centerX - (tooltipRect.width / 2);
+            tooltip.classList.add('tooltip-bottom');
+        } else if (spaceAbove >= tooltipRect.height + 10) {
+            // Position above the element
+            top = rect.top - tooltipRect.height - 10;
+            left = centerX - (tooltipRect.width / 2);
+            tooltip.classList.add('tooltip-top');
+        }
+        // If vertical positioning doesn't work well, try horizontal
+        else if (spaceRight >= tooltipRect.width + 10 || (spaceRight > spaceLeft && spaceLeft < tooltipRect.width + 10)) {
+            // Position to the right
+            top = centerY - (tooltipRect.height / 2);
+            left = rect.right + 10;
+            tooltip.classList.add('tooltip-left');
+        } else if (spaceLeft >= tooltipRect.width + 10) {
+            // Position to the left
+            top = centerY - (tooltipRect.height / 2);
+            left = rect.left - tooltipRect.width - 10;
+            tooltip.classList.add('tooltip-right');
+        } else {
+            // Default to below if no good option (this is a fallback)
+            top = rect.bottom + 10;
+            left = centerX - (tooltipRect.width / 2);
+            tooltip.classList.add('tooltip-bottom');
+        }
+        
+        // Ensure tooltip stays within viewport horizontally
+        if (left < 10) {
+            left = 10;
+        } else if (left + tooltipRect.width > viewportWidth - 10) {
+            left = viewportWidth - tooltipRect.width - 10;
+        }
+        
+        // Ensure tooltip stays within viewport vertically
+        if (top < 10) {
+            top = 10;
+        } else if (top + tooltipRect.height > viewportHeight - 10) {
+            top = viewportHeight - tooltipRect.height - 10;
+        }
+        
+        // Apply position
+        tooltip.style.top = `${top}px`;
+        tooltip.style.left = `${left}px`;
+    }
+
+    // Initialize tooltips
+    function initTooltips() {
+        // Find all elements with title attributes
+        const elementsWithTitle = document.querySelectorAll('[title]');
+        elementsWithTitle.forEach(element => {
+            // Store title text and remove the attribute
+            const titleText = element.getAttribute('title');
+            element.removeAttribute('title');
+            
+            // Add data attribute instead
+            element.setAttribute('data-tooltip', titleText);
+            
+            // Add tooltip trigger class
+            element.classList.add('tooltip-trigger');
+        });
+
+        // Add event delegation for showing tooltips
+        document.addEventListener('mouseover', function(e) {
+            const target = e.target.closest('.tooltip-trigger');
+            if (target && target.getAttribute('data-tooltip')) {
+                tooltip.textContent = target.getAttribute('data-tooltip');
+                tooltip.style.display = 'block';
+                
+                // Force reflow for animation
+                tooltip.offsetHeight;
+                
+                // Position the tooltip
+                positionTooltip(target, tooltip);
+                
+                // Show tooltip with animation
+                tooltip.classList.add('visible');
+            }
+        });
+
+        document.addEventListener('mouseout', function(e) {
+            if (e.target.closest('.tooltip-trigger')) {
+                tooltip.classList.remove('visible');
+                setTimeout(() => {
+                    if (!tooltip.classList.contains('visible')) {
+                        tooltip.style.display = 'none';
+                    }
+                }, 200); // Match transition duration
+            }
+        });
+        
+        // Special handling for touch devices
+        let touchTimer;
+        document.addEventListener('touchstart', function(e) {
+            const target = e.target.closest('.tooltip-trigger');
+            if (target && target.getAttribute('data-tooltip')) {
+                touchTimer = setTimeout(() => {
+                    tooltip.textContent = target.getAttribute('data-tooltip');
+                    tooltip.style.display = 'block';
+                    
+                    // Force reflow for animation
+                    tooltip.offsetHeight;
+                    
+                    // Position the tooltip
+                    positionTooltip(target, tooltip);
+                    
+                    // Show tooltip with animation
+                    tooltip.classList.add('visible');
+                    
+                    // Hide after a delay
+                    setTimeout(() => {
+                        tooltip.classList.remove('visible');
+                        setTimeout(() => {
+                            tooltip.style.display = 'none';
+                        }, 200);
+                    }, 3000);
+                }, 500); // Show after 500ms press
+            }
+        });
+        
+        document.addEventListener('touchend', function() {
+            clearTimeout(touchTimer);
+        });
+        
+        document.addEventListener('touchmove', function() {
+            clearTimeout(touchTimer);
+        });
+        
+        // Handle window resize - reposition tooltips if visible
+        window.addEventListener('resize', function() {
+            if (tooltip.classList.contains('visible')) {
+                const currentTarget = document.querySelector('.tooltip-trigger:hover');
+                if (currentTarget) {
+                    positionTooltip(currentTarget, tooltip);
+                }
+            }
+        });
+
+        // Apply tooltips to dynamically loaded content
+        // This handles gallery items loaded via AJAX
+        const observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(mutation) {
+                if (mutation.type === 'childList') {
+                    mutation.addedNodes.forEach(function(node) {
+                        if (node.nodeType === 1) { // Element node
+                            const newElements = node.querySelectorAll('[title]');
+                            if (newElements.length > 0) {
+                                newElements.forEach(element => {
+                                    const titleText = element.getAttribute('title');
+                                    element.removeAttribute('title');
+                                    element.setAttribute('data-tooltip', titleText);
+                                    element.classList.add('tooltip-trigger');
+                                });
+                            }
+                            
+                            // Also check if the node itself has a title
+                            if (node.hasAttribute && node.hasAttribute('title')) {
+                                const titleText = node.getAttribute('title');
+                                node.removeAttribute('title');
+                                node.setAttribute('data-tooltip', titleText);
+                                node.classList.add('tooltip-trigger');
+                            }
+                        }
+                    });
+                }
+            });
+        });
+        
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+    }
+
+    // Initialize tooltips after everything is loaded
+    initTooltips();
+});
+
+// Call initTooltips after AJAX updates
+document.addEventListener('ajaxComplete', function() {
+    // If your app has a custom event for AJAX completion, use that instead
+    setTimeout(function() {
+        const elementsWithTitle = document.querySelectorAll('[title]');
+        elementsWithTitle.forEach(element => {
+            const titleText = element.getAttribute('title');
+            element.removeAttribute('title');
+            element.setAttribute('data-tooltip', titleText);
+            element.classList.add('tooltip-trigger');
+        });
+    }, 500);
+});
 </script>
 </body>
 </html>

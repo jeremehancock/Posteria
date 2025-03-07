@@ -35,3 +35,7 @@
 ### Fixed
 - CSS Tweaks for the filter buttons and modal close icons
 - Updated the Change Poster to pull the Max File Size from config
+
+## [1.1.6]
+### Added
+- Fancy Tooltips
