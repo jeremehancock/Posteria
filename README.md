@@ -65,13 +65,6 @@ services:
     restart: unless-stopped
 ```
 
-#### Note:
-`PLEX_REMOVE_OVERLAY_LABEL`
-
-Controls whether Posteria will remove the "Overlay" label in Plex when the poster is updated. The "Overlay" label is used by Kometa for re-applying overlays on updated posters. Set to true if you use [Kometa](https://kometa.wiki/en/latest/).
-
-[More info](https://kometa.wiki/en/latest/files/overlays/#overlay-understandings)
-
 2. Start the container:
 ```bash
 docker-compose up -d
@@ -92,6 +85,13 @@ docker-compose up -d
 | PLEX_SERVER_URL | URL for your Plex Server | ex: http://your-server:32400
 | PLEX_TOKEN | Plex Server Token | [More info](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/) |
 | PLEX_REMOVE_OVERLAY_LABEL | Remove Overlay Label (true/false) | [More info](#note) |
+
+#### Note:
+`PLEX_REMOVE_OVERLAY_LABEL`
+
+Controls whether Posteria will remove the "Overlay" label in Plex when the poster is updated. The "Overlay" label is used by Kometa for re-applying overlays on updated posters. Set to true if you use [Kometa](https://kometa.wiki/en/latest/).
+
+[More info](https://kometa.wiki/en/latest/files/overlays/#overlay-understandings)
 
 ### Volume Mounts
 
