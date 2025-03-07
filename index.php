@@ -3061,7 +3061,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		            <p style="margin-bottom: 20px; text-align: left;">If you find Posteria useful in managing your media poster collection, please consider making a donation to support ongoing development and maintenance.</p>
 		            
 		            <div class="donate-section">
-		                <div class="donate-button" style="text-align: center; margin: 30px 0;">
+		                <div class="donate-button" style="text-align: center; margin: 15px 0 10px;">
 		                    <a href="https://www.buymeacoffee.com/jeremehancock" target="_blank">
 		                        <img src="https://img.buymeacoffee.com/button-api/?text=Hard drive fund&emoji=💻&slug=jeremehancock&button_colour=f5a623&font_colour=000000&font_family=Bree&outline_colour=000000&coffee_colour=FFDD00" alt="Buy Me A Coffee" style="height: 50px; transform: scale(1.2);">
 		                    </a>
