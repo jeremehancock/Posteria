@@ -3116,7 +3116,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		            const currentYear = today.getFullYear();
 		            document.write('© ' + (currentYear === startYear ? startYear : startYear + '-' + currentYear));
 		        </script>
-		        Posteria. MIT License.
+		        <a href="https://posteria.app" target="_blank" style="color: #ffffff; text-decoration: none;">Posteria</a> MIT License
 		        
 		        <?php 
 		        // Check for updates
