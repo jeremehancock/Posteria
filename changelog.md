@@ -26,3 +26,7 @@
 ## [1.1.3]
 ### Added
 - Added Support Development modal
+
+## [1.1.4]
+### Added
+- Added missing Cancel buttons in some modals

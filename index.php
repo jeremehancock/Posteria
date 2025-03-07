@@ -2340,6 +2340,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
                     </div>
                 </div>
                 <div class="upload-input-group">
+    				<button type="button" class="modal-button cancel" id="cancelChangePoster">Cancel</button>
                     <button type="submit" class="modal-button" disabled style="margin-top: 32px;">Change</button>
                 </div>
                 <div class="upload-help">
@@ -2358,6 +2359,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
                     <input type="url" name="image_url" class="login-input" placeholder="Enter poster URL..." required>
                 </div>
                 <div class="upload-input-group">
+    				<button type="button" class="modal-button cancel" id="cancelChangePosterUrl">Cancel</button>
                     <button type="submit" class="modal-button" style="margin-top: 32px;">Change</button>
                 </div>
                 <div class="upload-help">
@@ -2689,6 +2691,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		            <div class="import-error" style="display: none; color: var(--danger-color); background: rgba(239, 68, 68, 0.1); border: 1px solid var(--danger-color); padding: 12px; border-radius: 6px; margin-top: 16px;"></div>
 		            
 		            <div class="modal-actions" style="margin-top: 32px; justify-content: end;">
+		            	<button type="button" class="modal-button cancel" id="cancelPlexImportBtn">Cancel</button>
 		                <button type="button" id="startPlexImport" class="modal-button rename" disabled>
 		                    Start Import
 		                </button>
@@ -2790,6 +2793,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
                 <div class="export-error" style="display: none; color: var(--danger-color); background: rgba(239, 68, 68, 0.1); border: 1px solid var(--danger-color); padding: 12px; border-radius: 6px; margin-top: 16px;"></div>
                 
                 <div class="modal-actions" style="margin-top: 32px; justify-content: end;">
+                    <button type="button" class="modal-button cancel" id="cancelPlexExportBtn">Cancel</button>
                     <button type="button" id="startPlexExport" class="modal-button rename" disabled>
                         Start Export
                     </button>
@@ -4704,6 +4708,20 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		    });
 		}
 		
+	const cancelPlexImportBtn = document.getElementById('cancelPlexImportBtn');
+	if (cancelPlexImportBtn) {
+		cancelPlexImportBtn.addEventListener('click', function() {
+		    hidePlexModal();
+		});
+	}
+
+	const cancelPlexExportBtn = document.getElementById('cancelPlexExportBtn');
+	if (cancelPlexExportBtn) {
+		cancelPlexExportBtn.addEventListener('click', function() {
+		    hidePlexExportModal();
+		});
+	}
+		
 		// =========== PLEX INTEGRATION UTILITIES ===========
 		
 		// Function to refresh image after updates
@@ -5849,7 +5867,22 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		        button.removeEventListener('click', importFromPlexHandler);
 		        button.addEventListener('click', importFromPlexHandler);
 		    });
-		    
+
+			// Add these handlers for the cancel buttons
+			const cancelChangePosterBtn = document.getElementById('cancelChangePoster');
+			if (cancelChangePosterBtn) {
+				cancelChangePosterBtn.addEventListener('click', function() {
+					hideModal(changePosterModal);
+				});
+			}
+
+			const cancelChangePosterUrlBtn = document.getElementById('cancelChangePosterUrl');
+			if (cancelChangePosterUrlBtn) {
+				cancelChangePosterUrlBtn.addEventListener('click', function() {
+					hideModal(changePosterModal);
+				});
+			}
+	    
 		    // Initialize Plex-specific buttons
 		    initChangePosters();
 		    initializeSendToPlexButtons();
