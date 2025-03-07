@@ -31,7 +31,7 @@
 // Version Checker for Posteria
 
 // Set the current version here (to be updated with each release)
-define('POSTERIA_VERSION', '1.1.0');
+define('POSTERIA_VERSION', '1.1.1');
 
 /**
  * Checks if an update is available by comparing version strings

@@ -1661,6 +1661,8 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			position: relative;
 			display: inline-block;
 			flex: 1;
+			align-self: end;
+			margin-bottom: 8px;
 		}
 
 		.custom-file-input input[type="file"] {
@@ -7228,6 +7230,289 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
         initialize();
     }
 })();
+</script>
+
+<script>
+// Add file preview functionality to match URL preview exactly
+document.addEventListener('DOMContentLoaded', function() {
+    // Get the file input element and its parent container
+    const fileInput = document.getElementById('fileChangePosterInput');
+    if (!fileInput) return;
+
+    const inputGroup = fileInput.closest('.upload-input-group');
+    if (!inputGroup) return;
+    
+    // Style the input group as flex container to place preview alongside input
+    inputGroup.style.display = 'flex';
+    inputGroup.style.gap = '20px';
+    inputGroup.style.alignItems = 'start';
+    
+    // Create the preview container with same styling as URL preview
+    const previewContainer = document.createElement('div');
+    previewContainer.className = 'tmdb-poster-preview';
+    previewContainer.id = 'file-poster-preview';
+    previewContainer.style.width = '100px';
+    previewContainer.style.height = '150px';
+    previewContainer.style.borderRadius = '8px';
+    previewContainer.style.overflow = 'hidden';
+    previewContainer.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.2)';
+    previewContainer.style.flexShrink = '0';
+    previewContainer.style.backgroundColor = 'var(--bg-secondary)';
+    previewContainer.style.display = 'none';
+    previewContainer.style.cursor = 'pointer';
+    previewContainer.style.position = 'relative';
+    previewContainer.style.border = '2px solid #E5A00D';
+    previewContainer.style.marginBottom = '9px';
+
+    // Create the magnifying icon overlay (copied from URL preview)
+    const overlayIcon = document.createElement('div');
+    overlayIcon.className = 'tmdb-poster-icon';
+    overlayIcon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+    </svg>`;
+    overlayIcon.style.position = 'absolute';
+    overlayIcon.style.top = '50%';
+    overlayIcon.style.left = '50%';
+    overlayIcon.style.transform = 'translate(-50%, -50%)';
+    overlayIcon.style.width = '24px';
+    overlayIcon.style.height = '24px';
+    overlayIcon.style.zIndex = '3';
+    overlayIcon.style.opacity = '0';
+    overlayIcon.style.transition = 'all 0.2s';
+
+    // Create the preview image element
+    const previewImg = document.createElement('img');
+    previewImg.style.width = '100%';
+    previewImg.style.height = '100%';
+    previewImg.style.objectFit = 'cover';
+    previewImg.style.display = 'block';
+    
+    // Add hover effect (same as URL preview)
+    previewContainer.addEventListener('mouseenter', function() {
+        overlayIcon.style.opacity = '1';
+        this.style.setProperty('--overlay-opacity', '1');
+    });
+    
+    previewContainer.addEventListener('mouseleave', function() {
+        overlayIcon.style.opacity = '0';
+        this.style.setProperty('--overlay-opacity', '0');
+    });
+    
+    // Add the hover overlay effect with pseudo-elements
+    const style = document.createElement('style');
+    style.textContent = `
+        #file-poster-preview::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 2;
+            opacity: 0;
+            opacity: var(--overlay-opacity, 0);
+            transition: all 0.2s;
+            background: rgba(229, 160, 13, 0.9);
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+        }
+        
+        #file-poster-preview::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.6);
+            opacity: 0;
+            opacity: var(--overlay-opacity, 0);
+            transition: opacity 0.2s;
+        }
+    `;
+    document.head.appendChild(style);
+    
+    // Add elements to the DOM
+    previewContainer.appendChild(previewImg);
+    previewContainer.appendChild(overlayIcon);
+    inputGroup.appendChild(previewContainer);
+    
+    // Create the fullscreen preview modal (if it doesn't exist yet)
+    let imagePreviewModal = document.getElementById('imagePreviewModal');
+    
+    if (!imagePreviewModal) {
+        imagePreviewModal = document.createElement('div');
+        imagePreviewModal.id = 'imagePreviewModal';
+        imagePreviewModal.className = 'image-preview-modal';
+        imagePreviewModal.innerHTML = `
+            <div class="image-preview-content">
+                <img id="imagePreviewImg" src="" alt="Preview">
+            </div>
+            <button class="image-preview-close">×</button>
+        `;
+        document.body.appendChild(imagePreviewModal);
+        
+        // Style the modal to match the URL preview modal
+        imagePreviewModal.style.display = 'none';
+        imagePreviewModal.style.position = 'fixed';
+        imagePreviewModal.style.top = '0';
+        imagePreviewModal.style.left = '0';
+        imagePreviewModal.style.width = '100%';
+        imagePreviewModal.style.height = '100%';
+        imagePreviewModal.style.background = 'rgba(0, 0, 0, 0.85)';
+        imagePreviewModal.style.zIndex = '1100';
+        imagePreviewModal.style.opacity = '0';
+        imagePreviewModal.style.transition = 'opacity 0.3s ease';
+        imagePreviewModal.style.justifyContent = 'center';
+        imagePreviewModal.style.alignItems = 'center';
+        
+        // Style the modal content
+        const modalContent = imagePreviewModal.querySelector('.image-preview-content');
+        modalContent.style.position = 'relative';
+        modalContent.style.maxWidth = '80%';
+        modalContent.style.maxHeight = '80%';
+        modalContent.style.borderRadius = '8px';
+        modalContent.style.overflow = 'hidden';
+        modalContent.style.boxShadow = '0 8px 16px rgba(0,0,0,0.5)';
+        
+        // Style the image
+        const modalImg = imagePreviewModal.querySelector('#imagePreviewImg');
+        modalImg.style.display = 'block';
+        modalImg.style.maxWidth = '100%';
+        modalImg.style.maxHeight = '80vh';
+        modalImg.style.margin = '0 auto';
+        
+        // Style the close button
+        const closeBtn = imagePreviewModal.querySelector('.image-preview-close');
+        closeBtn.style.position = 'absolute';
+        closeBtn.style.top = '20px';
+        closeBtn.style.right = '20px';
+        closeBtn.style.background = 'var(--bg-secondary)';
+        closeBtn.style.color = 'var(--text-primary)';
+        closeBtn.style.width = '40px';
+        closeBtn.style.height = '40px';
+        closeBtn.style.borderRadius = '50%';
+        closeBtn.style.display = 'flex';
+        closeBtn.style.alignItems = 'center';
+        closeBtn.style.justifyContent = 'center';
+        closeBtn.style.cursor = 'pointer';
+        closeBtn.style.border = 'none';
+        closeBtn.style.fontSize = '24px';
+        closeBtn.style.boxShadow = '0 2px 10px rgba(0,0,0,0.3)';
+        closeBtn.style.transition = 'all 0.2s';
+        
+        // Add hover effect to close button
+        closeBtn.addEventListener('mouseover', function() {
+            this.style.background = 'var(--bg-tertiary)';
+            this.style.transform = 'scale(1.1)';
+        });
+        
+        closeBtn.addEventListener('mouseout', function() {
+            this.style.background = 'var(--bg-secondary)';
+            this.style.transform = 'scale(1)';
+        });
+        
+        // Close modal on button click
+        closeBtn.addEventListener('click', function() {
+            hideImagePreviewModal();
+        });
+        
+        // Close modal on outside click
+        imagePreviewModal.addEventListener('click', function(e) {
+            if (e.target === imagePreviewModal) {
+                hideImagePreviewModal();
+            }
+        });
+        
+        // Close modal on escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && imagePreviewModal.classList.contains('show')) {
+                hideImagePreviewModal();
+            }
+        });
+    }
+    
+    // Show image preview modal function
+    function showImagePreviewModal(imageUrl) {
+        const modalImg = document.getElementById('imagePreviewImg');
+        modalImg.src = imageUrl;
+        
+        imagePreviewModal.style.display = 'flex';
+        // Force reflow
+        imagePreviewModal.offsetHeight;
+        imagePreviewModal.classList.add('show');
+        imagePreviewModal.style.opacity = '1';
+    }
+    
+    // Hide image preview modal function
+    function hideImagePreviewModal() {
+        imagePreviewModal.classList.remove('show');
+        imagePreviewModal.style.opacity = '0';
+        setTimeout(() => {
+            imagePreviewModal.style.display = 'none';
+        }, 300);
+    }
+    
+    // Add click handler to preview container
+    previewContainer.addEventListener('click', function() {
+        showImagePreviewModal(previewImg.src);
+    });
+    
+    // Listen for file selection changes
+    fileInput.addEventListener('change', function() {
+        if (this.files && this.files[0]) {
+            const file = this.files[0];
+            
+            // Validate it's an image
+            if (!file.type.match('image.*')) {
+                previewContainer.style.display = 'none';
+                return;
+            }
+            
+            // Read the file and update preview
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                previewImg.src = e.target.result;
+                previewContainer.style.display = 'flex';
+            };
+            
+            reader.readAsDataURL(file);
+        } else {
+            // No file selected, hide preview
+            previewContainer.style.display = 'none';
+        }
+    });
+    
+    // Clear preview when switching tabs
+    const changePosterTabs = document.querySelectorAll('.upload-tab-btn');
+    if (changePosterTabs) {
+        changePosterTabs.forEach(tab => {
+            tab.addEventListener('click', function() {
+                if (this.getAttribute('data-tab') !== 'file') {
+                    previewContainer.style.display = 'none';
+                } else if (fileInput.files && fileInput.files[0]) {
+                    previewContainer.style.display = 'flex';
+                }
+            });
+        });
+    }
+    
+    // Handle modal close to reset everything
+    const changePosterModal = document.getElementById('changePosterModal');
+    if (changePosterModal) {
+        const closeButton = changePosterModal.querySelector('.modal-close-btn');
+        if (closeButton) {
+            closeButton.addEventListener('click', function() {
+                previewContainer.style.display = 'none';
+            });
+        }
+    }
+});
 </script>
 </body>
 </html>
