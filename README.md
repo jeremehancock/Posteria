@@ -110,6 +110,7 @@ The Docker container uses the following volume mounts:
 4. Change posters:
 	- Support for local file upload
 	- Support for direct URL upload
+	- Grab posters from TMDB for Movies and TV Shows
 5. Posters are automatically updated on Plex
 6. Bulk export options also available
 7. As you add more media to Plex just re-import to add new posters
