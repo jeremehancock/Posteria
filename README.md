@@ -49,13 +49,13 @@ services:
       - "1818:80"
     environment:
       - SITE_TITLE=Posteria
-  - AUTH_USERNAME=admin					# Change this!
-      - AUTH_PASSWORD=change				# Change this!
+      - AUTH_USERNAME=admin				# Change this!
+      - AUTH_PASSWORD=changeme				# Change this!
       - SESSION_DURATION=3600				# In seconds
       - IMAGES_PER_PAGE=24
       - MAX_FILE_SIZE=5242880				# In bytes
       - PLEX_SERVER_URL=
-      - PLEX_TOKEN=             	        
+      - PLEX_TOKEN=
       - PLEX_REMOVE_OVERLAY_LABEL=false			# Set to true for Kometa compatibility
     volumes:
       - ./posters/movies:/var/www/html/posters/movies
