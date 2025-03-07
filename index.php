@@ -743,6 +743,8 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			margin: 0 auto;
 			padding-bottom: 10px;
 			height: 100%;
+			display: flex;
+			flex-direction: column;
 		}
 
 		/* ==========================================================================
@@ -1195,7 +1197,6 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		   8. Search
 		   ========================================================================== */
 		.search-container {
-			margin-bottom: 40px;
 			text-align: center;
 			position: relative;
 		}
@@ -1244,6 +1245,9 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		.filter-container {
 			margin: 20px 0 30px;
 			text-align: center;
+			display: flex;
+			flex: 1;
+			justify-content: center;
 		}
 
 		.filter-buttons {
@@ -2123,6 +2127,8 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				font-size: .8rem;
 				flex-wrap: nowrap;
 				gap: 0;
+        		flex: 1;
+        		justify-content: space-between;
 			}
 			
 			body {
@@ -2145,11 +2151,6 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			.search-input, 
 			.search-button {
 				padding: 12px 16px;
-			}
-
-			.filter-buttons {
-				flex-wrap: wrap;
-				justify-content: center;
 			}
 			
 			.modal-content {
@@ -2203,9 +2204,11 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			}
 
 			.filter-buttons {
-				font-size: .76rem;
 				flex-wrap: nowrap;
 				gap: 0;
+    			flex: 1;
+        		justify-content: space-between;
+				
 			}
 
 			.gallery {
@@ -2360,7 +2363,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
                     <button type="submit" class="modal-button" disabled style="margin-top: 32px;">Change</button>
                 </div>
                 <div class="upload-help">
-                    Maximum file size: 5MB<br>
+                    Maximum file size: <?php echo htmlspecialchars(round($config['maxFileSize'] / (1024 * 1024), 2) . ' MB'); ?><br>
                     Allowed types: jpg, jpeg, png, webp
                 </div>
             </form>
@@ -2379,7 +2382,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
                     <button type="submit" class="modal-button" style="margin-top: 32px;">Change</button>
                 </div>
                 <div class="upload-help">
-                    Maximum file size: 5MB<br>
+                    Maximum file size: <?php echo htmlspecialchars(round($config['maxFileSize'] / (1024 * 1024), 2) . ' MB'); ?><br>
                     Allowed types: jpg, jpeg, png, webp
                 </div>
             </form>
