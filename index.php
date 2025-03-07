@@ -960,6 +960,21 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			border: 1px solid #a83232;
 			padding: 10px;
 			border-radius: 6px;
+			padding: 10px;
+		}
+		
+		@media (max-width: 768px) {
+			.delete {
+				height: 38px;
+				padding-top: 8px
+			}
+		}
+
+		@media (max-width: 480px) {
+			.delete {
+				height: 38px;
+				padding-top: 8px
+			}
 		}
 		
 		.orphan-button svg {
