@@ -18,3 +18,7 @@
 ## [1.1.1]
 ### Added
 - Added poster preview for Upload from Disk option
+
+## [1.1.2]
+### Added
+- Added new environment variable to ensure compatibility with Kometa
