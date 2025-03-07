@@ -22,3 +22,7 @@
 ## [1.1.2]
 ### Added
 - Added new environment variable to ensure compatibility with Kometa
+
+## [1.1.3]
+### Added
+- Added Support Development modal
