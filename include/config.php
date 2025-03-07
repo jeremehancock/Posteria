@@ -1,5 +1,4 @@
 <?php
-
 # Posteria: A Media Poster Collection App
 # Save all your favorite custom media server posters in one convenient place
 #
@@ -28,18 +27,31 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+// Helper function to convert string values to booleans
+function getBoolEnvWithFallback($key, $default) {
+    $value = getenv($key);
+    if ($value === false) {
+        return $default;
+    }
+    // Convert string "true"/"false" to actual boolean
+    if (is_string($value)) {
+        return strtolower($value) === 'true' || $value === '1' || $value === 'yes';
+    }
+    return (bool)$value;
+}
+
 $auth_config = [
 	'username' => getEnvWithFallback('AUTH_USERNAME', 'admin'),
 	'password' => getEnvWithFallback('AUTH_PASSWORD', 'changeme'),
 	'session_duration' => getIntEnvWithFallback('SESSION_DURATION', 3600) // 1 hour default
 ];
-
 $plex_config = [
     'server_url' => getEnvWithFallback('PLEX_SERVER_URL', ''),
     'token' => getEnvWithFallback('PLEX_TOKEN', ''),
     'connect_timeout' => getIntEnvWithFallback('PLEX_CONNECT_TIMEOUT', 10),
     'request_timeout' => getIntEnvWithFallback('PLEX_REQUEST_TIMEOUT', 60),
-    'import_batch_size' => getIntEnvWithFallback('PLEX_IMPORT_BATCH_SIZE', 25)
+    'import_batch_size' => getIntEnvWithFallback('PLEX_IMPORT_BATCH_SIZE', 25),
+    'remove_overlay_label' => getBoolEnvWithFallback('PLEX_REMOVE_OVERLAY_LABEL', false)
 ];
 
 ?>

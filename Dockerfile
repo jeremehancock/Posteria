@@ -5,6 +5,11 @@ RUN apt-get update && apt-get install -y \
     libfreetype6-dev \
     libjpeg62-turbo-dev \
     libpng-dev \
+    curl \
+    wget \
+    jq \
+    grep \
+    sed \
     && rm -rf /var/lib/apt/lists/*
 
 # Configure and install PHP extensions
@@ -17,6 +22,11 @@ RUN { \
     echo 'post_max_size = 21M'; \
     echo 'memory_limit = 256M'; \
 } > /usr/local/etc/php/conf.d/uploads.ini
+
+# Enable exec function for shell scripts
+RUN { \
+    echo 'disable_functions = '; \
+} > /usr/local/etc/php/conf.d/enable-exec.ini
 
 # Enable Apache modules
 RUN a2enmod rewrite
@@ -47,6 +57,8 @@ COPY include/library-tracking.php /var/www/html/include/
 COPY include/fetch-tmdb.php /var/www/html/include/
 COPY include/delete-orphans.php /var/www/html/include/
 COPY include/config.php /var/www/html/include/
+COPY include/remove-overlay-label.sh /var/www/html/include/
+COPY include/.htaccess /var/www/html/include/
 
 # Copy assets directory
 COPY assets/ /var/www/html/assets/

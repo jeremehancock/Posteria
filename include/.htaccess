@@ -1,0 +1,16 @@
+# Deny access to all non-PHP files in this directory
+<FilesMatch "^(?!.*\.php$).*$">
+  Order Allow,Deny
+  Deny from all
+</FilesMatch>
+
+# Allow PHP files to be executed, but not viewed directly
+<FilesMatch "\.php$">
+  # Only allow POST requests or internal includes
+  <IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteCond %{REQUEST_METHOD} !POST
+    RewriteCond %{THE_REQUEST} ^[A-Z]{3,}\s([^.]+)\.php [NC]
+    RewriteRule ^ - [F,L]
+  </IfModule>
+</FilesMatch>
