@@ -2026,6 +2026,30 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		   20. Media Queries
 		   ========================================================================== */
 		   
+		/* Hide the Export text on mobile devices */
+		@media screen and (max-width: 768px) {
+			.export-text {
+			    display: none;
+			}
+			
+			/* Optionally adjust padding for mobile to make it more of an icon button */
+			.upload-trigger-button {
+			    padding: 8px;
+			}
+		}
+    
+        /* Hide the Export text on mobile devices */
+		@media screen and (max-width: 480px) {
+		    .export-text {
+		        display: none;
+		    }
+		    
+		    /* Optionally adjust padding for mobile to make it more of an icon button */
+		    .upload-trigger-button {
+		        padding: 8px;
+		    }
+		}
+				   
 		@media (max-width: 480px) {
 			.footer {
 				padding: 20px 15px;
@@ -2475,7 +2499,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
                     <polyline points="8 7 3 12 8 17"></polyline>
                     <line x1="3" y1="12" x2="15" y2="12"></line>
                 </svg>
-                Import
+                 <span class="export-text">Import</span>
             </button>
         </div>
 		<?php 
@@ -2490,7 +2514,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 					    <polyline points="16 7 21 12 16 17"></polyline>
 					    <line x1="21" y1="12" x2="9" y2="12"></line>
 					</svg>
-					Export
+					 <span class="export-text">Export</span>
 				</button>
 			</div>
 		<?php endif; ?>
@@ -3020,6 +3044,33 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		            <a href="https://github.com/jeremehancock/Posteria/blob/main/changelog.md" target="_blank" class="modal-button" style="text-decoration: none;">
 		                View Changelog
 		            </a>
+		        </div>
+		    </div>
+		</div>
+	</div>
+	
+	<!-- Support Modal -->
+	<div id="supportModal" class="modal">
+		<div class="modal-content">
+		    <div class="modal-header">
+		        <h3>Support Development</h3>
+		        <button type="button" class="modal-close-btn">×</button>
+		    </div>
+		    <div class="modal-body">
+		        <div class="support-content">
+		            <p style="margin-bottom: 20px; text-align: left;">If you find Posteria useful in managing your media poster collection, please consider making a donation to support ongoing development and maintenance.</p>
+		            
+		            <div class="donate-section">
+		                <div class="donate-button" style="text-align: center; margin: 30px 0;">
+		                    <a href="https://www.buymeacoffee.com/jeremehancock" target="_blank">
+		                        <img src="https://img.buymeacoffee.com/button-api/?text=Hard drive fund&emoji=💻&slug=jeremehancock&button_colour=f5a623&font_colour=000000&font_family=Bree&outline_colour=000000&coffee_colour=FFDD00" alt="Buy Me A Coffee" style="height: 50px; transform: scale(1.2);">
+		                    </a>
+		                </div>
+		            </div>
+		            
+		            <div style="text-align: center; margin-top: 20px; color: var(--text-secondary);">
+		                <p>Thank you for supporting open source software!</p>
+		            </div>
 		        </div>
 		    </div>
 		</div>
@@ -7580,6 +7631,161 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		        attributes: true, 
 		        attributeFilter: ['class', 'style'],
 		        attributeOldValue: true
+		    });
+		}
+	});
+</script>
+
+<!-- Add support button to header -->
+<script>
+	document.addEventListener('DOMContentLoaded', function() {
+		// Create the support button
+		const supportButton = document.createElement('button');
+		supportButton.id = 'showSupportModal';
+		supportButton.className = 'support-button';
+		supportButton.setAttribute('title', 'Support Development');
+		supportButton.innerHTML = `
+		    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#e74c3c" width="24" height="24">
+		        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+		    </svg>
+		`;
+		
+		// Create style for the support button
+		const style = document.createElement('style');
+		style.textContent = `
+		    .support-button {
+		        background: transparent;
+		        border: none;
+		        cursor: pointer;
+		        padding: 8px;
+		        margin-right: 8px;
+		        display: flex;
+		        align-items: center;
+		        justify-content: center;
+		        border-radius: 50%;
+		        transition: all 0.2s ease;
+		    }
+		    
+		    .support-button:hover {
+		        background-color: rgba(231, 76, 60, 0.1);
+		        transform: scale(1.1);
+		    }
+		    
+		    .support-button svg {
+		        width: 30px;
+		        height: 30px;
+		        filter: drop-shadow(0 1px 3px rgba(0,0,0,0.3));
+		    }
+		    
+		    @media (max-width: 768px) {
+		        .support-button {
+		            padding: 6px;
+		        }
+		        
+		        .support-button svg {
+		            width: 28px;
+		            height: 28px;
+		        }
+		    }
+		    
+		    @media (max-width: 480px) {
+		        .support-button {
+		            padding: 5px;
+		        }
+		        
+		        .support-button svg {
+		            width: 26px;
+		            height: 26px;
+		        }
+		    }
+		    
+		    /* Support modal specific styles */
+		    .support-content {
+		        text-align: center;
+		    }
+		    
+		    .donate-section {
+		        margin: 20px 0;
+		        padding: 20px;
+		        background: rgba(229, 160, 13, 0.1);
+		        border-radius: 12px;
+		        border: 1px solid var(--accent-primary);
+		    }
+		`;
+		document.head.appendChild(style);
+		
+		// First check if user is logged in by looking for logout button
+		const isLoggedIn = document.querySelector('.logout-button') !== null;
+		
+		if (isLoggedIn) {
+		    // For logged in users, add to auth-actions div
+		    const authActions = document.querySelector('.auth-actions');
+		    if (authActions) {
+		        // Insert as first element of auth-actions
+		        authActions.insertBefore(supportButton, authActions.firstChild);
+		    }
+		} else {
+		    // For non-logged in users, find the login button
+		    const loginButton = document.getElementById('showLoginModal');
+		    if (loginButton) {
+		        // Create a container for both buttons that will go in the original position of the login button
+		        const buttonContainer = document.createElement('div');
+		        buttonContainer.className = 'header-buttons';
+		        buttonContainer.style.display = 'flex';
+		        buttonContainer.style.alignItems = 'center';
+		        buttonContainer.style.gap = '8px';
+		        
+		        // Add the support button first, then the login button
+		        buttonContainer.appendChild(supportButton);
+		        
+		        // Replace the login button with our container
+		        const parent = loginButton.parentNode;
+		        parent.replaceChild(buttonContainer, loginButton);
+		        
+		        // Now add the login button to our container
+		        buttonContainer.appendChild(loginButton);
+		    }
+		}
+		
+		// Add event listeners for the modal
+		const supportModal = document.getElementById('supportModal');
+		const closeSupportButton = supportModal?.querySelector('.modal-close-btn');
+		
+		if (supportButton && supportModal) {
+		    // Show modal function
+		    function showSupportModal() {
+		        supportModal.style.display = 'block';
+		        supportModal.offsetHeight; // Force reflow
+		        supportModal.classList.add('show');
+		    }
+		    
+		    // Hide modal function
+		    function hideSupportModal() {
+		        supportModal.classList.remove('show');
+		        setTimeout(() => {
+		            supportModal.style.display = 'none';
+		        }, 300);
+		    }
+		    
+		    // Event listeners
+		    supportButton.addEventListener('click', showSupportModal);
+		    
+		    if (closeSupportButton) {
+		        closeSupportButton.addEventListener('click', hideSupportModal);
+		    }
+		    
+		    // Close when clicking outside the modal
+		    supportModal.addEventListener('click', function(e) {
+		        if (e.target === supportModal) {
+		            hideSupportModal();
+		        }
+		    });
+		    
+		    // Close on escape key
+		    document.addEventListener('keydown', function(e) {
+		        if (e.key === 'Escape' && supportModal.classList.contains('show')) {
+		            hideSupportModal();
+		        }
 		    });
 		}
 	});
