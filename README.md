@@ -64,7 +64,7 @@ services:
     restart: unless-stopped
 ```
 
-#### Note
+#### Note:
 `PLEX_REMOVE_OVERLAY_LABEL`
 
 Controls whether Posteria will remove the "Overlay" label in Plex when the poster is updated. The "Overlay" label is used by Kometa for re-applying overlays on updated posters. Set to true if you use [Kometa](https://kometa.wiki/en/latest/).
