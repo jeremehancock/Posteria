@@ -1023,6 +1023,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			align-items: center;
 			justify-content: center;
 			box-sizing: border-box;
+			font-size: 14px;
 		}
 
 		.login-button:hover {
