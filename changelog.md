@@ -30,3 +30,8 @@
 ## [1.1.4]
 ### Added
 - Added missing Cancel buttons in some modals
+
+## [1.1.5]
+### Fixed
+- CSS Tweaks for the filter buttons and modal close icons
+- Updated the Change Poster to pull the Max File Size from config
