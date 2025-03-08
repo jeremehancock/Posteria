@@ -2930,11 +2930,9 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				    <?php foreach ($pageImages as $image): ?>
 				        <div class="gallery-item">
 				            <div class="gallery-image-container">
-				                <?php if (empty($currentDirectory)): ?>
 									<div class="directory-badge">
 										<?php echo formatDirectoryName($image['directory']); ?>
 									</div>
-				                <?php endif; ?>
 				                
 
 									<div class="orphaned-badge" data-orphaned="<?php echo (strpos(strtolower($image['filename']), '**plex**') === false) ? 'true' : 'false'; ?>" style="display: none;">

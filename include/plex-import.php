@@ -154,11 +154,14 @@ try {
         return trim($filename);
     }
 
-	function generatePlexFilename($title, $id, $extension, $mediaType = '', $libraryType = '') {
+	function generatePlexFilename($title, $id, $extension, $mediaType = '', $libraryType = '', $libraryName = '') {
 		$basename = sanitizeFilename($title);
 		if (!empty($id)) {
 		    $basename .= " [{$id}]";
 		}
+		
+		// Add library name in double brackets if provided
+		$libraryNameStr = !empty($libraryName) ? " [[{$libraryName}]]" : "";
 		
 		// For collections, add movie/TV markers based on the library type
 		if ($mediaType === 'collections') {
@@ -167,19 +170,68 @@ try {
 		    
 		    // Add type marker based on library type
 		    if ($libraryType === 'movie') {
-		        $basename .= "{$collectionLabel} (Movies) **Plex**";
+		        $basename .= "{$collectionLabel} (Movies){$libraryNameStr} **Plex**";
 		    } else if ($libraryType === 'show') {
-		        $basename .= "{$collectionLabel} (TV) **Plex**";
+		        $basename .= "{$collectionLabel} (TV){$libraryNameStr} **Plex**";
 		    } else {
 		        // If library type unknown, just use a generic marker
-		        $basename .= "{$collectionLabel} **Plex**";
+		        $basename .= "{$collectionLabel}{$libraryNameStr} **Plex**";
 		    }
 		} else {
 		    // For regular items (movies, shows, seasons)
-		    $basename .= " **Plex**";
+		    $basename .= "{$libraryNameStr} **Plex**";
 		}
 		
 		return $basename . '.' . $extension;
+	}
+
+    /**
+     * Check if there's an existing file without library name that needs to be upgraded
+     */
+    function findExistingPosterByRatingKey($directory, $ratingKey) {
+        if (!is_dir($directory)) {
+            return false;
+        }
+        
+        $files = glob($directory . '/*');
+        foreach ($files as $file) {
+            if (is_file($file) && strpos($file, "**Plex**") !== false) {
+                // Look for the rating key pattern [ratingKey]
+                $pattern = '/\[' . preg_quote($ratingKey, '/') . '\]/';
+                if (preg_match($pattern, basename($file))) {
+                    return basename($file);
+                }
+            }
+        }
+        
+        return false;
+    }
+
+    /**
+     * Add library name to an existing filename without modifying media type information
+     */
+	function addLibraryNameToFilename($filename, $libraryName) {
+		// Format library name with double brackets
+		$bracketedLibraryName = "[[{$libraryName}]]";
+		
+		// Don't add if it's already there
+		if (strpos($filename, $bracketedLibraryName) !== false) {
+		    return $filename;
+		}
+		
+		// Find the position of "**Plex**" in the filename
+		$plexPos = strpos($filename, '**Plex**');
+		if ($plexPos === false) {
+		    // If there's no "**Plex**" marker, just append the library name before the extension
+		    $ext = pathinfo($filename, PATHINFO_EXTENSION);
+		    $baseFilename = pathinfo($filename, PATHINFO_FILENAME);
+		    return $baseFilename . ' ' . $bracketedLibraryName . '.' . $ext;
+		}
+		
+		// Insert the library name before "**Plex**"
+		$beforePlex = substr($filename, 0, $plexPos);
+		$afterPlex = substr($filename, $plexPos);
+		return $beforePlex . $bracketedLibraryName . ' ' . $afterPlex;
 	}
 
     function handleExistingFile($targetPath, $overwriteOption, $filename, $extension) {
@@ -353,6 +405,21 @@ try {
             logDebug("Error getting Plex libraries: " . $e->getMessage());
             return ['success' => false, 'error' => $e->getMessage()];
         }
+    }
+
+    /**
+     * Get the library name from the library ID
+     */
+    function getLibraryNameById($serverUrl, $token, $libraryId) {
+        $libraries = getPlexLibraries($serverUrl, $token);
+        if ($libraries['success']) {
+            foreach ($libraries['data'] as $library) {
+                if ($library['id'] == $libraryId) {
+                    return $library['title'];
+                }
+            }
+        }
+        return '';
     }
 
     function getPlexMovies($serverUrl, $token, $libraryId, $start = 0, $size = 50) {
@@ -692,11 +759,12 @@ try {
     }
 
     // UPDATED: Process a batch of items with smart overwrite
-	function processBatch($items, $serverUrl, $token, $targetDir, $overwriteOption, $mediaType = '', $libraryType = '') {
+	function processBatch($items, $serverUrl, $token, $targetDir, $overwriteOption, $mediaType = '', $libraryType = '', $libraryName = '') {
 		$results = [
 		    'successful' => 0,
 		    'skipped' => 0,
 		    'unchanged' => 0,
+		    'renamed' => 0,  // New counter for renamed files
 		    'failed' => 0,
 		    'errors' => [],
 		    'skippedDetails' => [],
@@ -722,12 +790,34 @@ try {
 		    $id = $item['id'];
 		    $thumb = $item['thumb'];
 		    
-		    // Generate target filename - now with library type
+		    // First, check if there's an existing file for this rating key without library name
+		    $existingFile = findExistingPosterByRatingKey($targetDir, $id);
+		    
+		    // Generate target filename - now with library name
 		    $extension = 'jpg'; // Plex thumbnails are usually JPG
-		    $filename = generatePlexFilename($title, $id, $extension, $mediaType, $libraryType);
+		    $filename = generatePlexFilename($title, $id, $extension, $mediaType, $libraryType, $libraryName);
 		    $targetPath = $targetDir . $filename;
 		    
-		    // Handle existing file based on overwrite option - rest of the function remains the same
+		    // If we found an existing file without library name, handle it
+		    if ($existingFile && $existingFile !== $filename) {
+		        $oldPath = $targetDir . $existingFile;
+		        
+		        // Check if we're just upgrading the filename by adding library name
+		        if (strpos($filename, $libraryName) !== false && !strpos($existingFile, $libraryName)) {
+		            // Rename the file to include library name
+		            if (rename($oldPath, $targetPath)) {
+		                $results['renamed']++;
+		                $results['importedIds'][] = $id;
+		                logDebug("Renamed file to include library name: {$existingFile} -> {$filename}");
+		                continue;
+		            } else {
+		                // If rename failed, proceed with normal download
+		                logDebug("Failed to rename file, will try regular download: {$oldPath}");
+		            }
+		        }
+		    }
+		    
+		    // Handle existing file based on overwrite option
 		    if (file_exists($targetPath)) {
 		        if ($overwriteOption === 'skip') {
 		            $results['importedIds'][] = $id;
@@ -816,361 +906,354 @@ try {
 		
 		return $results;
 	}
+
+    function getExistingPosters($directory, $type = '**Plex**') {
+        $posters = [];
+        
+        // Check if directory exists
+        if (!is_dir($directory)) {
+            logDebug("getExistingPosters: Directory does not exist: {$directory}");
+            return $posters;
+        }
+        
+        // Check if directory is readable
+        if (!is_readable($directory)) {
+            logDebug("getExistingPosters: Directory is not readable: {$directory}");
+            return $posters;
+        }
+        
+        try {
+            logDebug("Searching for existing posters in: " . $directory);
+            
+            $handle = @opendir($directory);
+            if ($handle === false) {
+                logDebug("getExistingPosters: Failed to open directory: {$directory}");
+                return $posters;
+            }
+            
+            while (($file = readdir($handle)) !== false) {
+                if (is_file($directory . $file) && strpos($file, $type) !== false) {
+                    // Extract the ID if present (format: "Title [ID] Plex.jpg")
+                    preg_match('/\[([a-f0-9]+)\]/', $file, $matches);
+                    $id = isset($matches[1]) ? $matches[1] : null;
+                    if ($id) {
+                        $posters[$id] = $file;
+                    }
+                }
+            }
+            closedir($handle);
+            
+            logDebug("Found " . count($posters) . " existing posters");
+        } catch (Exception $e) {
+            logDebug("Error in getExistingPosters: " . $e->getMessage());
+        }
+        
+        return $posters;
+    }
+	
+    /**
+     * Main function to handle the detection and marking of orphaned posters
+     * for any media type at the end of a batch import process.
+     * 
+     * @param string $mediaType Type of media (movies, shows, seasons, collections)
+     * @param string $libraryId The library ID being processed
+     * @param array $importedIds IDs imported in the current session
+     * @param string $targetDir Directory to check for orphaned posters
+     * @param string $showTitle Optional - for seasons, only process files for this show
+     * @param string $libraryType Optional - for collections, the library type (movie/show)
+     * @return array Results with count of orphaned files
+     */
+    function handleOrphanedPosters($mediaType, $libraryId, $importedIds, $targetDir, $showTitle = '', $libraryType = '') {
+        // First, store the imported IDs in persistent storage with replace mode = true
+        storeValidIds($importedIds, $mediaType, $libraryId, true);
+        
+        // Synchronize session to storage to ensure persistence
+        syncSessionToStorage();
+        
+        // Now detect and mark orphaned posters
+        $orphanedResults = improvedMarkOrphanedPosters(
+            $targetDir,
+            $importedIds,
+            '**Orphaned**',
+            $libraryType,
+            $showTitle,
+            $mediaType,
+            $libraryId,
+            true // Refresh mode = true
+        );
+        
+        return $orphanedResults;
+    }
+	
+    /**
+     * Handle orphaned detection at the end of movie batch processing
+     */
+    function handleMovieOrphanedDetection($libraryId, $allImportedIds) {
+        $targetDir = '../posters/movies/';
+        return handleOrphanedPosters('movies', $libraryId, $allImportedIds, $targetDir);
+    }
+
+    /**
+     * Handle orphaned detection at the end of TV show batch processing
+     */
+    function handleShowOrphanedDetection($libraryId, $allImportedIds) {
+        $targetDir = '../posters/tv-shows/';
+        return handleOrphanedPosters('shows', $libraryId, $allImportedIds, $targetDir);
+    }
+
+    /**
+     * Handle orphaned detection at the end of season batch processing
+     */
+    function handleSeasonOrphanedDetection($libraryId, $allImportedIds, $showTitle = '') {
+        $targetDir = '../posters/tv-seasons/';
+        return handleOrphanedPosters('seasons', $libraryId, $allImportedIds, $targetDir, $showTitle);
+    }
+
+    /**
+     * Handle orphaned detection at the end of collection batch processing
+     */
+    function handleCollectionOrphanedDetection($libraryId, $allImportedIds, $libraryType) {
+        $targetDir = '../posters/collections/';
+        return handleOrphanedPosters('collections', $libraryId, $allImportedIds, $targetDir, '', $libraryType);
+    }
+
+    /**
+     * Ensure session is cleared properly after processing completes
+     */
+    function cleanupAfterImport($mediaType) {
+        // Clean up session variables for this media type
+        if (isset($_SESSION['import_' . $mediaType . '_ids'])) {
+            unset($_SESSION['import_' . $mediaType . '_ids']);
+        }
+        
+        // Also clean up show title and library type if needed
+        if (isset($_SESSION['current_show_title'])) {
+            unset($_SESSION['current_show_title']);
+        }
+        
+        if (isset($_SESSION['current_library_type'])) {
+            unset($_SESSION['current_library_type']);
+        }
+        
+        // Synchronize changes to persistent storage
+        syncSessionToStorage();
+    }
+
+    /**
+     * Improved function to detect orphaned files more consistently
+     * 
+     * This replaces the existing implementation to ensure all media types
+     * are handled the same way and orphaned detection works across libraries.
+     */
+    function improvedMarkOrphanedPosters($targetDir, $currentImportIds, $orphanedTag = '**Orphaned**', 
+                                 $libraryType = '', $showTitle = '', $mediaType = '', 
+                                 $libraryId = '', $refreshMode = true) {
+        $results = [
+            'orphaned' => 0,
+            'unmarked' => 0,
+            'details' => []
+        ];
+        
+        if (!is_dir($targetDir)) {
+            logDebug("Target directory does not exist: {$targetDir}");
+            return $results;
+        }
+
+        // First, ensure the current import IDs are stored correctly
+        if (!empty($currentImportIds) && !empty($libraryId) && !empty($mediaType)) {
+            // In refresh mode, we replace instead of merge
+            storeValidIds($currentImportIds, $mediaType, $libraryId, $refreshMode);
+            
+            // Force synchronization to ensure all storage is up to date
+            syncSessionToStorage();
+        }
+        
+        // Get ALL valid IDs for this media type across ALL libraries
+        $allValidIds = getAllValidIds($mediaType);
+        
+        // Log the state for debugging
+        logDebug("Orphaned detection for {$mediaType} - library {$libraryId}", [
+            'importedIdsCount' => count($currentImportIds),
+            'validIdsCount' => count($allValidIds),
+            'refreshMode' => $refreshMode ? 'Replace' : 'Merge'
+        ]);
+        
+        // Get all files in the directory
+        $files = glob($targetDir . '/*');
+        if (empty($files)) {
+            logDebug("No files found in directory: {$targetDir}");
+            return $results;
+        }
+        
+        $plexTag = '**Plex**';
+        
+        // For seasons with show titles, prepare normalized values for comparison
+        $normalizedShowTitle = '';
+        if ($mediaType === 'seasons' && !empty($showTitle)) {
+            // First, convert HTML entities to their corresponding characters
+            $decodedTitle = html_entity_decode($showTitle, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            
+            // Then, remove all non-alphanumeric characters except spaces
+            $normalizedShowTitle = preg_replace('/[^a-zA-Z0-9\s]/', '', $decodedTitle);
+            $normalizedShowTitle = trim(strtolower($normalizedShowTitle));
+            
+            logDebug("Normalized show title for comparison: '{$normalizedShowTitle}' from '{$showTitle}'");
+        }
+        
+        foreach ($files as $file) {
+            if (!is_file($file)) {
+                continue;
+            }
+            
+            $filename = basename($file);
+            
+            // Skip files that are already marked as orphaned
+            if (strpos($filename, $orphanedTag) !== false) {
+                continue;
+            }
+            
+            // Skip files that don't have the Plex tag
+            if (strpos($filename, $plexTag) === false) {
+                continue;
+            }
+            
+            // Special handling for different media types
+            if ($mediaType === 'collections') {
+                // Process collection files differently based on library type
+                if (!empty($libraryType)) {
+                    // Check if this is a collection file
+                    $isCollection = strpos($filename, 'Collection') !== false || 
+                                   strpos($filename, '(Movies)') !== false || 
+                                   strpos($filename, '(TV)') !== false;
+                    
+                    if ($isCollection) {
+                        // Check if this collection matches our library type
+                        $isMatch = false;
+                        
+                        if ($libraryType === 'movie' && strpos($filename, '(Movies)') !== false) {
+                            $isMatch = true;
+                        } else if ($libraryType === 'show' && strpos($filename, '(TV)') !== false) {
+                            $isMatch = true;
+                        } else if (strpos($filename, '(Movies)') === false && 
+                                  strpos($filename, '(TV)') === false) {
+                            // Generic collection without type marker - consider it a match
+                            $isMatch = true;
+                        }
+                        
+                        // Only process matching collections
+                        if (!$isMatch) {
+                            continue;
+                        }
+                    }
+                }
+            } else if ($mediaType === 'seasons') {
+                // For seasons, only process if they belong to the show we're currently handling
+                if (!empty($normalizedShowTitle)) {
+                    // First decode HTML entities and then normalize the filename for comparison
+                    $decodedFilename = html_entity_decode($filename, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                    $normalizedFilename = preg_replace('/[^a-zA-Z0-9\s]/', '', $decodedFilename);
+                    $normalizedFilename = trim(strtolower($normalizedFilename));
+                    
+                    // If we have a show title, check if the normalized filename contains it
+                    if (strpos($normalizedFilename, $normalizedShowTitle) === false) {
+                        // This season belongs to a different show, skip it
+                        continue;
+                    }
+                }
+            }
+            
+            // Extract the ID from the filename
+            $idMatch = [];
+            if (preg_match('/\[([a-f0-9]+)\]/', $filename, $idMatch)) {
+                $fileId = $idMatch[1];
+                
+                // Check against ALL valid IDs, not just current import
+                if (!in_array($fileId, $allValidIds)) {
+                    // Replace **Plex** with **Orphaned** in the filename
+                    $newFilename = str_replace($plexTag, $orphanedTag, $filename);
+                    $newPath = $targetDir . '/' . $newFilename;
+                    
+                    logDebug("Marking file as orphaned", [
+                        'oldName' => $filename,
+                        'newName' => $newFilename,
+                        'fileId' => $fileId,
+                        'mediaType' => $mediaType,
+                        'libraryId' => $libraryId,
+                        'found_in_validIds' => false
+                    ]);
+                    
+                    if (rename($file, $newPath)) {
+                        $results['orphaned']++;
+                        $results['details'][] = [
+                            'oldName' => $filename,
+                            'newName' => $newFilename
+                        ];
+                    } else {
+                        $results['unmarked']++;
+                        logDebug("Failed to rename orphaned file", [
+                            'oldPath' => $file,
+                            'newPath' => $newPath,
+                            'error' => error_get_last()
+                        ]);
+                    }
+                } else {
+                    logDebug("File ID found in valid IDs, not orphaned", [
+                        'filename' => $filename,
+                        'fileId' => $fileId
+                    ]);
+                }
+            } else {
+                logDebug("No ID match found in filename: {$filename}");
+            }
+        }
+        
+        logDebug("Orphaned detection complete", [
+            'mediaType' => $mediaType, 
+            'orphaned' => $results['orphaned'],
+            'unmarked' => $results['unmarked']
+        ]);
+        
+        return $results;
+    }
+
+    /**
+     * Integration function - Replace existing markOrphanedPosters calls with this one
+     * This wrapper ensures backward compatibility while using the improved logic
+     */
+    function markOrphanedPosters($targetDir, $validIds, $orphanedTag = '**Orphaned**', 
+                                $libraryType = '', $showTitle = '', $mediaType = '') {
+        // Get libraryId from session - this should be set during the import process
+        $libraryId = isset($_SESSION['current_library_id']) ? $_SESSION['current_library_id'] : '';
+        
+        // Default to refresh mode = true for backward compatibility
+        return improvedMarkOrphanedPosters($targetDir, $validIds, $orphanedTag, $libraryType, $showTitle, $mediaType, $libraryId, true);
+    }
     
-	/**
-	 * Get all existing posters in a directory 
-	 * 
-	 * @param string $directory Directory path to search
-	 * @param string $type Type of server ('Plex')
-	 * @return array Associative array of ID => filename
-	 */
-	function getExistingPosters($directory, $type = '**Plex**') {
-		$posters = [];
-		
-		// Check if directory exists
-		if (!is_dir($directory)) {
-		    logDebug("getExistingPosters: Directory does not exist: {$directory}");
-		    return $posters;
-		}
-		
-		// Check if directory is readable
-		if (!is_readable($directory)) {
-		    logDebug("getExistingPosters: Directory is not readable: {$directory}");
-		    return $posters;
-		}
-		
-		try {
-		    logDebug("Searching for existing posters in: " . $directory);
-		    
-		    $handle = @opendir($directory);
-		    if ($handle === false) {
-		        logDebug("getExistingPosters: Failed to open directory: {$directory}");
-		        return $posters;
-		    }
-		    
-		    while (($file = readdir($handle)) !== false) {
-		        if (is_file($directory . $file) && strpos($file, $type) !== false) {
-		            // Extract the ID if present (format: "Title [ID] Plex.jpg")
-		            preg_match('/\[([a-f0-9]+)\]/', $file, $matches);
-		            $id = isset($matches[1]) ? $matches[1] : null;
-		            if ($id) {
-		                $posters[$id] = $file;
-		            }
-		        }
-		    }
-		    closedir($handle);
-		    
-		    logDebug("Found " . count($posters) . " existing posters");
-		} catch (Exception $e) {
-		    logDebug("Error in getExistingPosters: " . $e->getMessage());
-		}
-		
-		return $posters;
-	}
-	
-	/**
-	 * Main function to handle the detection and marking of orphaned posters
-	 * for any media type at the end of a batch import process.
-	 * 
-	 * @param string $mediaType Type of media (movies, shows, seasons, collections)
-	 * @param string $libraryId The library ID being processed
-	 * @param array $importedIds IDs imported in the current session
-	 * @param string $targetDir Directory to check for orphaned posters
-	 * @param string $showTitle Optional - for seasons, only process files for this show
-	 * @param string $libraryType Optional - for collections, the library type (movie/show)
-	 * @return array Results with count of orphaned files
-	 */
-	function handleOrphanedPosters($mediaType, $libraryId, $importedIds, $targetDir, $showTitle = '', $libraryType = '') {
-		// First, store the imported IDs in persistent storage with replace mode = true
-		storeValidIds($importedIds, $mediaType, $libraryId, true);
-		
-		// Synchronize session to storage to ensure persistence
-		syncSessionToStorage();
-		
-		// Now detect and mark orphaned posters
-		$orphanedResults = improvedMarkOrphanedPosters(
-		    $targetDir,
-		    $importedIds,
-		    '**Orphaned**',
-		    $libraryType,
-		    $showTitle,
-		    $mediaType,
-		    $libraryId,
-		    true // Refresh mode = true
-		);
-		
-		return $orphanedResults;
-	}
-	
-	/**
-	 * Handle orphaned detection at the end of movie batch processing
-	 */
-	function handleMovieOrphanedDetection($libraryId, $allImportedIds) {
-		$targetDir = '../posters/movies/';
-		return handleOrphanedPosters('movies', $libraryId, $allImportedIds, $targetDir);
-	}
-
-	/**
-	 * Handle orphaned detection at the end of TV show batch processing
-	 */
-	function handleShowOrphanedDetection($libraryId, $allImportedIds) {
-		$targetDir = '../posters/tv-shows/';
-		return handleOrphanedPosters('shows', $libraryId, $allImportedIds, $targetDir);
-	}
-
-	/**
-	 * Handle orphaned detection at the end of season batch processing
-	 */
-	function handleSeasonOrphanedDetection($libraryId, $allImportedIds, $showTitle = '') {
-		$targetDir = '../posters/tv-seasons/';
-		return handleOrphanedPosters('seasons', $libraryId, $allImportedIds, $targetDir, $showTitle);
-	}
-
-	/**
-	 * Handle orphaned detection at the end of collection batch processing
-	 */
-	function handleCollectionOrphanedDetection($libraryId, $allImportedIds, $libraryType) {
-		$targetDir = '../posters/collections/';
-		return handleOrphanedPosters('collections', $libraryId, $allImportedIds, $targetDir, '', $libraryType);
-	}
-
-	/**
-	 * Ensure session is cleared properly after processing completes
-	 */
-	function cleanupAfterImport($mediaType) {
-		// Clean up session variables for this media type
-		if (isset($_SESSION['import_' . $mediaType . '_ids'])) {
-		    unset($_SESSION['import_' . $mediaType . '_ids']);
-		}
-		
-		// Also clean up show title and library type if needed
-		if (isset($_SESSION['current_show_title'])) {
-		    unset($_SESSION['current_show_title']);
-		}
-		
-		if (isset($_SESSION['current_library_type'])) {
-		    unset($_SESSION['current_library_type']);
-		}
-		
-		// Synchronize changes to persistent storage
-		syncSessionToStorage();
-	}
-
-	/**
-	 * Improved function to detect orphaned files more consistently
-	 * 
-	 * This replaces the existing implementation to ensure all media types
-	 * are handled the same way and orphaned detection works across libraries.
-	 */
-	function improvedMarkOrphanedPosters($targetDir, $currentImportIds, $orphanedTag = '**Orphaned**', 
-			                             $libraryType = '', $showTitle = '', $mediaType = '', 
-			                             $libraryId = '', $refreshMode = true) {
-		$results = [
-			'orphaned' => 0,
-			'unmarked' => 0,
-			'details' => []
-		];
-		
-		if (!is_dir($targetDir)) {
-			logDebug("Target directory does not exist: {$targetDir}");
-			return $results;
-		}
-
-		// First, ensure the current import IDs are stored correctly
-		if (!empty($currentImportIds) && !empty($libraryId) && !empty($mediaType)) {
-			// In refresh mode, we replace instead of merge
-			storeValidIds($currentImportIds, $mediaType, $libraryId, $refreshMode);
-			
-			// Force synchronization to ensure all storage is up to date
-			syncSessionToStorage();
-		}
-		
-		// Get ALL valid IDs for this media type across ALL libraries
-		$allValidIds = getAllValidIds($mediaType);
-		
-		// Log the state for debugging
-		logDebug("Orphaned detection for {$mediaType} - library {$libraryId}", [
-			'importedIdsCount' => count($currentImportIds),
-			'validIdsCount' => count($allValidIds),
-			'refreshMode' => $refreshMode ? 'Replace' : 'Merge'
-		]);
-		
-		// Get all files in the directory
-		$files = glob($targetDir . '/*');
-		if (empty($files)) {
-			logDebug("No files found in directory: {$targetDir}");
-			return $results;
-		}
-		
-		$plexTag = '**Plex**';
-		
-		// For seasons with show titles, prepare normalized values for comparison
-		$normalizedShowTitle = '';
-		if ($mediaType === 'seasons' && !empty($showTitle)) {
-			// First, convert HTML entities to their corresponding characters
-			$decodedTitle = html_entity_decode($showTitle, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-			
-			// Then, remove all non-alphanumeric characters except spaces
-			$normalizedShowTitle = preg_replace('/[^a-zA-Z0-9\s]/', '', $decodedTitle);
-			$normalizedShowTitle = trim(strtolower($normalizedShowTitle));
-			
-			logDebug("Normalized show title for comparison: '{$normalizedShowTitle}' from '{$showTitle}'");
-		}
-		
-		foreach ($files as $file) {
-			if (!is_file($file)) {
-			    continue;
-			}
-			
-			$filename = basename($file);
-			
-			// Skip files that are already marked as orphaned
-			if (strpos($filename, $orphanedTag) !== false) {
-			    continue;
-			}
-			
-			// Skip files that don't have the Plex tag
-			if (strpos($filename, $plexTag) === false) {
-			    continue;
-			}
-			
-			// Special handling for different media types
-			if ($mediaType === 'collections') {
-			    // Process collection files differently based on library type
-			    if (!empty($libraryType)) {
-			        // Check if this is a collection file
-			        $isCollection = strpos($filename, 'Collection') !== false || 
-			                       strpos($filename, '(Movies)') !== false || 
-			                       strpos($filename, '(TV)') !== false;
-			        
-			        if ($isCollection) {
-			            // Check if this collection matches our library type
-			            $isMatch = false;
-			            
-			            if ($libraryType === 'movie' && strpos($filename, '(Movies)') !== false) {
-			                $isMatch = true;
-			            } else if ($libraryType === 'show' && strpos($filename, '(TV)') !== false) {
-			                $isMatch = true;
-			            } else if (strpos($filename, '(Movies)') === false && 
-			                      strpos($filename, '(TV)') === false) {
-			                // Generic collection without type marker - consider it a match
-			                $isMatch = true;
-			            }
-			            
-			            // Only process matching collections
-			            if (!$isMatch) {
-			                continue;
-			            }
-			        }
-			    }
-			} else if ($mediaType === 'seasons') {
-			    // For seasons, only process if they belong to the show we're currently handling
-			    if (!empty($normalizedShowTitle)) {
-			        // First decode HTML entities and then normalize the filename for comparison
-			        $decodedFilename = html_entity_decode($filename, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-			        $normalizedFilename = preg_replace('/[^a-zA-Z0-9\s]/', '', $decodedFilename);
-			        $normalizedFilename = trim(strtolower($normalizedFilename));
-			        
-			        // If we have a show title, check if the normalized filename contains it
-			        if (strpos($normalizedFilename, $normalizedShowTitle) === false) {
-			            // This season belongs to a different show, skip it
-			            continue;
-			        }
-			    }
-			}
-			
-			// Extract the ID from the filename
-			$idMatch = [];
-			if (preg_match('/\[([a-f0-9]+)\]/', $filename, $idMatch)) {
-			    $fileId = $idMatch[1];
-			    
-			    // Check against ALL valid IDs, not just current import
-			    if (!in_array($fileId, $allValidIds)) {
-			        // Replace **Plex** with **Orphaned** in the filename
-			        $newFilename = str_replace($plexTag, $orphanedTag, $filename);
-			        $newPath = $targetDir . '/' . $newFilename;
-			        
-			        logDebug("Marking file as orphaned", [
-			            'oldName' => $filename,
-			            'newName' => $newFilename,
-			            'fileId' => $fileId,
-			            'mediaType' => $mediaType,
-			            'libraryId' => $libraryId,
-			            'found_in_validIds' => false
-			        ]);
-			        
-			        if (rename($file, $newPath)) {
-			            $results['orphaned']++;
-			            $results['details'][] = [
-			                'oldName' => $filename,
-			                'newName' => $newFilename
-			            ];
-			        } else {
-			            $results['unmarked']++;
-			            logDebug("Failed to rename orphaned file", [
-			                'oldPath' => $file,
-			                'newPath' => $newPath,
-			                'error' => error_get_last()
-			            ]);
-			        }
-			    } else {
-			        logDebug("File ID found in valid IDs, not orphaned", [
-			            'filename' => $filename,
-			            'fileId' => $fileId
-			        ]);
-			    }
-			} else {
-			    logDebug("No ID match found in filename: {$filename}");
-			}
-		}
-		
-		logDebug("Orphaned detection complete", [
-			'mediaType' => $mediaType, 
-			'orphaned' => $results['orphaned'],
-			'unmarked' => $results['unmarked']
-		]);
-		
-		return $results;
-	}
-
-	/**
-	 * Integration function - Replace existing markOrphanedPosters calls with this one
-	 * This wrapper ensures backward compatibility while using the improved logic
-	 */
-	function markOrphanedPosters($targetDir, $validIds, $orphanedTag = '**Orphaned**', 
-		                        $libraryType = '', $showTitle = '', $mediaType = '') {
-		// Get libraryId from session - this should be set during the import process
-		$libraryId = isset($_SESSION['current_library_id']) ? $_SESSION['current_library_id'] : '';
-		
-		// Default to refresh mode = true for backward compatibility
-		return improvedMarkOrphanedPosters($targetDir, $validIds, $orphanedTag, $libraryType, $showTitle, $mediaType, $libraryId, true);
-	}
-	
-	/**
-	 * Helper function to update the library ID in session
-	 * Call this before starting a new import process
-	 */
-	function setCurrentLibraryId($libraryId) {
-		$_SESSION['current_library_id'] = $libraryId;
-		logDebug("Set current library ID: " . $libraryId);
-	}
+    /**
+     * Helper function to update the library ID in session
+     * Call this before starting a new import process
+     */
+    function setCurrentLibraryId($libraryId) {
+        $_SESSION['current_library_id'] = $libraryId;
+        logDebug("Set current library ID: " . $libraryId);
+    }
 
     // API Endpoints
     
-	if (isset($_POST['action']) && $_POST['action'] === 'get_plex_libraries') {
-		logDebug("Processing get_plex_libraries action");
-		$result = getPlexLibraries($plex_config['server_url'], $plex_config['token']);
-		
-		// ADD THIS CODE:
-		if ($result['success'] && !empty($result['data'])) {
-		    // Store all libraries for reference
-		    storeLibraryInfo($result['data'], 'all');
-		}
-		
-		echo json_encode($result);
-		logDebug("Response sent", $result);
-		exit;
-	}
+    if (isset($_POST['action']) && $_POST['action'] === 'get_plex_libraries') {
+        logDebug("Processing get_plex_libraries action");
+        $result = getPlexLibraries($plex_config['server_url'], $plex_config['token']);
+        
+        // ADD THIS CODE:
+        if ($result['success'] && !empty($result['data'])) {
+            // Store all libraries for reference
+            storeLibraryInfo($result['data'], 'all');
+        }
+        
+        echo json_encode($result);
+        logDebug("Response sent", $result);
+        exit;
+    }
 
     // Test Plex Connection
     if (isset($_POST['action']) && $_POST['action'] === 'test_plex_connection') {
@@ -1203,7 +1286,6 @@ try {
         exit;
     }
 
-	// Import Plex Posters
 // Import Plex Posters
 if (isset($_POST['action']) && $_POST['action'] === 'import_plex_posters') {
     if (!isset($_POST['type'], $_POST['libraryId'], $_POST['contentType'], $_POST['overwriteOption'])) {
@@ -1215,6 +1297,9 @@ if (isset($_POST['action']) && $_POST['action'] === 'import_plex_posters') {
     $libraryId = $_POST['libraryId'];
     $contentType = $_POST['contentType']; // This will be the directory key
     $overwriteOption = $_POST['overwriteOption']; // 'overwrite', 'copy', 'skip'
+    
+    // Get the library name to include in filenames
+    $libraryName = getLibraryNameById($plex_config['server_url'], $plex_config['token'], $libraryId);
     
     // Set the current library ID in session for orphan detection
     setCurrentLibraryId($libraryId);
@@ -1312,7 +1397,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'import_plex_posters') {
                     $isComplete = $endIndex >= count($allMovies);
                     
                     // Process the batch
-                    $batchResults = processBatch($currentBatch, $plex_config['server_url'], $plex_config['token'], $targetDir, $overwriteOption, $type);
+                    $batchResults = processBatch($currentBatch, $plex_config['server_url'], $plex_config['token'], $targetDir, $overwriteOption, $type, '', $libraryName);
                     
                     // Handle orphaned posters if this is the final batch
                     $orphanedResults = null;
@@ -1390,6 +1475,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'import_plex_posters') {
                             'successful' => $batchResults['successful'] ?? 0,
                             'skipped' => $batchResults['skipped'] ?? 0,
                             'unchanged' => $batchResults['unchanged'] ?? 0,
+                            'renamed' => $batchResults['renamed'] ?? 0,
                             'failed' => $batchResults['failed'] ?? 0,
                             'orphaned' => $orphanedResults ? (($orphanedResults['orphaned'] ?? 0) + ($orphanedResults['unmarked'] ?? 0)) : 0
                         ]
@@ -1424,7 +1510,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'import_plex_posters') {
                     $isComplete = $endIndex >= count($allShows);
                     
                     // Process the batch
-                    $batchResults = processBatch($currentBatch, $plex_config['server_url'], $plex_config['token'], $targetDir, $overwriteOption, $type);
+                    $batchResults = processBatch($currentBatch, $plex_config['server_url'], $plex_config['token'], $targetDir, $overwriteOption, $type, '', $libraryName);
                     
                     // Handle orphaned posters if this is the final batch
                     $orphanedResults = null;
@@ -1502,6 +1588,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'import_plex_posters') {
                             'successful' => $batchResults['successful'] ?? 0,
                             'skipped' => $batchResults['skipped'] ?? 0,
                             'unchanged' => $batchResults['unchanged'] ?? 0,
+                            'renamed' => $batchResults['renamed'] ?? 0,
                             'failed' => $batchResults['failed'] ?? 0,
                             'orphaned' => $orphanedResults ? (($orphanedResults['orphaned'] ?? 0) + ($orphanedResults['unmarked'] ?? 0)) : 0
                         ]
@@ -1516,8 +1603,8 @@ if (isset($_POST['action']) && $_POST['action'] === 'import_plex_posters') {
                     $items = $result['data'];
                 }
                 break;
-            
-            case 'seasons':
+                
+                case 'seasons':
                 // Check if we're importing all seasons
                 $importAllSeasons = isset($_POST['importAllSeasons']) && $_POST['importAllSeasons'] === 'true';
                 
@@ -1549,7 +1636,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'import_plex_posters') {
                             if ($seasonsResult['success'] && !empty($seasonsResult['data'])) {
                                 $items = $seasonsResult['data'];
                                 // Process seasons for this show
-                                $batchResults = processBatch($items, $plex_config['server_url'], $plex_config['token'], $targetDir, $overwriteOption, $type);
+                                $batchResults = processBatch($items, $plex_config['server_url'], $plex_config['token'], $targetDir, $overwriteOption, $type, '', $libraryName);
                                 
                                 // Update running totals
                                 $totalStats['successful'] += $batchResults['successful'];
@@ -1566,6 +1653,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'import_plex_posters') {
                                     'successful' => 0,
                                     'skipped' => 0,
                                     'unchanged' => 0,
+                                    'renamed' => 0,
                                     'failed' => 0,
                                     'errors' => [],
                                     'importedIds' => []
@@ -1656,6 +1744,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'import_plex_posters') {
                                     'successful' => $batchResults['successful'] ?? 0,
                                     'skipped' => $batchResults['skipped'] ?? 0,
                                     'unchanged' => $batchResults['unchanged'] ?? 0,
+                                    'renamed' => $batchResults['renamed'] ?? 0,
                                     'failed' => $batchResults['failed'] ?? 0,
                                     'orphaned' => $orphanedResults ? (($orphanedResults['orphaned'] ?? 0) + ($orphanedResults['unmarked'] ?? 0)) : 0
                                 ]
@@ -1677,6 +1766,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'import_plex_posters') {
                                     'successful' => 0,
                                     'skipped' => 0,
                                     'unchanged' => 0,
+                                    'renamed' => 0,
                                     'failed' => 0,
                                     'errors' => []
                                 ],
@@ -1685,6 +1775,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'import_plex_posters') {
                                     'successful' => isset($_POST['totalSuccessful']) ? (int)$_POST['totalSuccessful'] : 0,
                                     'skipped' => isset($_POST['totalSkipped']) ? (int)$_POST['totalSkipped'] : 0,
                                     'unchanged' => isset($_POST['totalUnchanged']) ? (int)$_POST['totalUnchanged'] : 0,
+                                    'renamed' => isset($_POST['totalRenamed']) ? (int)$_POST['totalRenamed'] : 0,
                                     'failed' => isset($_POST['totalFailed']) ? (int)$_POST['totalFailed'] : 0,
                                     'orphaned' => 0
                                 ]
@@ -1749,7 +1840,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'import_plex_posters') {
                         $isComplete = $endIndex >= count($allSeasons);
                         
                         // Process the batch
-                        $batchResults = processBatch($currentBatch, $plex_config['server_url'], $plex_config['token'], $targetDir, $overwriteOption);
+                        $batchResults = processBatch($currentBatch, $plex_config['server_url'], $plex_config['token'], $targetDir, $overwriteOption, $type, '', $libraryName);
                         
                         // Handle orphaned posters if this is the final batch
                         $orphanedResults = null;
@@ -1831,6 +1922,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'import_plex_posters') {
                                 'successful' => $batchResults['successful'] ?? 0,
                                 'skipped' => $batchResults['skipped'] ?? 0,
                                 'unchanged' => $batchResults['unchanged'] ?? 0,
+                                'renamed' => $batchResults['renamed'] ?? 0,
                                 'failed' => $batchResults['failed'] ?? 0,
                                 'orphaned' => $orphanedResults ? (($orphanedResults['orphaned'] ?? 0) + ($orphanedResults['unmarked'] ?? 0)) : 0
                             ]
@@ -1899,9 +1991,9 @@ if (isset($_POST['action']) && $_POST['action'] === 'import_plex_posters') {
                         $endIndex = $startIndex + count($currentBatch);
                         $isComplete = $endIndex >= count($allCollections);
                         
-                        // Process the batch with library type information
+                        // Process the batch with library type information and library name
                         $batchResults = processBatch($currentBatch, $plex_config['server_url'], $plex_config['token'], 
-                                                  $targetDir, $overwriteOption, $type, $libraryType);
+                                                  $targetDir, $overwriteOption, $type, $libraryType, $libraryName);
                         
                         // Ensure batchResults is properly structured
                         if (!isset($batchResults['importedIds']) || !is_array($batchResults['importedIds'])) {
@@ -2006,6 +2098,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'import_plex_posters') {
                                 'successful' => $batchResults['successful'] ?? 0,
                                 'skipped' => $batchResults['skipped'] ?? 0,
                                 'unchanged' => $batchResults['unchanged'] ?? 0,
+                                'renamed' => $batchResults['renamed'] ?? 0,
                                 'failed' => $batchResults['failed'] ?? 0,
                                 'orphaned' => ($orphanedResults['orphaned'] ?? 0) + ($orphanedResults['unmarked'] ?? 0)
                             ]
@@ -2057,7 +2150,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'import_plex_posters') {
         
         // This code will only execute for non-batch processing, which is not recommended for large libraries
         // Process all items
-        $results = processBatch($items, $plex_config['server_url'], $plex_config['token'], $targetDir, $overwriteOption, $type);
+        $results = processBatch($items, $plex_config['server_url'], $plex_config['token'], $targetDir, $overwriteOption, $type, $libraryType ?? '', $libraryName);
         
         // For non-batch processing, also use enhanced orphan detection
         $orphanedResults = enhancedMarkOrphanedPosters(
@@ -2082,6 +2175,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'import_plex_posters') {
                 'successful' => $results['successful'],
                 'skipped' => $results['skipped'],
                 'unchanged' => $results['unchanged'],
+                'renamed' => $results['renamed'],
                 'failed' => $results['failed'],
                 'orphaned' => ($orphanedResults['orphaned'] ?? 0) + ($orphanedResults['unmarked'] ?? 0)
             ]
