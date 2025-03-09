@@ -160,25 +160,23 @@ try {
 		    $basename .= " [{$id}]";
 		}
 		
-		// Add library name in double brackets if provided
-		$libraryNameStr = !empty($libraryName) ? " [[{$libraryName}]]" : "";
-		
-		// For collections, add movie/TV markers based on the library type
+		// For collections, don't add the library name
 		if ($mediaType === 'collections') {
 		    // Add collection marker if not already in the name
 		    $collectionLabel = (!stripos($basename, 'Collection')) ? " Collection" : "";
 		    
 		    // Add type marker based on library type
 		    if ($libraryType === 'movie') {
-		        $basename .= "{$collectionLabel} (Movies){$libraryNameStr} **Plex**";
+		        $basename .= "{$collectionLabel} (Movies) **Plex**";
 		    } else if ($libraryType === 'show') {
-		        $basename .= "{$collectionLabel} (TV){$libraryNameStr} **Plex**";
+		        $basename .= "{$collectionLabel} (TV) **Plex**";
 		    } else {
 		        // If library type unknown, just use a generic marker
-		        $basename .= "{$collectionLabel}{$libraryNameStr} **Plex**";
+		        $basename .= "{$collectionLabel} **Plex**";
 		    }
 		} else {
-		    // For regular items (movies, shows, seasons)
+		    // For regular items (movies, shows, seasons), add library name
+		    $libraryNameStr = !empty($libraryName) ? " [[{$libraryName}]]" : "";
 		    $basename .= "{$libraryNameStr} **Plex**";
 		}
 		
