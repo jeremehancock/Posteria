@@ -797,23 +797,24 @@ try {
 		    $targetPath = $targetDir . $filename;
 		    
 		    // If we found an existing file without library name, handle it
-		    if ($existingFile && $existingFile !== $filename) {
-		        $oldPath = $targetDir . $existingFile;
-		        
-		        // Check if we're just upgrading the filename by adding library name
-		        if (strpos($filename, $libraryName) !== false && !strpos($existingFile, $libraryName)) {
-		            // Rename the file to include library name
-		            if (rename($oldPath, $targetPath)) {
-		                $results['renamed']++;
-		                $results['importedIds'][] = $id;
-		                logDebug("Renamed file to include library name: {$existingFile} -> {$filename}");
-		                continue;
-		            } else {
-		                // If rename failed, proceed with normal download
-		                logDebug("Failed to rename file, will try regular download: {$oldPath}");
-		            }
-		        }
-		    }
+			if ($existingFile && $existingFile !== $filename) {
+				$oldPath = $targetDir . $existingFile;
+				
+				// Check if we're just upgrading the filename by adding library name
+				if (strpos($filename, $libraryName) !== false && !strpos($existingFile, $libraryName)) {
+					// Rename the file to include library name
+					if (rename($oldPath, $targetPath)) {
+						$results['renamed']++;
+						$results['successful']++;  // Also count as successful
+						$results['importedIds'][] = $id;
+						logDebug("Renamed file to include library name: {$existingFile} -> {$filename}");
+						continue;
+					} else {
+						// If rename failed, proceed with normal download
+						logDebug("Failed to rename file, will try regular download: {$oldPath}");
+					}
+				}
+			}
 		    
 		    // Handle existing file based on overwrite option
 		    if (file_exists($targetPath)) {
@@ -1469,14 +1470,14 @@ if (isset($_POST['action']) && $_POST['action'] === 'import_plex_posters') {
                         ],
                         'results' => $batchResults,
                         'orphanedResults' => $orphanedResults,
-                        'totalStats' => [
-                            'successful' => $batchResults['successful'] ?? 0,
-                            'skipped' => $batchResults['skipped'] ?? 0,
-                            'unchanged' => $batchResults['unchanged'] ?? 0,
-                            'renamed' => $batchResults['renamed'] ?? 0,
-                            'failed' => $batchResults['failed'] ?? 0,
-                            'orphaned' => $orphanedResults ? (($orphanedResults['orphaned'] ?? 0) + ($orphanedResults['unmarked'] ?? 0)) : 0
-                        ]
+						'totalStats' => [
+							'successful' => $batchResults['successful'] ?? 0,
+							'skipped' => $batchResults['skipped'] ?? 0,
+							'unchanged' => $batchResults['unchanged'] ?? 0,
+							'renamed' => $batchResults['renamed'] ?? 0,  // Include the renamed counter
+							'failed' => $batchResults['failed'] ?? 0,
+							'orphaned' => $orphanedResults ? (($orphanedResults['orphaned'] ?? 0) + ($orphanedResults['unmarked'] ?? 0)) : 0
+						]
                     ]);
                     exit;
                 } else {
