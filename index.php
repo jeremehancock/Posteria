@@ -3008,9 +3008,16 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				                </div>
 				            </div>
 							<div class="gallery-caption" data-full-text="<?php echo htmlspecialchars(pathinfo($image['filename'], PATHINFO_FILENAME)); ?>">
-								<?php echo htmlspecialchars(
-									preg_replace('/\[.*?\]/', '', str_replace(['**Plex**', '**Orphaned**'], '', pathinfo($image['filename'], PATHINFO_FILENAME)))
-								); ?>
+								<?php 
+									$filename = pathinfo($image['filename'], PATHINFO_FILENAME);
+									// First remove Plex and Orphaned tags
+									$filename = str_replace(['**Plex**', '**Orphaned**'], '', $filename);
+									// Then remove both single [ID] and double [[Library]] brackets with their contents
+									$filename = preg_replace('/\[\[[^\]]*\]\]|\[[^\]]*\]/', '', $filename);
+									// Trim any resulting extra spaces
+									$filename = trim($filename);
+									echo htmlspecialchars($filename);
+								?>
 							</div>
 				     	</div>
 				    <?php endforeach; ?>
