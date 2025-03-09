@@ -28,6 +28,9 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+require_once './plex-id-storage.php';
+require_once './library-tracking.php';
+    
 // Make sure we catch all errors
 set_error_handler(function($errno, $errstr, $errfile, $errline) {
     logDebug("PHP Error", [
@@ -83,14 +86,104 @@ function logDebug($message, $data = null) {
     file_put_contents('plex-debug.log', $logMessage . "\n\n", FILE_APPEND);
 }
 
+/**
+ * Simple one-time solution to register all existing Plex IDs
+ * This prevents orphaned detection issues with library names
+ */
+function registerExistingPlexIds() {
+    // Only run this once
+    $flagFile = __DIR__ . '/ids_registered.flag';
+    if (file_exists($flagFile)) {
+        return;
+    }
+    
+    try {
+        logDebug("Starting one-time registration of all existing Plex files");
+        
+        // Define media types and directories
+        $mediaTypes = [
+            'movies' => '../posters/movies/',
+            'shows' => '../posters/tv-shows/',
+            'seasons' => '../posters/tv-seasons/',
+            'collections' => '../posters/collections/'
+        ];
+        
+        // Load the current stored IDs
+        $storedIds = loadValidIdsFromStorage();
+        $registered = 0;
+        $byType = [];
+        
+        // Process each media type
+        foreach ($mediaTypes as $mediaType => $directory) {
+            if (!isset($byType[$mediaType])) {
+                $byType[$mediaType] = 0;
+            }
+            
+            if (!is_dir($directory)) {
+                continue;
+            }
+            
+            // Make sure the structure exists
+            if (!isset($storedIds[$mediaType])) {
+                $storedIds[$mediaType] = [];
+            }
+            
+            // Create a "legacy" library ID for old files without library names
+            if (!isset($storedIds[$mediaType]['legacy'])) {
+                $storedIds[$mediaType]['legacy'] = [];
+            }
+            
+            // Get all Plex files
+            $files = glob($directory . '/*');
+            foreach ($files as $file) {
+                if (!is_file($file) || strpos(basename($file), '**Plex**') === false) {
+                    continue;
+                }
+                
+                // Extract ID
+                $idMatch = [];
+                if (preg_match('/\[([a-f0-9]+)\]/', basename($file), $idMatch)) {
+                    $fileId = $idMatch[1];
+                    
+                    // Add to legacy library if not already there
+                    if (!in_array($fileId, $storedIds[$mediaType]['legacy'])) {
+                        $storedIds[$mediaType]['legacy'][] = $fileId;
+                        $registered++;
+                        $byType[$mediaType]++;
+                    }
+                }
+            }
+        }
+        
+        // Save the updated stored IDs
+        saveValidIdsToStorage($storedIds);
+        
+        // Create flag file to mark this as done
+        file_put_contents($flagFile, time());
+        
+        // Also initialize session from updated storage
+        $_SESSION['valid_plex_ids'] = $storedIds;
+        
+        logDebug("Completed one-time registration of Plex files", [
+            'total' => $registered,
+            'byType' => $byType
+        ]);
+    } catch (Exception $e) {
+        logDebug("Error during Plex ID registration", [
+            'message' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+    }
+}
+
+// Call the function early in the execution
+registerExistingPlexIds();
+
 try {
     // Start session
     if (!session_id()) {
         session_start();
     }
-    
-    require_once './plex-id-storage.php';
-    require_once './library-tracking.php';
 
     // Log the request
     logDebug("Request received", [
