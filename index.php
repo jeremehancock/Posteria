@@ -2111,7 +2111,165 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		}
 		
 		/* ==========================================================================
-		   20. Media Queries
+		   21. Multi Select
+		   ========================================================================== */
+		
+		/* Enhanced Multi-Select Styles for Library Selection */
+
+		/* Basic styling for the multi-select */
+		#plexLibrary {
+			padding: 12px 16px;
+			background: var(--bg-secondary);
+			border: 1px solid var(--border-color);
+			border-radius: 6px;
+			color: var(--text-primary);
+			width: 100%;
+			height: auto;
+			min-height: 44px;
+			max-height: 200px;
+			box-sizing: border-box;
+			font-family: inherit;
+			font-size: 14px;
+			transition: all 0.2s ease;
+			overflow-y: auto;
+			scrollbar-width: thin;
+			scrollbar-color: var(--bg-tertiary) var(--bg-secondary);
+		}
+
+		/* Custom scrollbar for the multi-select */
+		#plexLibrary::-webkit-scrollbar {
+			width: 8px;
+			height: 8px;
+			background-color: var(--bg-secondary);
+		}
+
+		#plexLibrary::-webkit-scrollbar-track {
+			background: var(--bg-secondary);
+			border-radius: 4px;
+		}
+
+		#plexLibrary::-webkit-scrollbar-thumb {
+			background: var(--bg-tertiary);
+			border-radius: 4px;
+			border: 2px solid var(--bg-secondary);
+			min-height: 30px;
+		}
+
+		#plexLibrary::-webkit-scrollbar-thumb:hover {
+			background: var(--accent-primary);
+		}
+
+		/* Focus state */
+		#plexLibrary:focus {
+			outline: none;
+			border-color: var(--accent-primary);
+			box-shadow: 0 0 0 1px rgba(229, 160, 13, 0.2);
+			background-color: var(--bg-tertiary);
+		}
+
+		/* Hover state */
+		#plexLibrary:hover {
+			border-color: var(--accent-primary);
+			background-color: var(--bg-tertiary);
+		}
+
+		/* Option styling */
+		#plexLibrary option {
+			padding: 10px 12px;
+			background-color: var(--bg-secondary);
+			color: var(--text-primary);
+			border-bottom: 1px solid rgba(59, 59, 59, 0.3);
+			cursor: pointer;
+			transition: all 0.2s ease;
+		}
+
+		/* Last option no border */
+		#plexLibrary option:last-child {
+			border-bottom: none;
+		}
+
+		/* Hover and selected states for options */
+		#plexLibrary option:hover,
+		#plexLibrary option:focus {
+			background-color: var(--bg-tertiary);
+		}
+
+		#plexLibrary option:checked {
+			background-color: rgba(229, 160, 13, 0.2);
+			color: var(--accent-primary);
+			font-weight: bold;
+		}
+
+		/* Selection instructions */
+		.multiselect-instructions {
+			margin-top: 6px;
+			color: var(--text-secondary);
+			font-size: 0.9em;
+			line-height: 1.4;
+			display: flex;
+			align-items: center;
+		}
+
+		.multiselect-instructions svg {
+			margin-right: 6px;
+			flex-shrink: 0;
+		}
+
+		/* Container for multiselect */
+		.multiselect-container {
+			position: relative;
+		}
+
+		/* Selection count badge */
+		.selection-count {
+			position: absolute;
+			top: -8px;
+			right: -8px;
+			background: linear-gradient(45deg, var(--accent-primary), #ff9f43);
+			color: #1f1f1f;
+			font-weight: bold;
+			font-size: 12px;
+			border-radius: 50%;
+			width: 24px;
+			height: 24px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+			border: 2px solid var(--bg-secondary);
+			opacity: 0;
+			transform: scale(0.8);
+			transition: all 0.3s ease;
+		}
+
+		.selection-count.visible {
+			opacity: 1;
+			transform: scale(1);
+		}
+
+		/* Responsive adjustments */
+		@media (max-width: 768px) {
+			#plexLibrary {
+				max-height: 150px;
+			}
+			
+			.multiselect-instructions {
+				font-size: 0.8em;
+			}
+		}
+
+		@media (max-width: 480px) {
+			#plexLibrary {
+				max-height: 120px;
+				font-size: 13px;
+			}
+			
+			#plexLibrary option {
+				padding: 8px 10px;
+			}
+		}
+		/* ==========================================================================
+		   21. Media Queries
 		   ========================================================================== */
 		   
 		/* Hide the Export text on mobile devices */
