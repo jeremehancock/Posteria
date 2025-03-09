@@ -5720,41 +5720,165 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		    showModal(modal);
 		}
 		
-		// Function to send the import request to the server
 		async function importFromPlex(filename, directory) {
-		    // Show a loading notification
-		    const notification = showImportingNotification();
-		    
-		    try {
-		        const formData = new FormData();
-		        formData.append('action', 'import_from_plex');
-		        formData.append('filename', filename);
-		        formData.append('directory', directory);
-		        
-		        const response = await fetch('./include/get-from-plex.php', {
-		            method: 'POST',
-		            body: formData
-		        });
-		        
-		        const data = await response.json();
-		        
-		        if (data.success) {
-		            // Show success notification
-		            showImportSuccessNotification();
-		            
-		            // Refresh the image to show the updated version
-		            refreshImage(filename, directory);
-		        } else {
-		            // Show error notification
-		            showImportErrorNotification(data.error || 'Failed to import poster from Plex');
-		        }
-		    } catch (error) {
-		        // Show error notification
-		        showImportErrorNotification('Error importing poster from Plex: ' + error.message);
-		    } finally {
-		        // Hide the sending notification
-		        notification.remove();
-		    }
+			// Show a loading notification
+			const notification = showImportingNotification();
+			
+			try {
+				const formData = new FormData();
+				formData.append('action', 'import_from_plex');
+				formData.append('filename', filename);
+				formData.append('directory', directory);
+				
+				const response = await fetch('./include/get-from-plex.php', {
+				    method: 'POST',
+				    body: formData
+				});
+				
+				const data = await response.json();
+				
+				if (data.success) {
+				    // Show success notification
+				    showImportSuccessNotification();
+				    
+				    if (data.renamed) {
+				        // If the file was renamed, we need to update DOM elements and refresh with the new filename
+				        handleRenamedPoster(filename, data.filename, directory, data.newPath);
+				    } else {
+				        // If not renamed, just refresh the image
+				        refreshImage(filename, directory);
+				    }
+				} else {
+				    // Show error notification
+				    showImportErrorNotification(data.error || 'Failed to import poster from Plex');
+				}
+			} catch (error) {
+				// Show error notification
+				showImportErrorNotification('Error importing poster from Plex: ' + error.message);
+			} finally {
+				// Hide the sending notification
+				notification.remove();
+			}
+		}
+
+		// Function to handle renamed posters
+		function handleRenamedPoster(oldFilename, newFilename, directory, newPath) {
+			// First find the gallery item that contains this poster
+			const galleryItems = document.querySelectorAll('.gallery-item');
+			let targetItem = null;
+			
+			galleryItems.forEach(item => {
+				const buttons = item.querySelectorAll('button[data-filename]');
+				buttons.forEach(button => {
+				    if (button.getAttribute('data-filename') === oldFilename && 
+				        button.getAttribute('data-dirname') === directory) {
+				        targetItem = item;
+				    }
+				});
+			});
+			
+			if (!targetItem) {
+				return;
+			}
+			
+			// Update all buttons' data-filename attributes in this gallery item
+			const buttons = targetItem.querySelectorAll('button[data-filename]');
+			buttons.forEach(button => {
+				button.setAttribute('data-filename', newFilename);
+			});
+			
+			// Find the image element and update its source
+			const imageElement = targetItem.querySelector('.gallery-image');
+			if (imageElement) {
+				// For a renamed file, we'll use the new path directly instead of trying to modify the old path
+				if (newPath) {
+				    imageElement.src = '';  // Clear the src first
+				    imageElement.setAttribute('data-src', newPath);
+				    imageElement.src = newPath;
+				    
+				    // Reset loading state
+				    imageElement.classList.remove('loaded');
+				    const placeholder = imageElement.previousElementSibling;
+				    if (placeholder && placeholder.classList.contains('gallery-image-placeholder')) {
+				        placeholder.classList.remove('hidden');
+				    }
+				    
+				    // Set loaded class when the new image loads
+				    imageElement.onload = function() {
+				        imageElement.classList.add('loaded');
+				        if (placeholder) {
+				            placeholder.classList.add('hidden');
+				        }
+				    };
+				}
+			}
+			
+			// Update the copy URL button
+			const copyUrlBtn = targetItem.querySelector('.copy-url-btn');
+			if (copyUrlBtn) {
+				try {
+				    // Figure out what the new URL should be based on site URL and path structure
+				    const siteBaseUrl = window.location.origin + window.location.pathname.replace(/\/[^\/]*$/, '/');
+				    const dirPath = directory === 'movies' ? 'posters/movies/' : 
+				                  directory === 'tv-shows' ? 'posters/tv-shows/' :
+				                  directory === 'tv-seasons' ? 'posters/tv-seasons/' : 
+				                  'posters/collections/';
+				    
+				    // Construct the complete new URL
+				    const newUrl = siteBaseUrl + dirPath + encodeURIComponent(newFilename);
+				    
+				    // Update the copy URL button's data-url attribute
+				    copyUrlBtn.setAttribute('data-url', newUrl);
+				    
+				} catch (e) {
+				}
+			}
+			
+			// Update the download link href if it exists
+			const downloadLink = targetItem.querySelector('.download-btn');
+			if (downloadLink) {
+				const href = downloadLink.getAttribute('href');
+				if (href) {
+				    // Parse the URL query parameters
+				    try {
+				        // Remove the leading ? if present
+				        const queryString = href.startsWith('?') ? href.substring(1) : href;
+				        const params = new URLSearchParams(queryString);
+				        
+				        // Update the download parameter with the new filename
+				        if (params.has('download')) {
+				            params.set('download', newFilename);
+				            
+				            // Set the updated href
+				            const newHref = '?' + params.toString();
+				            downloadLink.setAttribute('href', newHref);
+				        }
+				    } catch (e) {
+				    }
+				}
+			}
+			
+			// Update the caption text if needed 
+			const captionElement = targetItem.querySelector('.gallery-caption');
+			if (captionElement) {
+				// Get the current full text
+				let fullText = captionElement.getAttribute('data-full-text');
+				if (fullText) {
+				    // Replace the old filename with the new one
+				    fullText = fullText.replace(oldFilename, newFilename);
+				    captionElement.setAttribute('data-full-text', fullText);
+				    
+				    // Also update the displayed caption text
+				    // First remove Plex and Orphaned tags
+				    let displayText = fullText.replace(/\*\*(Plex|Orphaned)\*\*/g, '');
+				    // Then remove both single [ID] and double [[Library]] brackets with their contents
+				    displayText = displayText.replace(/\[\[[^\]]*\]\]|\[[^\]]*\]/g, '');
+				    // Trim any resulting extra spaces
+				    displayText = displayText.trim();
+				    
+				    captionElement.textContent = displayText;
+				}
+			}
 		}
 		
 		// Function to show importing notification
@@ -6536,7 +6660,6 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		            
 		            // Show error
 		            showNotification('Error: Could not complete the deletion.', 'error');
-		            console.error('Delete error:', error);
 		        });
 		    });
 		}
