@@ -388,6 +388,48 @@ if (isset($_SESSION['login_time']) && (time() - $_SESSION['login_time']) > $auth
     exit;
 }
 
+
+// Handle reset all request
+if (isLoggedIn() && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'reset_all') {
+    header('Content-Type: application/json');
+    
+    $deleteCount = 0;
+    $errors = [];
+    
+    // Loop through all directories and delete all files
+    foreach ($config['directories'] as $directory) {
+        if (is_dir($directory)) {
+            $files = glob($directory . '*');
+            foreach ($files as $file) {
+                if (is_file($file)) {
+                    if (unlink($file)) {
+                        $deleteCount++;
+                    } else {
+                        $errors[] = 'Failed to delete: ' . basename($file);
+                    }
+                }
+            }
+        }
+    }
+    
+    // Return results
+    if (!empty($errors)) {
+        echo json_encode([
+            'success' => false,
+            'error' => 'Some files could not be deleted',
+            'deleted' => $deleteCount,
+            'errors' => $errors
+        ]);
+    } else {
+        echo json_encode([
+            'success' => true,
+            'deleted' => $deleteCount,
+            'message' => 'All posters have been deleted successfully'
+        ]);
+    }
+    exit;
+}
+
 /**
  * File Management Handlers
  */
@@ -2453,10 +2495,6 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				height: 75px;
 			}
 
-			.header-content {
-				gap: 15px;
-			}
-
 			.auth-actions {
 				justify-content: center;
 			}
@@ -2541,6 +2579,30 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
             </div>
         </div>
   
+  <!-- Reset Modal -->
+<div id="resetModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Reset Posteria</h3>
+            <button type="button" class="modal-close-btn">×</button>
+        </div>
+        <div class="modal-body">
+            <p>Are you sure you want to delete <strong>ALL</strong> posters? This action cannot be undone.</p>
+            <div style="margin: 20px 0; padding: 15px; background: rgba(239, 68, 68, 0.1); border: 1px solid var(--danger-color); border-radius: 6px;">
+                <p style="margin: 0;">⚠️ Warning: This will permanently delete all posters in your Posteria collection.</p>
+                <p style="margin-top: 10px;">This will not remove any posters from Plex.</p>
+            </div>
+            <form id="resetForm" method="POST">
+                <input type="hidden" name="action" value="reset_all">
+                <div class="modal-actions">
+                    <button type="button" class="modal-button cancel" id="cancelReset">Cancel</button>
+                    <button type="submit" class="modal-button delete">Reset All</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
   <!-- Change Poster Modal -->
 <div id="changePosterModal" class="modal upload-modal">
     <div class="modal-content">
@@ -2884,7 +2946,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 								<option value="">Loading libraries...</option>
 							</select>
 						</div>
-						<p style="font-size: 0.9em; color: var(--text-secondary);">Hold Ctrl (Windows) or Cmd (Mac) to select multiple libraries</p>
+						<p style="font-size: 0.9em; color: var(--text-secondary);">Hold Ctrl or Cmd to select multiple libraries</p>
 					</div>
 		            
 		            <!-- New: Option to import all seasons -->
@@ -8547,6 +8609,219 @@ document.addEventListener('ajaxComplete', function() {
             element.classList.add('tooltip-trigger');
         });
     }, 500);
+});
+</script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Create the reset button
+    const resetButton = document.createElement('button');
+    resetButton.id = 'showResetModal';
+    resetButton.className = 'reset-button';
+    resetButton.setAttribute('title', 'Reset Posteria');
+    resetButton.innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 2v6h6"></path>
+            <path d="M3 13a9 9 0 1 0 3-7.7L3 8"></path>
+        </svg>
+    `;
+    
+    // Create style for the reset button
+    const style = document.createElement('style');
+    style.textContent = `
+        .reset-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s;
+            text-decoration: none;
+            border: none;
+            height: 44px;
+            box-sizing: border-box;
+            background: #8B0000;
+            color: var(--text-primary);
+            border: 1px solid #a83232;
+        }
+        
+        .reset-button:hover {
+            background: #a31c1c;
+            transform: translateY(-2px);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            border-color: #c73e3e;
+        }
+        
+        @media (max-width: 768px) {
+            .reset-button {
+                height: 40px;
+                padding: 10px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .reset-button {
+                height: 38px;
+                padding: 8px;
+            }
+        }
+    `;
+    document.head.appendChild(style);
+    
+    // Check if user is logged in by looking for logout button
+    const isLoggedIn = document.querySelector('.logout-button') !== null;
+    
+    // Check if there are any files in the gallery
+    const hasFiles = document.querySelector('.gallery-item') !== null;
+    
+    if (isLoggedIn && hasFiles) {
+        // Add the reset button before the logout button
+        const authActions = document.querySelector('.auth-actions');
+        if (authActions) {
+            // Get the logout button
+            const logoutButton = document.querySelector('.logout-button');
+            if (logoutButton) {
+                // Insert the reset button before the logout button
+                authActions.insertBefore(resetButton, logoutButton);
+            }
+        }
+    }
+    
+    // Get the modal elements
+    const resetModal = document.getElementById('resetModal');
+    const showResetButton = document.getElementById('showResetModal');
+    const closeResetButton = resetModal?.querySelector('.modal-close-btn');
+    const cancelResetButton = document.getElementById('cancelReset');
+    const resetForm = document.getElementById('resetForm');
+    
+    // Modal functions
+    function showResetModal() {
+        resetModal.style.display = 'block';
+        resetModal.offsetHeight; // Force reflow
+        resetModal.classList.add('show');
+    }
+    
+    function hideResetModal() {
+        resetModal.classList.remove('show');
+        setTimeout(() => {
+            resetModal.style.display = 'none';
+        }, 300);
+    }
+    
+    // Add event listeners
+    if (showResetButton && resetModal) {
+        showResetButton.addEventListener('click', showResetModal);
+    }
+    
+    if (closeResetButton) {
+        closeResetButton.addEventListener('click', hideResetModal);
+    }
+    
+    if (cancelResetButton) {
+        cancelResetButton.addEventListener('click', hideResetModal);
+    }
+    
+    // Close modal when clicking outside
+    if (resetModal) {
+        resetModal.addEventListener('click', (e) => {
+            if (e.target === resetModal) {
+                hideResetModal();
+            }
+        });
+    }
+    
+    // Handle form submission
+    if (resetForm) {
+        resetForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            // Show a loading notification
+            const notification = showNotification('Resetting Posteria...', 'loading');
+            
+            try {
+                const formData = new FormData(resetForm);
+                
+                // Send to the main PHP file instead of a separate file
+                const response = await fetch(window.location.href, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Show success notification
+                    notification.remove();
+                    showNotification('Posteria has been reset successfully!', 'success');
+                    
+                    // Hide modal
+                    hideResetModal();
+                    
+                    // Reload page after a brief delay
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1500);
+                } else {
+                    // Show error notification
+                    notification.remove();
+                    showNotification('Error: ' + (data.error || 'Reset failed'), 'error');
+                }
+            } catch (error) {
+                // Show error notification
+                notification.remove();
+                showNotification('Error: Unable to reset Posteria', 'error');
+            }
+        });
+    }
+    
+    // Helper function to show notifications
+    function showNotification(message, type) {
+        const notification = document.createElement('div');
+        notification.className = `plex-notification plex-${type}`;
+        
+        let iconHtml = '';
+        if (type === 'success') {
+            iconHtml = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                <polyline points="22 4 12 14.01 9 11.01"></polyline>
+            </svg>`;
+        } else if (type === 'error') {
+            iconHtml = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>`;
+        } else if (type === 'loading') {
+            iconHtml = `<div class="plex-spinner"></div>`;
+        }
+        
+        notification.innerHTML = `
+            <div class="plex-notification-content">
+                ${iconHtml}
+                <span>${message}</span>
+            </div>
+        `;
+        
+        document.body.appendChild(notification);
+        
+        // Force reflow to trigger animation
+        notification.offsetHeight;
+        notification.classList.add('show');
+        
+        // Auto-remove after 3 seconds for success/error notifications
+        if (type !== 'loading') {
+            setTimeout(() => {
+                notification.classList.remove('show');
+                setTimeout(() => {
+                    notification.remove();
+                }, 300); // Match transition duration
+            }, 3000);
+        }
+        
+        return notification;
+    }
 });
 </script>
 </body>
