@@ -54,4 +54,19 @@ $plex_config = [
     'remove_overlay_label' => getBoolEnvWithFallback('PLEX_REMOVE_OVERLAY_LABEL', false)
 ];
 
+$auto_import_config = [
+    // Whether auto-import is enabled
+    'enabled' => getBoolEnvWithFallback('AUTO_IMPORT_ENABLED', true),
+    
+    // Schedule interval - supported formats: '24h', '12h', '6h', '1d', '7d', etc.
+    // h = hours, d = days, w = weeks, m = minutes
+    'schedule' => getEnvWithFallback('AUTO_IMPORT_SCHEDULE', '24h'),
+    
+    // What to import
+    'import_movies' => getBoolEnvWithFallback('AUTO_IMPORT_MOVIES', true),
+    'import_shows' => getBoolEnvWithFallback('AUTO_IMPORT_SHOWS', true),
+    'import_seasons' => getBoolEnvWithFallback('AUTO_IMPORT_SEASONS', true),
+    'import_collections' => getBoolEnvWithFallback('AUTO_IMPORT_COLLECTIONS', true)
+];
+
 ?>

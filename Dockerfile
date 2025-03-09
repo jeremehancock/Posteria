@@ -1,5 +1,4 @@
 FROM php:8.2-apache
-
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     libfreetype6-dev \
@@ -10,6 +9,7 @@ RUN apt-get update && apt-get install -y \
     jq \
     grep \
     sed \
+    cron \
     && rm -rf /var/lib/apt/lists/*
 
 # Configure and install PHP extensions
@@ -59,9 +59,15 @@ COPY include/delete-orphans.php /var/www/html/include/
 COPY include/config.php /var/www/html/include/
 COPY include/remove-overlay-label.sh /var/www/html/include/
 COPY include/.htaccess /var/www/html/include/
+COPY include/auto-import.php /var/www/html/include/
 
 # Copy assets directory
 COPY assets/ /var/www/html/assets/
+
+# Set up cron for auto-import
+RUN echo "0 * * * * cd /var/www/html && /usr/local/bin/php include/auto-import.php >> /var/www/html/data/auto-import-cron.log 2>&1" > /etc/cron.d/posteria-autoimport
+RUN chmod 0644 /etc/cron.d/posteria-autoimport
+RUN crontab /etc/cron.d/posteria-autoimport
 
 # Copy and set up entrypoint script
 COPY docker-entrypoint.sh /usr/local/bin/
@@ -70,8 +76,10 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 # Ensure proper permissions
 RUN chown -R www-data:www-data /var/www/html && \
     find /var/www/html -type d -exec chmod 755 {} \; && \
-    find /var/www/html -type f -exec chmod 644 {} \;
+    find /var/www/html -type f -exec chmod 644 {} \; && \
+    chmod +x /var/www/html/include/auto-import.php
 
 EXPOSE 80
 
+# Updated entrypoint that starts cron
 ENTRYPOINT ["docker-entrypoint.sh"]

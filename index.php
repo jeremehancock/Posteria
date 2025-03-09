@@ -1477,7 +1477,6 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			font-size: 12px;
 			font-weight: 600;
 			opacity: 0.9;
-			z-index: 1;
 			max-width: calc(100% - 20px); /* Leave 10px margin on each side */
 			white-space: nowrap;
 			overflow: hidden;
