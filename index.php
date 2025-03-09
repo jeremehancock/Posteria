@@ -96,6 +96,54 @@ function sendJsonResponse($success, $error = null) {
     exit;
 }
 
+// Function to extract library name from filename
+function extractLibraryName($filename) {
+    // Look for library name enclosed in double brackets [[Library Name]]
+    if (preg_match('/\[\[(.*?)\]\]/', $filename, $matches)) {
+        return $matches[1];
+    }
+    return '';
+}
+
+// Function to check if there are multiple libraries for a media type
+function hasMultipleLibraries($allImages, $directory) {
+    $libraries = [];
+    
+    foreach ($allImages as $image) {
+        if ($image['directory'] === $directory) {
+            $libraryName = extractLibraryName($image['filename']);
+            if (!empty($libraryName) && !in_array($libraryName, $libraries)) {
+                $libraries[] = $libraryName;
+            }
+        }
+    }
+    
+    return count($libraries) > 1;
+}
+
+// Function to generate directory badge with optional library name
+function generateDirectoryBadge($image, $allImages) {
+    $directory = $image['directory'];
+    $directoryName = formatDirectoryName($directory);
+    
+    // Don't show library name for collections
+    if ($directory === 'collections') {
+        return $directoryName;
+    }
+    
+    // Check if we should display library name (only if multiple libraries exist)
+    $hasMultipleLibraries = hasMultipleLibraries($allImages, $directory);
+    
+    if ($hasMultipleLibraries) {
+        $libraryName = extractLibraryName($image['filename']);
+        if (!empty($libraryName)) {
+            return $directoryName . ': ' . $libraryName;
+        }
+    }
+    
+    return $directoryName;
+}
+
 // Get image files from directory
 function getImageFiles($config, $currentDirectory = '') {
     $files = [];
@@ -1387,7 +1435,20 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			font-size: 12px;
 			font-weight: 600;
 			opacity: 0.9;
-			z-index: 0;
+			z-index: 1;
+			max-width: calc(100% - 20px); /* Leave 10px margin on each side */
+			white-space: nowrap;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+		}
+
+		/* Hover effect to show full text if it's truncated */
+		.directory-badge:hover {
+			white-space: normal;
+			word-break: break-word;
+			z-index: 5;
+			max-width: 90%;
 		}
 
 		/* Delete Orphans Button */
@@ -2931,7 +2992,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				        <div class="gallery-item">
 				            <div class="gallery-image-container">
 									<div class="directory-badge">
-										<?php echo formatDirectoryName($image['directory']); ?>
+										<?php echo generateDirectoryBadge($image, $allImages); ?>
 									</div>
 				                
 
