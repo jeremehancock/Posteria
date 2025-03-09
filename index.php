@@ -2719,14 +2719,15 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		            </div>
 		            
 		            <!-- Step 2: Library Selection -->
-		            <div class="import-step" id="librarySelectionStep" style="display: none;">
-		                <h4 style="margin-bottom: 12px;">Select Library</h4>
-		                <div class="directory-select" style="margin-bottom: 16px;">
-		                    <select id="plexLibrary" class="login-input">
-		                        <option value="">Loading libraries...</option>
-		                    </select>
-		                </div>
-		            </div>
+					<div class="import-step" id="librarySelectionStep" style="display: none;">
+						<h4 style="margin-bottom: 12px;">Select Libraries</h4>
+						<div class="directory-select" style="margin-bottom: 16px;">
+							<select id="plexLibrary" class="login-input" multiple size="5">
+								<option value="">Loading libraries...</option>
+							</select>
+						</div>
+						<p style="font-size: 0.9em; color: var(--text-secondary);">Hold Ctrl (Windows) or Cmd (Mac) to select multiple libraries</p>
+					</div>
 		            
 		            <!-- New: Option to import all seasons -->
 		            <div class="import-step" id="seasonsOptionsStep" style="display: none;">
@@ -4055,72 +4056,72 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		    }
 		    
 		    // Load Plex libraries based on import type
-		    async function loadPlexLibraries() {
-		        // Get the currently selected import type
-		        const importType = importTypeSelect.value;
-		        
-		        // If no import type is selected, don't try to load libraries
-		        if (!importType) {
-		            librarySelect.innerHTML = '<option value="">Select a content type first...</option>';
-		            return;
-		        }
-		        
-		        librarySelect.innerHTML = '<option value="">Loading libraries...</option>';
-		        
-		        try {
-		            const response = await fetch('./include/plex-import.php', {
-		                method: 'POST',
-		                headers: {
-		                    'Content-Type': 'application/x-www-form-urlencoded',
-		                },
-		                body: new URLSearchParams({
-		                    'action': 'get_plex_libraries'
-		                })
-		            });
-		            
-		            const data = await response.json();
-		            
-		            if (data.success && data.data.length > 0) {
-		                plexLibraries = data.data;
-		                librarySelect.innerHTML = '<option value="">Select library...</option>';
-		                
-		                let matchingLibrariesCount = 0;
-		                
-		                plexLibraries.forEach(library => {
-		                    // Filter libraries based on import type
-		                    const showLibrary = (
-		                        // For movies, only show movie libraries
-		                        (importType === 'movies' && library.type === 'movie') ||
-		                        // For shows or seasons, only show TV show libraries
-		                        ((importType === 'shows' || importType === 'seasons') && library.type === 'show') ||
-		                        // For collections, show both
-		                        (importType === 'collections')
-		                    );
-		                    
-		                    if (showLibrary) {
-		                        matchingLibrariesCount++;
-		                        const option = document.createElement('option');
-		                        option.value = library.id;
-		                        option.dataset.type = library.type;
-		                        option.textContent = `${library.title} (${library.type === 'movie' ? 'Movies' : 'TV Shows'})`;
-		                        librarySelect.appendChild(option);
-		                    }
-		                });
-		                
-		                // If no libraries match the filter
-		                if (matchingLibrariesCount === 0) {
-		                    librarySelect.innerHTML = '<option value="">No matching libraries found</option>';
-		                    showErrorInImportOptions('No libraries of the required type were found');
-		                }
-		            } else {
-		                librarySelect.innerHTML = '<option value="">No libraries found</option>';
-		                showErrorInImportOptions(data.error || 'No libraries found on Plex server');
-		            }
-		        } catch (error) {
-		            librarySelect.innerHTML = '<option value="">Error loading libraries</option>';
-		            showErrorInImportOptions('Error loading Plex libraries: ' + error.message);
-		        }
-		    }
+			async function loadPlexLibraries() {
+				// Get the currently selected import type
+				const importType = importTypeSelect.value;
+				
+				// If no import type is selected, don't try to load libraries
+				if (!importType) {
+					librarySelect.innerHTML = '<option value="">Select a content type first...</option>';
+					return;
+				}
+				
+				librarySelect.innerHTML = '<option value="">Loading libraries...</option>';
+				
+				try {
+					const response = await fetch('./include/plex-import.php', {
+						method: 'POST',
+						headers: {
+						    'Content-Type': 'application/x-www-form-urlencoded',
+						},
+						body: new URLSearchParams({
+						    'action': 'get_plex_libraries'
+						})
+					});
+					
+					const data = await response.json();
+					
+					if (data.success && data.data.length > 0) {
+						plexLibraries = data.data;
+						librarySelect.innerHTML = '';
+						
+						let matchingLibrariesCount = 0;
+						
+						plexLibraries.forEach(library => {
+						    // Filter libraries based on import type
+						    const showLibrary = (
+						        // For movies, only show movie libraries
+						        (importType === 'movies' && library.type === 'movie') ||
+						        // For shows or seasons, only show TV show libraries
+						        ((importType === 'shows' || importType === 'seasons') && library.type === 'show') ||
+						        // For collections, show both
+						        (importType === 'collections')
+						    );
+						    
+						    if (showLibrary) {
+						        matchingLibrariesCount++;
+						        const option = document.createElement('option');
+						        option.value = library.id;
+						        option.dataset.type = library.type;
+						        option.textContent = `${library.title} (${library.type === 'movie' ? 'Movies' : 'TV Shows'})`;
+						        librarySelect.appendChild(option);
+						    }
+						});
+						
+						// If no libraries match the filter
+						if (matchingLibrariesCount === 0) {
+						    librarySelect.innerHTML = '<option value="">No matching libraries found</option>';
+						    showErrorInImportOptions('No libraries of the required type were found');
+						}
+					} else {
+						librarySelect.innerHTML = '<option value="">No libraries found</option>';
+						showErrorInImportOptions(data.error || 'No libraries found on Plex server');
+					}
+				} catch (error) {
+					librarySelect.innerHTML = '<option value="">Error loading libraries</option>';
+					showErrorInImportOptions('Error loading Plex libraries: ' + error.message);
+				}
+			}
 		    
 		    // Load shows for a specific library (for TV season selection)
 		    async function loadPlexShows(libraryId) {
@@ -4180,28 +4181,28 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		    }
 		    
 		    // Validate import options and enable/disable start button
-		    function validateImportOptions() {
-		        const importType = importTypeSelect.value;
-		        const libraryId = librarySelect.value;
-		        const showId = showSelect.value;
-		        const importAllSeasons = document.getElementById('importAllSeasons')?.checked || false;
-		        
-		        let isValid = false;
-		        
-		        if (!importType || !libraryId) {
-		            isValid = false;
-		        } else if (importType === 'seasons') {
-		            // If importing all seasons, we just need a valid library
-		            // If importing specific show seasons, we need both library and show
-		            isValid = importAllSeasons ? true : (showId ? true : false);
-		        } else {
-		            // For all other types, just need a valid library ID
-		            isValid = true;
-		        }
-		        
-		        startPlexImportButton.disabled = !isValid;
-		        return isValid;
-		    }
+			function validateImportOptions() {
+				const importType = importTypeSelect.value;
+				const selectedLibraries = Array.from(librarySelect.selectedOptions).map(option => option.value);
+				const showId = showSelect.value;
+				const importAllSeasons = document.getElementById('importAllSeasons')?.checked || false;
+				
+				let isValid = false;
+				
+				if (!importType || selectedLibraries.length === 0) {
+					isValid = false;
+				} else if (importType === 'seasons') {
+					// If importing all seasons, we just need valid libraries
+					// If importing specific show seasons, we need both libraries and show
+					isValid = importAllSeasons ? true : (showId ? true : false);
+				} else {
+					// For all other types, just need valid libraries
+					isValid = true;
+				}
+				
+				startPlexImportButton.disabled = !isValid;
+				return isValid;
+			}
 		    
 		    // Checkbox handler for "Import all seasons"
 		    const importAllSeasonsCheckbox = document.getElementById('importAllSeasons');
@@ -4316,7 +4317,11 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		        const selectedLibraryId = this.value;
 		        const selectedOption = this.options[this.selectedIndex];
 		        const libraryType = selectedOption ? selectedOption.dataset.type : '';
+		        const selectedLibraries = Array.from(this.selectedOptions).map(option => option.value);
 		        
+	            hideErrorInImportOptions();
+    
+    			validateImportOptions();
 		        // Reset show selection
 		        showSelectionStep.style.display = 'none';
 		        showSelect.innerHTML = '<option value="">Loading shows...</option>';
@@ -4345,228 +4350,262 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		    });
 		    
 		    // Start the import process
-		    startPlexImportButton.addEventListener('click', async function() {
-		        if (!validateImportOptions()) {
-		            return;
-		        }
-		        
-		        // Get selected options
-		        const importType = importTypeSelect.value;
-		        const libraryId = librarySelect.value;
-		        const importAllSeasons = document.getElementById('importAllSeasons')?.checked || false;
-		        
-		        // Only get showKey if we're not importing all seasons
-		        const showKey = (importType === 'seasons' && !importAllSeasons) ? showSelect.value : null;
-		        
-		        const targetDirectory = targetDirectorySelect.value;
-		        const overwriteOption = fileHandlingSelect.value;
-		        
-		        // Hide the close button when starting the import process
-		        const closeButton = plexImportModal.querySelector('.modal-close-btn');
-		        if (closeButton) {
-		            closeButton.style.display = 'none';
-		        }
-		        
-		        // Show progress container, hide options
-		        importOptionsContainer.style.display = 'none';
-		        importProgressContainer.style.display = 'block';
-		        
-		        // Start import process
-		        try {
-		            await importPlexPosters(importType, libraryId, showKey, targetDirectory, overwriteOption, importAllSeasons);
-		        } catch (error) {
-		            // Show the close button again on error
-		            if (closeButton) {
-		                closeButton.style.display = 'block';
-		            }
-		            
-		            // Hide the progress container
-		            importProgressContainer.style.display = 'none';
-		            importOptionsContainer.style.display = 'block';
-		            
-		            // Show error
-		            showErrorInImportOptions('Import failed: ' + error.message);
-		        }
-		    });
+			startPlexImportButton.addEventListener('click', async function() {
+				if (!validateImportOptions()) {
+					return;
+				}
+				
+				// Get selected options
+				const importType = importTypeSelect.value;
+				const selectedLibraries = Array.from(librarySelect.selectedOptions).map(option => option.value);
+				const importAllSeasons = document.getElementById('importAllSeasons')?.checked || false;
+				
+				// Only get showKey if we're not importing all seasons
+				const showKey = (importType === 'seasons' && !importAllSeasons) ? showSelect.value : null;
+				
+				const targetDirectory = targetDirectorySelect.value;
+				const overwriteOption = fileHandlingSelect.value;
+				
+				// Hide the close button when starting the import process
+				const closeButton = plexImportModal.querySelector('.modal-close-btn');
+				if (closeButton) {
+					closeButton.style.display = 'none';
+				}
+				
+				// Show progress container, hide options
+				importOptionsContainer.style.display = 'none';
+				importProgressContainer.style.display = 'block';
+				
+				// Start import process with multiple libraries
+				try {
+					await importPlexPosters(importType, selectedLibraries, showKey, targetDirectory, overwriteOption, importAllSeasons);
+				} catch (error) {
+					// Show the close button again on error
+					if (closeButton) {
+						closeButton.style.display = 'block';
+					}
+					
+					// Hide the progress container
+					importProgressContainer.style.display = 'none';
+					importOptionsContainer.style.display = 'block';
+					
+					// Show error
+					showErrorInImportOptions('Import failed: ' + error.message);
+				}
+			});
 		    
 		    // Import posters from Plex
-		    async function importPlexPosters(type, libraryId, showKey, contentType, overwriteOption, importAllSeasons) {
-		        // Configure initial request
-		        const initialParams = {
-		            'action': 'import_plex_posters',
-		            'type': type,
-		            'libraryId': libraryId,
-		            'contentType': contentType,
-		            'overwriteOption': overwriteOption,
-		            'batchProcessing': 'true',
-		            'startIndex': 0
-		        };
-		        
-		        // Add showKey for seasons import (when not importing all)
-		        if (type === 'seasons' && !importAllSeasons && showKey) {
-		            initialParams.showKey = showKey;
-		        }
-		        
-		        // Add importAllSeasons parameter if true
-		        if (type === 'seasons' && importAllSeasons) {
-		            initialParams.importAllSeasons = 'true';
-		        }
-		        
-		        let isComplete = false;
-		        let currentIndex = 0;
-		        const results = {
-		            successful: 0,
-		            skipped: 0,
-		            failed: 0,
-		            errors: []
-		        };
-		        
-		        // Stats dashboard in the modal
-		        const statsDashboard = `
-		        <div id="importStatsDashboard" style="margin-top: 20px; display: flex; justify-content: space-between; text-align: center; gap: 10px;">
-		            <div style="flex: 1; background: rgba(46, 213, 115, 0.1); border: 1px solid var(--success-color); border-radius: 6px; padding: 12px;">
-		                <div style="font-size: 24px; font-weight: bold; color: var(--success-color);" id="statsSuccessful">0</div>
-		                <div style="color: var(--text-primary);">Successful</div>
-		            </div>
-		            <div style="flex: 1; background: rgba(255, 159, 67, 0.1); border: 1px solid var(--accent-primary); border-radius: 6px; padding: 12px;">
-		                <div style="font-size: 24px; font-weight: bold; color: var(--accent-primary);" id="statsSkipped">0</div>
-		                <div style="color: var(--text-primary);">Skipped</div>
-		            </div>
-		            <div style="flex: 1; background: rgba(239, 68, 68, 0.1); border: 1px solid var(--danger-color); border-radius: 6px; padding: 12px;">
-		                <div style="font-size: 24px; font-weight: bold; color: var(--danger-color);" id="statsFailed">0</div>
-		                <div style="color: var(--text-primary);">Failed</div>
-		            </div>
-		        </div>
-		        `;
-		        
-		        // Add stats dashboard to progress container
-		        if (!document.getElementById('importStatsDashboard')) {
-		            document.getElementById('importProgressDetails').insertAdjacentHTML('afterend', statsDashboard);
-		        }
-		        
-		        // Update progress message for all seasons import
-		        if (type === 'seasons' && importAllSeasons) {
-		            document.getElementById('importProgressStatus').textContent = 'Importing season posters from all shows...';
-		        }
-		        
-		        const allSkippedDetails = []; // Array to store results
-		        
-		        // While not complete and not cancelled
-		        while (!isComplete && !importCancelled) {
-		            try {
-		                const formData = new FormData();
-		                
-		                // Add all parameters
-		                for (const [key, value] of Object.entries({
-		                    ...initialParams,
-		                    'startIndex': currentIndex,
-		                    'totalSuccessful': results.successful,
-		                    'totalSkipped': results.skipped,
-		                    'totalFailed': results.failed
-		                })) {
-		                    formData.append(key, value);
-		                }
-		                
-		                const response = await fetch('./include/plex-import.php', {
-		                    method: 'POST',
-		                    body: formData
-		                });
-		                
-		                const data = await response.json();
-		                
-		                if (!data.success) {
-		                    throw new Error(data.error || 'Unknown error during import');
-		                }
-		                
-		                // Update progress
-		                if (data.batchComplete) {
-		                    // For "Import all seasons", show which show is being processed
-		                    if (type === 'seasons' && importAllSeasons && data.progress.currentShow) {
-		                        document.getElementById('importProgressStatus').textContent = 
-		                            "Importing posters...";
-		                        
-		                        // Season progress details
-		                        if (data.progress.seasonCount !== undefined) {
-		                            document.getElementById('importProgressDetails').innerHTML = 
-		                                `Processing show ${data.progress.processed} of ${data.progress.total} (${data.progress.percentage}%)<br>` +
-		                                `Found ${data.progress.seasonCount} seasons in current show`;
-		                        } else {
-		                            document.getElementById('importProgressDetails').textContent = 
-		                                `Processing show ${data.progress.processed} of ${data.progress.total} (${data.progress.percentage}%)`;
-		                        }
-		                    } else {
-		                        // Regular batch progress
-		                        const percentage = data.progress.percentage;
-		                        if (importProgressBar) {
-		                            importProgressBar.style.width = `${percentage}%`;
-		                        }
-		                        
-		                        // Update progress text
-		                        document.getElementById('importProgressDetails').textContent = 
-		                            `Processing ${data.progress.processed} of ${data.progress.total} items (${percentage}%)`;
-		                    }
-		                    
-		                    // Update progress bar for all cases
-		                    const percentage = data.progress.percentage;
-		                    if (importProgressBar) {
-		                        importProgressBar.style.width = `${percentage}%`;
-		                    }
-		                    
-		                    // Track results
-		                    if (data.results) {
-		                        results.successful += data.results.successful;
-		                        results.skipped += data.results.skipped;
-		                        results.failed += data.results.failed;
-		                        
-		                        // Concat any errors
-		                        if (data.results.errors && data.results.errors.length) {
-		                            results.errors = [...results.errors, ...data.results.errors];
-		                        }
-		                    }
-		                    
-		                    if (data.results && data.results.skippedDetails) {
-		                        allSkippedDetails.push(...data.results.skippedDetails); // Spread to merge arrays
-		                    }
-		                    
-		                    // Update stats dashboard with the latest totals
-		                    updateStatsDashboard(results, allSkippedDetails);
-		                    
-		                    // Check if complete
-		                    isComplete = data.progress.isComplete;
-		                    currentIndex = data.progress.nextIndex || 0;
-		                } else {
-		                    // Handle non-batch processing result
-		                    isComplete = true;
-		                    
-		                    if (data.results) {
-		                        results.successful = data.results.successful;
-		                        results.skipped = data.results.skipped;
-		                        results.failed = data.results.failed;
-		                        results.errors = data.results.errors || [];
-		                    }
-		                    
-		                    // Update stats dashboard
-		                    updateStatsDashboard(data.totalStats, allSkippedDetails || results, allSkippedDetails);
-		                }
-		                
-		                // If complete, show results
-		                if (isComplete) {
-		                    // Update status text for results
-		                    document.getElementById('importProgressStatus').textContent = 'Import complete!';
-		                    
-		                    // Small delay before showing the results screen
-		                    setTimeout(() => {
-		                        showImportResults(results, allSkippedDetails);
-		                    }, 500);
-		                }
-		            } catch (error) {
-		                // Stop processing and show error
-		                throw error;
-		            }
-		        }
-		        
-		        return results;
-		    }
+			async function importPlexPosters(type, libraryIds, showKey, contentType, overwriteOption, importAllSeasons) {
+				// Configure initial request
+				const initialParams = {
+					'action': 'import_plex_posters',
+					'type': type,
+					'libraryIds': libraryIds.join(','), // Send as comma-separated string
+					'contentType': contentType,
+					'overwriteOption': overwriteOption,
+					'batchProcessing': 'true',
+					'startIndex': 0,
+					'libraryIndex': 0 // New parameter to track which library we're processing
+				};
+				
+				// Add showKey for seasons import (when not importing all)
+				if (type === 'seasons' && !importAllSeasons && showKey) {
+					initialParams.showKey = showKey;
+				}
+				
+				// Add importAllSeasons parameter if true
+				if (type === 'seasons' && importAllSeasons) {
+					initialParams.importAllSeasons = 'true';
+				}
+				
+				let isComplete = false;
+				let currentIndex = 0;
+				let currentLibraryIndex = 0;
+				const results = {
+					successful: 0,
+					skipped: 0,
+					unchanged: 0,
+					renamed: 0,
+					failed: 0,
+					errors: []
+				};
+				
+				// Stats dashboard in the modal
+				const statsDashboard = `
+				<div id="importStatsDashboard" style="margin-top: 20px; display: flex; justify-content: space-between; text-align: center; gap: 10px;">
+					<div style="flex: 1; background: rgba(46, 213, 115, 0.1); border: 1px solid var(--success-color); border-radius: 6px; padding: 12px;">
+						<div style="font-size: 24px; font-weight: bold; color: var(--success-color);" id="statsSuccessful">0</div>
+						<div style="color: var(--text-primary);">Successful</div>
+					</div>
+					<div style="flex: 1; background: rgba(255, 159, 67, 0.1); border: 1px solid var(--accent-primary); border-radius: 6px; padding: 12px;">
+						<div style="font-size: 24px; font-weight: bold; color: var(--accent-primary);" id="statsSkipped">0</div>
+						<div style="color: var(--text-primary);">Skipped</div>
+					</div>
+					<div style="flex: 1; background: rgba(239, 68, 68, 0.1); border: 1px solid var(--danger-color); border-radius: 6px; padding: 12px;">
+						<div style="font-size: 24px; font-weight: bold; color: var(--danger-color);" id="statsFailed">0</div>
+						<div style="color: var(--text-primary);">Failed</div>
+					</div>
+				</div>
+				`;
+				
+				// Add stats dashboard to progress container
+				if (!document.getElementById('importStatsDashboard')) {
+					document.getElementById('importProgressDetails').insertAdjacentHTML('afterend', statsDashboard);
+				}
+				
+				// Update progress message for all seasons import
+				if (type === 'seasons' && importAllSeasons) {
+					document.getElementById('importProgressStatus').textContent = 'Importing season posters from all shows...';
+				}
+				
+				const allSkippedDetails = []; // Array to store results
+				
+				// While not complete and not cancelled
+				while (!isComplete && !importCancelled) {
+					try {
+						const formData = new FormData();
+						
+						// Add all parameters
+						for (const [key, value] of Object.entries({
+						    ...initialParams,
+						    'startIndex': currentIndex,
+						    'libraryIndex': currentLibraryIndex,
+						    'totalSuccessful': results.successful,
+						    'totalSkipped': results.skipped,
+						    'totalUnchanged': results.unchanged,
+						    'totalRenamed': results.renamed,
+						    'totalFailed': results.failed
+						})) {
+						    formData.append(key, value);
+						}
+						
+						const response = await fetch('./include/plex-import.php', {
+						    method: 'POST',
+						    body: formData
+						});
+						
+						const data = await response.json();
+						
+						if (!data.success) {
+						    throw new Error(data.error || 'Unknown error during import');
+						}
+						
+						// Update progress
+						if (data.batchComplete) {
+						    // For "Import all seasons", show which show is being processed
+						    if (type === 'seasons' && importAllSeasons && data.progress.currentShow) {
+						        document.getElementById('importProgressStatus').textContent = 
+						            "Importing posters...";
+						        
+						        // Season progress details
+						        if (data.progress.seasonCount !== undefined) {
+						            document.getElementById('importProgressDetails').innerHTML = 
+						                `Processing show ${data.progress.processed} of ${data.progress.total} (${data.progress.percentage}%)<br>` +
+						                `Found ${data.progress.seasonCount} seasons in current show`;
+						        } else {
+						            document.getElementById('importProgressDetails').textContent = 
+						                `Processing show ${data.progress.processed} of ${data.progress.total} (${data.progress.percentage}%)`;
+						        }
+						    } else if (data.progress.currentLibrary) {
+						        // Show which library is being processed (for multi-library)
+						        document.getElementById('importProgressStatus').textContent = 
+						            `Importing posters from library: ${data.progress.currentLibrary}`;
+						        
+						        // Regular batch progress
+						        const percentage = data.progress.percentage;
+						        if (importProgressBar) {
+						            importProgressBar.style.width = `${percentage}%`;
+						        }
+						        
+						        // Update progress text
+						        document.getElementById('importProgressDetails').textContent = 
+						            `Library ${data.progress.currentLibraryIndex + 1} of ${data.progress.totalLibraries}: ` +
+						            `Processing ${data.progress.processed} of ${data.progress.total} items (${percentage}%)`;
+						    } else {
+						        // Regular batch progress
+						        const percentage = data.progress.percentage;
+						        if (importProgressBar) {
+						            importProgressBar.style.width = `${percentage}%`;
+						        }
+						        
+						        // Update progress text
+						        document.getElementById('importProgressDetails').textContent = 
+						            `Processing ${data.progress.processed} of ${data.progress.total} items (${percentage}%)`;
+						    }
+						    
+						    // Update progress bar for all cases
+						    const percentage = data.progress.percentage;
+						    if (importProgressBar) {
+						        importProgressBar.style.width = `${percentage}%`;
+						    }
+						    
+						    // Track results
+						    if (data.results) {
+						        results.successful += data.results.successful || 0;
+						        results.skipped += data.results.skipped || 0;
+						        results.unchanged += data.results.unchanged || 0;
+						        results.renamed += data.results.renamed || 0;
+						        results.failed += data.results.failed || 0;
+						        
+						        // Concat any errors
+						        if (data.results.errors && data.results.errors.length) {
+						            results.errors = [...results.errors, ...data.results.errors];
+						        }
+						    }
+						    
+						    if (data.results && data.results.skippedDetails) {
+						        allSkippedDetails.push(...data.results.skippedDetails); // Spread to merge arrays
+						    }
+						    
+						    // Update stats dashboard with the latest totals
+						    updateStatsDashboard(results, allSkippedDetails);
+						    
+						    // Check if complete or need to move to next library
+						    if (data.progress.moveToNextLibrary) {
+						        // Update to the next library
+						        currentLibraryIndex = data.progress.nextLibraryIndex || 0;
+						        currentIndex = 0; // Reset index for the new library
+						    } else {
+						        // Update the current index within this library
+						        isComplete = data.progress.isComplete;
+						        currentIndex = data.progress.nextIndex || 0;
+						    }
+						} else {
+						    // Handle non-batch processing result
+						    isComplete = true;
+						    
+						    if (data.results) {
+						        results.successful = data.results.successful || 0;
+						        results.skipped = data.results.skipped || 0;
+						        results.unchanged = data.results.unchanged || 0;
+						        results.renamed = data.results.renamed || 0;
+						        results.failed = data.results.failed || 0;
+						        results.errors = data.results.errors || [];
+						    }
+						    
+						    // Update stats dashboard
+						    updateStatsDashboard(data.totalStats || results, allSkippedDetails);
+						}
+						
+						// If complete, show results
+						if (isComplete) {
+						    // Update status text for results
+						    document.getElementById('importProgressStatus').textContent = 'Import complete!';
+						    
+						    // Small delay before showing the results screen
+						    setTimeout(() => {
+						        showImportResults(results, allSkippedDetails);
+						    }, 500);
+						}
+					} catch (error) {
+						// Stop processing and show error
+						console.error("Import error:", error);
+						throw error;
+					}
+				}
+				
+				return results;
+			}
 		    
 		    // Update the stats dashboard with the current totals
 		    function updateStatsDashboard(stats) {
