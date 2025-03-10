@@ -66,3 +66,6 @@
 ### Fixed
 - Poster names in Change Poster modal issue
 
+## [1.2.2]
+### Added
+- Mobile tooltip to show truncated Poster names

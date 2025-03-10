@@ -8360,6 +8360,7 @@ document.addEventListener('DOMContentLoaded', function() {
             border: 1px solid var(--border-color);
             word-wrap: break-word;
             line-height: 1.4;
+            text-align: center;
         }
         
         /* Arrow indicator for the tooltip */
@@ -8850,6 +8851,245 @@ document.addEventListener('DOMContentLoaded', function() {
         
         return notification;
     }
+});
+</script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // First check if it's a touch device - we'll only apply this solution for touch devices
+    const isTouchDevice = ('ontouchstart' in window) || 
+                          (navigator.maxTouchPoints > 0) || 
+                          (navigator.msMaxTouchPoints > 0);
+    
+    // Exit early if this is not a touch device (no need to set up mobile tooltip)
+    if (!isTouchDevice) {
+        return;
+    }
+    
+    // Create a mobile tooltip element for captions
+    const mobileCaptionTooltip = document.createElement('div');
+    mobileCaptionTooltip.className = 'mobile-caption-tooltip';
+    mobileCaptionTooltip.style.display = 'none';
+    document.body.appendChild(mobileCaptionTooltip);
+
+    // Add CSS for the mobile caption tooltip
+    const mobileCaptionStyle = document.createElement('style');
+    mobileCaptionStyle.textContent = `
+        .mobile-caption-tooltip {
+            position: fixed;
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 16px;
+            max-width: 90%;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+            z-index: 1050;
+            text-align: center;
+            border: 1px solid var(--border-color);
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity 0.3s, transform 0.3s;
+            word-break: break-word;
+            line-height: 1.5;
+            left: 50%;
+            transform: translateX(-50%) translateY(20px);
+            bottom: 20px;
+        }
+        
+        .mobile-caption-tooltip.visible {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+        
+        /* Add a class to indicate truncated captions */
+        .gallery-caption.is-truncated {
+            position: relative;
+        }
+        
+        /* Only style truncated captions on mobile devices */
+        @media (hover: none) {
+            .gallery-caption.is-truncated:active {
+                background-color: rgba(255, 255, 255, 0.1);
+                border-radius: 4px;
+            }
+        }
+    `;
+    document.head.appendChild(mobileCaptionStyle);
+
+    // Track whether tooltip is showing or timer is active
+    let tooltipActive = false;
+    let tooltipTimer = null;
+    let currentlyTruncatedElement = null;
+    
+    // Function to show the mobile caption tooltip
+    function showMobileCaptionTooltip(captionElement) {
+        if (!captionElement || !captionElement.classList.contains('is-truncated')) {
+            return;
+        }
+        
+        const fullText = captionElement.getAttribute('data-full-text');
+        if (!fullText) {
+            return;
+        }
+        
+        // Store current element
+        currentlyTruncatedElement = captionElement;
+        
+        // Clean up the text to display
+        let textToDisplay = fullText;
+        // Remove Plex and Orphaned tags
+        textToDisplay = textToDisplay.replace(/\*\*(Plex|Orphaned)\*\*/g, '');
+        // Remove both single [ID] and double [[Library]] brackets with their contents
+        textToDisplay = textToDisplay.replace(/\[\[[^\]]*\]\]|\[[^\]]*\]/g, '');
+        // Trim any resulting extra spaces
+        textToDisplay = textToDisplay.trim();
+        
+        // Set tooltip content
+        mobileCaptionTooltip.textContent = textToDisplay;
+        
+        // Show tooltip
+        mobileCaptionTooltip.style.display = 'block';
+        
+        // Force reflow
+        mobileCaptionTooltip.offsetHeight;
+        
+        // Add visible class for animation
+        mobileCaptionTooltip.classList.add('visible');
+        
+        // Set timeout to hide tooltip after 3 seconds
+        if (tooltipTimer) {
+            clearTimeout(tooltipTimer);
+        }
+        
+        tooltipActive = true;
+        tooltipTimer = setTimeout(() => {
+            hideMobileCaptionTooltip();
+        }, 3000);
+    }
+    
+    // Function to hide the mobile caption tooltip
+    function hideMobileCaptionTooltip() {
+        mobileCaptionTooltip.classList.remove('visible');
+        tooltipActive = false;
+        currentlyTruncatedElement = null;
+        
+        // Wait for animation to complete before hiding
+        setTimeout(() => {
+            if (!tooltipActive) {
+                mobileCaptionTooltip.style.display = 'none';
+            }
+        }, 300);
+    }
+
+    // Function to mark truncated captions
+    function markTruncatedCaptions() {
+        const captions = document.querySelectorAll('.gallery-caption');
+        
+        captions.forEach(caption => {
+            const fullText = caption.getAttribute('data-full-text');
+            if (!fullText) return;
+            
+            // Get the current displayed text
+            const displayedText = caption.textContent.trim();
+            
+            // Clean up the full text for comparison
+            let cleanFullText = fullText;
+            // Remove Plex and Orphaned tags
+            cleanFullText = cleanFullText.replace(/\*\*(Plex|Orphaned)\*\*/g, '');
+            // Remove both single [ID] and double [[Library]] brackets with their contents
+            cleanFullText = cleanFullText.replace(/\[\[[^\]]*\]\]|\[[^\]]*\]/g, '');
+            // Trim any resulting extra spaces
+            cleanFullText = cleanFullText.trim();
+            
+            // Check if text is truncated
+            if (displayedText.endsWith('...') || displayedText.length < cleanFullText.length) {
+                caption.classList.add('is-truncated');
+            } else {
+                caption.classList.remove('is-truncated');
+            }
+        });
+    }
+
+    // Use touchstart event (to make it respond on first tap)
+    document.addEventListener('touchstart', function(e) {
+        const caption = e.target.closest('.gallery-caption.is-truncated');
+        
+        // If we touched a truncated caption
+        if (caption) {
+            // Prevent default behavior only for truncated captions
+            e.preventDefault();
+            
+            // If this element is already showing a tooltip, do nothing
+            if (caption === currentlyTruncatedElement) {
+                return;
+            }
+            
+            // Otherwise, show the tooltip
+            showMobileCaptionTooltip(caption);
+        } else if (!e.target.closest('.mobile-caption-tooltip')) {
+            // If touched anywhere else, hide tooltip
+            hideMobileCaptionTooltip();
+        }
+    }, { passive: false });
+    
+    // Hide tooltip when scrolling
+    let scrollTimer = null;
+    window.addEventListener('scroll', function() {
+        if (tooltipActive) {
+            hideMobileCaptionTooltip();
+        }
+        
+        // Also refresh the truncated caption markers when scrolling stops
+        clearTimeout(scrollTimer);
+        scrollTimer = setTimeout(() => {
+            markTruncatedCaptions();
+        }, 200);
+    }, { passive: true });
+    
+    // Mark truncated captions on load
+    markTruncatedCaptions();
+    
+    // Run markTruncatedCaptions after images load, which might change layout
+    document.querySelectorAll('.gallery-image').forEach(img => {
+        img.addEventListener('load', function() {
+            setTimeout(markTruncatedCaptions, 100);
+        });
+    });
+    
+    // Re-check on window resize
+    let resizeTimer = null;
+    window.addEventListener('resize', function() {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => {
+            markTruncatedCaptions();
+        }, 200);
+    });
+
+    // Observer for dynamic content changes
+    const observer = new MutationObserver(function(mutations) {
+        let shouldMarkCaptions = false;
+        
+        mutations.forEach(function(mutation) {
+            if (mutation.type === 'childList' || 
+                (mutation.type === 'attributes' && 
+                 mutation.attributeName === 'class' && 
+                 mutation.target.classList.contains('gallery-caption'))) {
+                shouldMarkCaptions = true;
+            }
+        });
+        
+        if (shouldMarkCaptions) {
+            setTimeout(markTruncatedCaptions, 100);
+        }
+    });
+    
+    observer.observe(document.body, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['class']
+    });
 });
 </script>
 </body>
