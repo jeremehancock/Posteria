@@ -40,6 +40,23 @@ function getBoolEnvWithFallback($key, $default) {
     return (bool)$value;
 }
 
+// Define helper functions if they don't exist
+if (!function_exists('getEnvWithFallback')) {
+    function getEnvWithFallback($key, $default) {
+        $value = getenv($key);
+        return $value !== false ? $value : $default;
+    }
+    writeLog("Defined getEnvWithFallback function");
+}
+
+if (!function_exists('getIntEnvWithFallback')) {
+    function getIntEnvWithFallback($key, $default) {
+        $value = getenv($key);
+        return $value !== false ? intval($value) : $default;
+    }
+    writeLog("Defined getIntEnvWithFallback function");
+}
+
 $auth_config = [
 	'username' => getEnvWithFallback('AUTH_USERNAME', 'admin'),
 	'password' => getEnvWithFallback('AUTH_PASSWORD', 'changeme'),
