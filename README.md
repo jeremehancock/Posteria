@@ -49,14 +49,17 @@ services:
       - "1818:80"
     environment:
       - SITE_TITLE=Posteria
-      - AUTH_USERNAME=admin				# Change this!
-      - AUTH_PASSWORD=changeme				# Change this!
-      - SESSION_DURATION=3600				# In seconds
+      - AUTH_USERNAME=admin									# Change this!
+      - AUTH_PASSWORD=changeme								# Change this!
+      - SESSION_DURATION=3600								# In seconds
       - IMAGES_PER_PAGE=24
-      - MAX_FILE_SIZE=5242880				# In bytes
+      - MAX_FILE_SIZE=5242880								# In bytes
+      
       - PLEX_SERVER_URL=
       - PLEX_TOKEN=
-      - PLEX_REMOVE_OVERLAY_LABEL=false			# Set to true for Kometa compatibility
+      - PLEX_REMOVE_OVERLAY_LABEL=false							# Set to true for Kometa compatibility
+      
+      - IGNORE_ARTICLES_IN_SORT=true							# Set to 'false' to sort with articles (A, An, The) included
     volumes:
       - ./posters/movies:/var/www/html/posters/movies
       - ./posters/tv-shows:/var/www/html/posters/tv-shows
@@ -85,6 +88,7 @@ docker-compose up -d
 | PLEX_SERVER_URL | URL for your Plex Server | ex: http://your-server:32400
 | PLEX_TOKEN | Plex Server Token | [More info](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/) |
 | PLEX_REMOVE_OVERLAY_LABEL | Remove Overlay Label (true/false) | [More info](#note) |
+| IGNORE_ARTICLES_IN_SORT | Ignore articles in sort | true |
 
 #### Note:
 `PLEX_REMOVE_OVERLAY_LABEL`
