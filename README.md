@@ -63,7 +63,7 @@ services:
       
       - AUTO_IMPORT_ENABLED=false							# Enable/disable auto-import
       - AUTO_IMPORT_SCHEDULE=1h								# Schedule 24h, 12h, 6h, 3h, 1h
-	  - AUTO_IMPORT_MOVIES=false							# Import Movie posters
+      - AUTO_IMPORT_MOVIES=false							# Import Movie posters
       - AUTO_IMPORT_SHOWS=false								# Import TV Show posters
       - AUTO_IMPORT_SEASONS=false							# Import TV season posters
       - AUTO_IMPORT_COLLECTIONS=false						# Import Collection posters
