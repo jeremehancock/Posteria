@@ -40,11 +40,29 @@ function getBoolEnvWithFallback($key, $default) {
     return (bool)$value;
 }
 
+// Define helper functions if they don't exist
+if (!function_exists('getEnvWithFallback')) {
+    function getEnvWithFallback($key, $default) {
+        $value = getenv($key);
+        return $value !== false ? $value : $default;
+    }
+    writeLog("Defined getEnvWithFallback function");
+}
+
+if (!function_exists('getIntEnvWithFallback')) {
+    function getIntEnvWithFallback($key, $default) {
+        $value = getenv($key);
+        return $value !== false ? intval($value) : $default;
+    }
+    writeLog("Defined getIntEnvWithFallback function");
+}
+
 $auth_config = [
 	'username' => getEnvWithFallback('AUTH_USERNAME', 'admin'),
 	'password' => getEnvWithFallback('AUTH_PASSWORD', 'changeme'),
 	'session_duration' => getIntEnvWithFallback('SESSION_DURATION', 3600) // 1 hour default
 ];
+
 $plex_config = [
     'server_url' => getEnvWithFallback('PLEX_SERVER_URL', ''),
     'token' => getEnvWithFallback('PLEX_TOKEN', ''),
@@ -54,7 +72,22 @@ $plex_config = [
     'remove_overlay_label' => getBoolEnvWithFallback('PLEX_REMOVE_OVERLAY_LABEL', false)
 ];
 
-// Display and sorting configuration
+$auto_import_config = [
+    // Whether auto-import is enabled
+    'enabled' => getBoolEnvWithFallback('AUTO_IMPORT_ENABLED', true),
+    
+    // Schedule interval - supported formats: '24h', '12h', '6h', '1d', '7d', etc.
+    // h = hours, d = days, w = weeks, m = minutes
+    'schedule' => getEnvWithFallback('AUTO_IMPORT_SCHEDULE', '24h'),
+    
+    // What to import
+    'import_movies' => getBoolEnvWithFallback('AUTO_IMPORT_MOVIES', true),
+    'import_shows' => getBoolEnvWithFallback('AUTO_IMPORT_SHOWS', true),
+    'import_seasons' => getBoolEnvWithFallback('AUTO_IMPORT_SEASONS', true),
+    'import_collections' => getBoolEnvWithFallback('AUTO_IMPORT_COLLECTIONS', true)
+
+];
+
 $display_config = [
     'ignore_articles_in_sort' => getBoolEnvWithFallback('IGNORE_ARTICLES_IN_SORT', true) // Default to true for better user experience
 ];

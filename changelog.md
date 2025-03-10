@@ -57,3 +57,8 @@
 
 ### Added
 - Added config option to ignore articles in sort
+
+## [1.2.0]
+### Added
+- Scheduled import config option
+

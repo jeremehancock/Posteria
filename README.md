@@ -57,9 +57,16 @@ services:
       
       - PLEX_SERVER_URL=
       - PLEX_TOKEN=
-      - PLEX_REMOVE_OVERLAY_LABEL=false							# Set to true for Kometa compatibility
+      - PLEX_REMOVE_OVERLAY_LABEL=false						# Set to true for Kometa compatibility
       
-      - IGNORE_ARTICLES_IN_SORT=true							# Set to 'false' to sort with articles (A, An, The) included
+      - IGNORE_ARTICLES_IN_SORT=true						# Set to false to sort with articles (A, An, The) included
+      
+      - AUTO_IMPORT_ENABLED=false							# Enable/disable auto-import
+      - AUTO_IMPORT_SCHEDULE=1h								# Schedule 24h, 12h, 6h, 3h, 1h
+	  - AUTO_IMPORT_MOVIES=false							# Import Movie posters
+      - AUTO_IMPORT_SHOWS=false								# Import TV Show posters
+      - AUTO_IMPORT_SEASONS=false							# Import TV season posters
+      - AUTO_IMPORT_COLLECTIONS=false						# Import Collection posters
     volumes:
       - ./posters/movies:/var/www/html/posters/movies
       - ./posters/tv-shows:/var/www/html/posters/tv-shows
@@ -89,6 +96,12 @@ docker-compose up -d
 | PLEX_TOKEN | Plex Server Token | [More info](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/) |
 | PLEX_REMOVE_OVERLAY_LABEL | Remove Overlay Label (true/false) | [More info](#note) |
 | IGNORE_ARTICLES_IN_SORT | Ignore articles in sort | true |
+| AUTO_IMPORT_ENABLED | Enable/disable auto-import | false |
+| AUTO_IMPORT_SCHEDULE | Schedule 24h, 12h, 6h, 3h, 1h | 1h |
+| AUTO_IMPORT_MOVIES | Import Movie posters | false |
+| AUTO_IMPORT_SHOWS | Import TV Shows posters | false |
+| AUTO_IMPORT_SEASONS | Import TV Seasons posters | false |
+| AUTO_IMPORT_COLLECTIONS | Import Collection posters | false |
 
 #### Note:
 `PLEX_REMOVE_OVERLAY_LABEL`
