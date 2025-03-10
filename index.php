@@ -8674,7 +8674,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const isLoggedIn = document.querySelector('.logout-button') !== null;
     
     // Check if there are any files in the gallery
-    const hasFiles = document.querySelector('.gallery-item') !== null;
+    const hasFiles = document.querySelector('#showPlexExportModal') !== null;
     
     if (isLoggedIn && hasFiles) {
         // Add the reset button before the logout button
