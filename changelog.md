@@ -50,3 +50,10 @@
 ## [1.1.8]
 ### Fixed
 - Fixed issue with Send to Plex and Export not removing Overlay labels if that option is set to true.
+
+## [1.1.9]
+### Fixed
+- Gallery Stats not showing how many images are showing when filtered
+
+### Added
+- Added config option to ignore articles in sort
