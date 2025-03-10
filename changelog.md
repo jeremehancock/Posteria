@@ -46,3 +46,7 @@
 - Added the Library Name to the overlay badge when there are more than one library of the same media type.
 - Added Reset option to start fresh
 - The filenames now include the Library Names
+
+## [1.1.8]
+### Fixed
+- Fixed issue with Send to Plex and Export not removing Overlay labels if that option is set to true.
