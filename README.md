@@ -15,6 +15,7 @@ Here's the updated version with the PWA line added:
 - 🎬 Grab posters directly from TMDB
 - 📥 Import posters from Plex
 - 📤 Export posters to Plex
+- 🤖 Schedule Auto Imports
 - 🧹 Orphan Poster detection
 - 🎨 Support for JPG, JPEG, PNG, and WebP formats
 
