@@ -95,7 +95,7 @@ docker-compose up -d
 | MAX_FILE_SIZE | Maximum upload file size in bytes | 5242880 (5MB) |
 | PLEX_SERVER_URL | URL for your Plex Server | ex: http://your-server:32400
 | PLEX_TOKEN | Plex Server Token | [More info](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/) |
-| PLEX_REMOVE_OVERLAY_LABEL | Remove Overlay Label (true/false) | false [More info](#note) |
+| PLEX_REMOVE_OVERLAY_LABEL | Remove Overlay Label | false [More info](#note) |
 | IGNORE_ARTICLES_IN_SORT | Ignore articles in sort | true |
 | AUTO_IMPORT_ENABLED | Enable/disable auto-import | true |
 | AUTO_IMPORT_SCHEDULE | Schedule 24h, 12h, 6h, 3h, 1h | 1h |
