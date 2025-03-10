@@ -66,7 +66,7 @@ services:
       - AUTO_IMPORT_MOVIES=false							# Import Movie posters
       - AUTO_IMPORT_SHOWS=false								# Import TV Show posters
       - AUTO_IMPORT_SEASONS=false							# Import TV season posters
-      - AUTO_IMPORT_COLLECTIONS=false								# Import Collection posters
+      - AUTO_IMPORT_COLLECTIONS=false							# Import Collection posters
     volumes:
       - ./posters/movies:/var/www/html/posters/movies
       - ./posters/tv-shows:/var/www/html/posters/tv-shows
