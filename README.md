@@ -59,7 +59,7 @@ services:
       - PLEX_TOKEN=
       - PLEX_REMOVE_OVERLAY_LABEL=false							# Set to true for Kometa compatibility
       
-      - IGNORE_ARTICLES_IN_SORT=true								# Set to false to sort with articles (A, An, The) included
+      - IGNORE_ARTICLES_IN_SORT=true							# Set to false to sort with articles (A, An, The) included
       
       - AUTO_IMPORT_ENABLED=false							# Enable/disable auto-import
       - AUTO_IMPORT_SCHEDULE=1h								# Schedule 24h, 12h, 6h, 3h, 1h
