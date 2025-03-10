@@ -57,7 +57,7 @@ services:
       
       - PLEX_SERVER_URL=
       - PLEX_TOKEN=
-      - PLEX_REMOVE_OVERLAY_LABEL=false								# Set to true for Kometa compatibility
+      - PLEX_REMOVE_OVERLAY_LABEL=false							# Set to true for Kometa compatibility
       
       - IGNORE_ARTICLES_IN_SORT=true								# Set to false to sort with articles (A, An, The) included
       
