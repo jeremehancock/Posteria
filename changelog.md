@@ -39,3 +39,10 @@
 ## [1.1.6]
 ### Added
 - Fancy Tooltips
+
+## [1.1.7]
+### Added
+- Multi Library Select on Import
+- Added the Library Name to the overlay badge when there are more than one library of the same media type.
+- Added Reset option to start fresh
+- The filenames now include the Library Names
