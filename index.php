@@ -146,6 +146,7 @@ function generateDirectoryBadge($image, $allImages) {
 
 // Get image files from directory
 function getImageFiles($config, $currentDirectory = '') {
+    global $display_config;
     $files = [];
     
     if (empty($currentDirectory)) {
@@ -188,8 +189,30 @@ function getImageFiles($config, $currentDirectory = '') {
     }
     
     // Sort files alphabetically
-    usort($files, function($a, $b) {
-        return strnatcasecmp($a['filename'], $b['filename']);
+    usort($files, function($a, $b) use ($display_config) {
+        // Get filenames without extension
+        $filenameA = pathinfo($a['filename'], PATHINFO_FILENAME);
+        $filenameB = pathinfo($b['filename'], PATHINFO_FILENAME);
+        
+        // Remove Plex and Orphaned tags for cleaner comparison
+        $filenameA = str_replace(['**Plex**', '**Orphaned**'], '', $filenameA);
+        $filenameB = str_replace(['**Plex**', '**Orphaned**'], '', $filenameB);
+        
+        // Remove library brackets and their contents
+        $filenameA = preg_replace('/\[\[[^\]]*\]\]|\[[^\]]*\]/', '', $filenameA);
+        $filenameB = preg_replace('/\[\[[^\]]*\]\]|\[[^\]]*\]/', '', $filenameB);
+        
+        // Trim extra spaces
+        $filenameA = trim($filenameA);
+        $filenameB = trim($filenameB);
+        
+        // If configured to ignore articles, remove leading "The ", "A ", "An "
+        if (isset($display_config['ignore_articles_in_sort']) && $display_config['ignore_articles_in_sort']) {
+            $filenameA = preg_replace('/^(The|A|An)\s+/i', '', $filenameA);
+            $filenameB = preg_replace('/^(The|A|An)\s+/i', '', $filenameB);
+        }
+        
+        return strnatcasecmp($filenameA, $filenameB);
     });
     
     return $files;

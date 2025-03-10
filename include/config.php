@@ -54,4 +54,9 @@ $plex_config = [
     'remove_overlay_label' => getBoolEnvWithFallback('PLEX_REMOVE_OVERLAY_LABEL', false)
 ];
 
+// Display and sorting configuration
+$display_config = [
+    'ignore_articles_in_sort' => getBoolEnvWithFallback('IGNORE_ARTICLES_IN_SORT', true) // Default to true for better user experience
+];
+
 ?>
