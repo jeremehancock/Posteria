@@ -3189,12 +3189,14 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		</div>
 
 		<div class="gallery-stats">
-		    <?php if (!empty($searchQuery)): ?>
-		        Showing <?php echo count($filteredImages); ?> of <?php echo count($allImages); ?> images
-		        <a href="?<?php echo !empty($currentDirectory) ? 'directory=' . urlencode($currentDirectory) : ''; ?>">Clear search</a>
-		    <?php else: ?>
-		        Total images: <?php echo count($allImages); ?>
-		    <?php endif; ?>
+			<?php if (!empty($searchQuery)): ?>
+				Showing <?php echo count($filteredImages); ?> of <?php echo count($allImages); ?> images
+				<a href="?<?php echo !empty($currentDirectory) ? 'directory=' . urlencode($currentDirectory) : ''; ?>">Clear search</a>
+			<?php elseif (!empty($currentDirectory)): ?>
+				Showing <?php echo count($filteredImages); ?> of <?php echo count(getImageFiles($config, '')); ?> images in <?php echo formatDirectoryName($currentDirectory); ?>
+			<?php else: ?>
+				Total images: <?php echo count($allImages); ?>
+			<?php endif; ?>
 		</div>
 		
 			<?php if (empty($pageImages)): ?>
