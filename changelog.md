@@ -62,3 +62,7 @@
 ### Added
 - Scheduled import config option
 
+## [1.2.1]
+### Fixed
+- Poster names in Change Poster modal issue
+

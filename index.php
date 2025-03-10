@@ -6644,7 +6644,11 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		    const filename = this.getAttribute('data-filename');
 		    const dirname = this.getAttribute('data-dirname');
 		    
-			const cleanedFilename = this.getAttribute('data-filename').replace(/\.jpg$/i, '').replace(/\s*\[.*?\]\s*/g, ' ').replace(/\*\*(Plex)\*\*/g, ''); 
+			const cleanedFilename = this.getAttribute('data-filename')
+			  .replace(/\.jpg$/i, '')                 // Remove .jpg extension
+			  .replace(/\*\*Plex\*\*|\*\*Orphaned\*\*/g, '')  // Remove **Plex** and **Orphaned** tags
+			  .replace(/\[\[[^\]]*\]\]|\[[^\]]*\]/g, '')      // Remove both [[Library]] and [ID] brackets with contents
+			  .trim();                                // Trim extra spaces
 			
 		    // Update the modal with file info
 		    document.getElementById('changePosterFilename').textContent = `Changing poster: ${cleanedFilename}`;
