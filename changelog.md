@@ -69,3 +69,7 @@
 ## [1.2.2]
 ### Added
 - Mobile tooltip to show truncated Poster names
+
+## [1.2.3]
+### Fixed
+- Fixed cursor style inconsistency

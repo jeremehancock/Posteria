@@ -6450,7 +6450,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		            truncated = text.slice(0, start) + '...';
 		            caption.textContent = truncated;
 		            caption.title = text; // Use native title for tooltip
-		            caption.style.cursor = 'pointer';
+		            caption.style.cursor = 'default';
 		        }
 		    });
 		}
