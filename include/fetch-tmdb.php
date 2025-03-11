@@ -49,6 +49,7 @@ if (empty($_POST['query']) || empty($_POST['type'])) {
 // Get the query and type from POST
 $query = trim($_POST['query']);
 $type = trim($_POST['type']);
+$season = isset($_POST['season']) ? intval($_POST['season']) : null;
 
 function generateClientInfoHeader() {
     $payload = [
@@ -67,6 +68,28 @@ if ($type === 'movie') {
     $apiUrl .= 'movie=' . urlencode($query);
 } elseif ($type === 'tv') {
     $apiUrl .= 'q=' . urlencode($query) . '&type=tv';
+    
+    // Add season parameter if provided
+    if ($season !== null) {
+        $apiUrl .= '&season=' . $season;
+    }
+} elseif ($type === 'season') {
+    // Handle TV season directly
+    // Extract show title and season number from the query if in format "Show Name - Season X"
+    if (preg_match('/^(.+?)(?:\s*[-:]\s*Season\s*(\d+))?$/i', $query, $matches)) {
+        $showTitle = trim($matches[1]);
+        $seasonNumber = isset($matches[2]) ? intval($matches[2]) : 1; // Default to season 1 if not specified
+        
+        // If season was explicitly provided in POST, use that instead
+        if ($season !== null) {
+            $seasonNumber = $season;
+        }
+        
+        $apiUrl .= 'q=' . urlencode($showTitle) . '&type=tv&season=' . $seasonNumber;
+    } else {
+        // If we can't parse the format, just use what we have
+        $apiUrl .= 'q=' . urlencode($query) . '&type=tv&season=1';
+    }
 } else {
     echo json_encode([
         'success' => false,
@@ -141,23 +164,62 @@ if (empty($data['results']) || !is_array($data['results'])) {
 $result = $data['results'][0];
 
 $title = '';
+$posterUrl = null;
+$seasonNumber = null;
+
 if ($type === 'movie') {
+    // Movie handling
     $title = $result['title'] ?? 'Unknown Movie';
     if (!empty($result['release_date'])) {
         $year = substr($result['release_date'], 0, 4);
         $title .= " ($year)";
     }
-} else {
+    
+    // Get movie poster
+    if (!empty($result['poster']) && is_array($result['poster'])) {
+        $posterUrl = $result['poster']['original'] ?? $result['poster']['large'] ?? $result['poster']['medium'] ?? $result['poster']['small'] ?? null;
+    }
+} elseif ($type === 'tv') {
+    // TV show handling
     $title = $result['title'] ?? 'Unknown TV Show';
     if (!empty($result['first_air_date'])) {
         $year = substr($result['first_air_date'], 0, 4);
         $title .= " ($year)";
     }
-}
-
-$posterUrl = null;
-if (!empty($result['poster']) && is_array($result['poster'])) {
-    $posterUrl = $result['poster']['original'] ?? $result['poster']['large'] ?? $result['poster']['medium'] ?? $result['poster']['small'] ?? null;
+    
+    // Get TV show poster
+    if (!empty($result['poster']) && is_array($result['poster'])) {
+        $posterUrl = $result['poster']['original'] ?? $result['poster']['large'] ?? $result['poster']['medium'] ?? $result['poster']['small'] ?? null;
+    }
+} elseif ($type === 'season') {
+    // Season handling
+    $title = $result['title'] ?? 'Unknown TV Show';
+    if (!empty($result['first_air_date'])) {
+        $year = substr($result['first_air_date'], 0, 4);
+        $title .= " ($year)";
+    }
+    
+    // Check if there's a season object with poster
+    if (!empty($result['season']) && is_array($result['season'])) {
+        $seasonNumber = $result['season']['season_number'] ?? null;
+        $seasonName = $result['season']['name'] ?? "Season $seasonNumber";
+        
+        // Add season information to the title
+        $title .= " - $seasonName";
+        
+        // Get season poster from the season object
+        if (!empty($result['season']['poster']) && is_array($result['season']['poster'])) {
+            $posterUrl = $result['season']['poster']['original'] ?? 
+                         $result['season']['poster']['large'] ?? 
+                         $result['season']['poster']['medium'] ?? 
+                         $result['season']['poster']['small'] ?? null;
+        }
+    } else {
+        // Fallback to show poster if season poster not available
+        if (!empty($result['poster']) && is_array($result['poster'])) {
+            $posterUrl = $result['poster']['original'] ?? $result['poster']['large'] ?? $result['poster']['medium'] ?? $result['poster']['small'] ?? null;
+        }
+    }
 }
 
 if (empty($posterUrl)) {
@@ -172,7 +234,9 @@ echo json_encode([
     'success' => true,
     'posterUrl' => $posterUrl,
     'title' => $title,
-    'mediaType' => $type
+    'mediaType' => $type,
+    'seasonNumber' => $seasonNumber,
+    'requested_season' => $season
 ]);
 
 ?>
