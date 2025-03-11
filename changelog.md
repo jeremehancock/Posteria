@@ -73,3 +73,8 @@
 ## [1.2.3]
 ### Fixed
 - Fixed cursor style inconsistency
+
+## [1.2.4]
+### Added
+- Added TMDB support for TV Seasons
+
