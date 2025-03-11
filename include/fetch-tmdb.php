@@ -164,76 +164,115 @@ if (empty($data['results']) || !is_array($data['results'])) {
     exit;
 }
 
+// Get the first result as the primary result
 $result = $data['results'][0];
 
 $title = '';
 $posterUrl = null;
 $seasonNumber = null;
+$allResults = [];
 
-if ($type === 'movie') {
-    // Movie handling
-    $title = $result['title'] ?? 'Unknown Movie';
-    if (!empty($result['release_date'])) {
-        $year = substr($result['release_date'], 0, 4);
-        $title .= " ($year)";
-    }
+// Process all results based on media type
+if ($type === 'collection') {
+    // For collections, we'll process all results to get multiple posters
+    $allResults = $data['results'];
     
-    // Get movie poster
+    // Still set the primary result for backward compatibility
+    $title = $result['name'] ?? 'Unknown Collection';
+    
+    // Get collection poster from the first result
     if (!empty($result['poster']) && is_array($result['poster'])) {
         $posterUrl = $result['poster']['original'] ?? $result['poster']['large'] ?? $result['poster']['medium'] ?? $result['poster']['small'] ?? null;
     }
-} elseif ($type === 'tv') {
-    // TV show handling
-    $title = $result['title'] ?? 'Unknown TV Show';
-    if (!empty($result['first_air_date'])) {
-        $year = substr($result['first_air_date'], 0, 4);
-        $title .= " ($year)";
-    }
     
-    // Get TV show poster
-    if (!empty($result['poster']) && is_array($result['poster'])) {
-        $posterUrl = $result['poster']['original'] ?? $result['poster']['large'] ?? $result['poster']['medium'] ?? $result['poster']['small'] ?? null;
-    }
-} elseif ($type === 'season') {
-    // Season handling
-    $title = $result['title'] ?? 'Unknown TV Show';
-    if (!empty($result['first_air_date'])) {
-        $year = substr($result['first_air_date'], 0, 4);
-        $title .= " ($year)";
-    }
-    
-    // Check if there's a season object with poster
-    if (!empty($result['season']) && is_array($result['season'])) {
-        $seasonNumber = $result['season']['season_number'] ?? null;
-        $seasonName = $result['season']['name'] ?? "Season $seasonNumber";
-        
-        // Add season information to the title
-        $title .= " - $seasonName";
-        
-        // Get season poster from the season object
-        if (!empty($result['season']['poster']) && is_array($result['season']['poster'])) {
-            $posterUrl = $result['season']['poster']['original'] ?? 
-                         $result['season']['poster']['large'] ?? 
-                         $result['season']['poster']['medium'] ?? 
-                         $result['season']['poster']['small'] ?? null;
+    // Process all collection posters for the multiple selection feature
+	$allPosters = [];
+	foreach ($allResults as $collectionResult) {
+		// Use 'title' if available, otherwise fall back to 'name'
+		$collectionName = $collectionResult['title'] ?? $collectionResult['name'] ?? 'Unknown Collection';
+		
+		if (!empty($collectionResult['poster']) && is_array($collectionResult['poster'])) {
+			$collectionPosterUrl = $collectionResult['poster']['original'] ?? 
+			                       $collectionResult['poster']['large'] ?? 
+			                       $collectionResult['poster']['medium'] ?? 
+			                       $collectionResult['poster']['small'] ?? null;
+			                       
+			if ($collectionPosterUrl) {
+			    $allPosters[] = [
+			        'url' => $collectionPosterUrl,
+			        'name' => $collectionName
+			    ];
+			}
+		}
+	}
+} else {
+    // Standard processing for other media types
+    if ($type === 'movie') {
+        // Movie handling
+        $title = $result['title'] ?? 'Unknown Movie';
+        if (!empty($result['release_date'])) {
+            $year = substr($result['release_date'], 0, 4);
+            $title .= " ($year)";
         }
-    } else {
-        // Fallback to show poster if season poster not available
+        
+        // Get movie poster
         if (!empty($result['poster']) && is_array($result['poster'])) {
             $posterUrl = $result['poster']['original'] ?? $result['poster']['large'] ?? $result['poster']['medium'] ?? $result['poster']['small'] ?? null;
         }
+    } elseif ($type === 'tv') {
+        // TV show handling
+        $title = $result['title'] ?? 'Unknown TV Show';
+        if (!empty($result['first_air_date'])) {
+            $year = substr($result['first_air_date'], 0, 4);
+            $title .= " ($year)";
+        }
+        
+        // Get TV show poster
+        if (!empty($result['poster']) && is_array($result['poster'])) {
+            $posterUrl = $result['poster']['original'] ?? $result['poster']['large'] ?? $result['poster']['medium'] ?? $result['poster']['small'] ?? null;
+        }
+    } elseif ($type === 'season') {
+        // Season handling
+        $title = $result['title'] ?? 'Unknown TV Show';
+        if (!empty($result['first_air_date'])) {
+            $year = substr($result['first_air_date'], 0, 4);
+            $title .= " ($year)";
+        }
+        
+        // Check if there's a season object with poster
+        if (!empty($result['season']) && is_array($result['season'])) {
+            $seasonNumber = $result['season']['season_number'] ?? null;
+            $seasonName = $result['season']['name'] ?? "Season $seasonNumber";
+            
+            // Add season information to the title
+            $title .= " - $seasonName";
+            
+            // Get season poster from the season object
+            if (!empty($result['season']['poster']) && is_array($result['season']['poster'])) {
+                $posterUrl = $result['season']['poster']['original'] ?? 
+                             $result['season']['poster']['large'] ?? 
+                             $result['season']['poster']['medium'] ?? 
+                             $result['season']['poster']['small'] ?? null;
+            }
+        } else {
+            // Fallback to show poster if season poster not available
+            if (!empty($result['poster']) && is_array($result['poster'])) {
+                $posterUrl = $result['poster']['original'] ?? $result['poster']['large'] ?? $result['poster']['medium'] ?? $result['poster']['small'] ?? null;
+            }
+        }
     }
-} elseif ($type === 'collection') {
-    // Collection handling
-    $title = $result['name'] ?? 'Unknown Collection';
     
-    // Get collection poster
-    if (!empty($result['poster']) && is_array($result['poster'])) {
-        $posterUrl = $result['poster']['original'] ?? $result['poster']['large'] ?? $result['poster']['medium'] ?? $result['poster']['small'] ?? null;
+    // For non-collection types, there is no multi-poster support yet
+    $allPosters = [];
+    if ($posterUrl) {
+        $allPosters[] = [
+            'url' => $posterUrl,
+            'name' => $title
+        ];
     }
 }
 
-if (empty($posterUrl)) {
+if (empty($posterUrl) && empty($allPosters)) {
     echo json_encode([
         'success' => false,
         'error' => 'No poster found for this title'
@@ -241,13 +280,15 @@ if (empty($posterUrl)) {
     exit;
 }
 
+// Return both single poster and all posters for multi-selection
 echo json_encode([
     'success' => true,
     'posterUrl' => $posterUrl,
     'title' => $title,
     'mediaType' => $type,
     'seasonNumber' => $seasonNumber,
-    'requested_season' => $season
+    'requested_season' => $season,
+    'allPosters' => $allPosters,
+    'hasMultiplePosters' => count($allPosters) > 1
 ]);
-
 ?>

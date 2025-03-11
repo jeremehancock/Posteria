@@ -7680,208 +7680,168 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Perform TMDB search
-	function performTMDBSearch(title, mediaType, season = null) {
-		// Get the URL form
-		const urlForm = document.getElementById('urlChangePosterForm');
-		if (!urlForm) return;
-		
-		// Get input
-		const urlInput = urlForm.querySelector('input[name="image_url"]');
-		if (!urlInput) return;
-		
-		// Find the container
-		const container = urlForm.querySelector('.url-input-container');
-		if (!container) return;
-		
-		// Remove any existing preview
-		removeExistingPreview();
-		
-		// Show loading indicator
-		const loading = document.createElement('div');
-		loading.className = 'tmdb-loading';
-		loading.innerHTML = `
-		    <div class="tmdb-spinner"></div>
-		    <div>Searching...</div>
-		`;
-		
-		container.appendChild(loading);
-		
-		// For TV seasons, try to extract just the show name without season info
-		let searchTitle = title;
-		if (mediaType === 'season') {
-		    // Remove "Season X", "SXX", and "Specials" from the title
-		    searchTitle = title.replace(/\s*[-:]\s*Season\s*\d+/i, '')
-		                       .replace(/\s*S\d+\b/i, '')
-		                       .replace(/\s*[-:]\s*Specials/i, '')
-		                       .replace(/\s+Specials$/i, '')
-		                       .replace(/\s+Special$/i, '')
-		                       .trim();
-		}
-		
-		// Create form data for request
-		const formData = new FormData();
-		formData.append('query', searchTitle);
-		formData.append('type', mediaType);
-		
-		// Add season if searching for TV season
-		if (season !== null && (mediaType === 'tv' || mediaType === 'season')) {
-		    formData.append('season', season);
-		}
-		
-		// Make the API request
-		fetch('./include/fetch-tmdb.php', {
-		    method: 'POST',
-		    body: formData
-		})
-		.then(response => response.json())
-		.then(data => {
-		    // Remove loading indicator
-		    loading.remove();
-		    
-		    if (data.success && data.posterUrl) {
-		        // Fill in the URL input
-		        urlInput.value = data.posterUrl;
-		        
-		        // Trigger input event to enable the submit button if needed
-		        const inputEvent = new Event('input', { bubbles: true });
-		        urlInput.dispatchEvent(inputEvent);
-		        
-		        // Create poster preview directly (manual input handler will be triggered by the input event)
-		        showManualUrlPreview(data.posterUrl);
-		        
-		        // Add season badge if this is a season result
-		        if (mediaType === 'season' && season !== null) {
-		            const preview = container.querySelector('.tmdb-poster-preview');
-		            if (preview) {
-		                const badge = document.createElement('div');
-		                badge.className = 'season-badge';
-		                badge.textContent = season === 0 ? 'Specials' : `Season ${season}`;
-		                preview.appendChild(badge);
-		            }
-		        }
-		        
-		        // Highlight the URL input but don't focus it (prevents keyboard on mobile)
-		        urlInput.style.borderColor = 'var(--accent-primary)';
-		        
-		        // On desktop only, focus the input (won't trigger keyboard on mobile)
-		        if (window.innerWidth > 768) {
-		            urlInput.focus();
-		        }
-		        
-		        // Flash effect to draw attention to the URL being populated
-		        urlInput.style.backgroundColor = 'rgba(229, 160, 13, 0.2)';
-		        setTimeout(() => {
-		            urlInput.style.backgroundColor = '';
-		        }, 1000);
-		    } else {
-		        // Enhanced error message styling
-		        const errorMsg = document.createElement('div');
-		        errorMsg.className = 'tmdb-error-container';
-		        
-		        // Add the error icon SVG with improved styling
-		        errorMsg.innerHTML = `
-		            <div class="error-content">
-		                <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-		                    <circle cx="12" cy="12" r="10"></circle>
-		                    <line x1="12" y1="8" x2="12" y2="12"></line>
-		                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
-		                </svg>
-		                <div class="error-text">No poster found</div>
-		                <div class="error-subtext">${mediaType === 'collection' ? 'Collection' : 
-		                                          mediaType === 'season' ? 'Season' : 
-		                                          mediaType === 'tv' ? 'TV Show' : 'Movie'} not found</div>
-		            </div>
-		        `;
-		        
-		        container.appendChild(errorMsg);
-		        
-		        // Add CSS for the error styling if it doesn't exist
-		        if (!document.getElementById('tmdb-error-styles')) {
-		            const style = document.createElement('style');
-		            style.id = 'tmdb-error-styles';
-		            style.textContent = `
-		                .tmdb-error-container {
-		                    width: 100px;
-		                    height: 150px;
-		                    display: flex;
-		                    align-items: center;
-		                    justify-content: center;
-		                    border: 2px solid #FF4757;
-		                    background-color: rgba(33, 33, 33, 0.95);
-		                    border-radius: 8px;
-		                    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
-		                    flex-shrink: 0;
-		                    overflow: hidden;
-		                    position: relative;
-		                    margin-bottom: 9px;
-		                }
-		                
-		                /* Remove all hover effects */
-		                .tmdb-error-container::before,
-		                .tmdb-error-container::after,
-		                .tmdb-error-container:hover::before,
-		                .tmdb-error-container:hover::after {
-		                    display: none !important;
-		                }
-		                
-		                .error-content {
-		                    display: flex;
-		                    flex-direction: column;
-		                    align-items: center;
-		                    justify-content: center;
-		                    text-align: center;
-		                    color: #FF6B81;
-		                    height: 100%;
-		                    width: 100%;
-		                    padding: 8px;
-		                }
-		                
-		                .error-text {
-		                    font-weight: bold;
-		                    margin-top: 8px;
-		                    font-size: 14px;
-		                    text-shadow: 0 1px 3px rgba(0,0,0,0.5);
-		                    color: #FF6B81;
-		                }
-		                
-		                .error-subtext {
-		                    font-size: 12px;
-		                    margin-top: 4px;
-		                    color: #FFC3C3;
-		                    text-shadow: 0 1px 2px rgba(0,0,0,0.4);
-		                }
-		                
-		                /* Specifically ensure no hover states */
-		                .tmdb-error-container .tmdb-poster-icon,
-		                .tmdb-error-container:hover .tmdb-poster-icon {
-		                    display: none !important;
-		                }
-		            `;
-		            document.head.appendChild(style);
-		        }
-		    }
-		})
-		.catch(error => {
-		    // Remove loading indicator
-		    loading.remove();
-		    
-		    // Enhanced error message for network/system errors
-		    const errorMsg = document.createElement('div');
-		    errorMsg.className = 'tmdb-error-container';
-		    errorMsg.innerHTML = `
-		        <div class="error-content">
-		            <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-		                <polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon>
-		                <line x1="12" y1="8" x2="12" y2="12"></line>
-		                <line x1="12" y1="16" x2="12.01" y2="16"></line>
-		            </svg>
-		            <div class="error-text">Search failed</div>
-		            <div class="error-subtext">Connection error</div>
-		        </div>
-		    `;
-		    container.appendChild(errorMsg);
-		});
-	}
+function performTMDBSearch(title, mediaType, season = null) {
+    // Get the URL form
+    const urlForm = document.getElementById('urlChangePosterForm');
+    if (!urlForm) {
+        console.error("TMDB Debug: urlChangePosterForm not found");
+        return;
+    }
+    
+    // Get input
+    const urlInput = urlForm.querySelector('input[name="image_url"]');
+    if (!urlInput) {
+        console.error("TMDB Debug: URL input not found");
+        return;
+    }
+    
+    // Find the container
+    const container = urlForm.querySelector('.url-input-container');
+    if (!container) {
+        console.error("TMDB Debug: URL input container not found");
+        return;
+    }
+    
+    console.log(`TMDB Debug: Starting search for "${title}" as ${mediaType}`);
+    
+    // Remove any existing preview
+    removeExistingPreview();
+    
+    // Show loading indicator
+    const loading = document.createElement('div');
+    loading.className = 'tmdb-loading';
+    loading.innerHTML = `
+        <div class="tmdb-spinner"></div>
+        <div>Searching...</div>
+    `;
+    
+    container.appendChild(loading);
+    
+    // For TV seasons, try to extract just the show name without season info
+    let searchTitle = title;
+    if (mediaType === 'season') {
+        // Remove "Season X", "SXX", and "Specials" from the title
+        searchTitle = title.replace(/\s*[-:]\s*Season\s*\d+/i, '')
+                           .replace(/\s*S\d+\b/i, '')
+                           .replace(/\s*[-:]\s*Specials/i, '')
+                           .replace(/\s+Specials$/i, '')
+                           .replace(/\s+Special$/i, '')
+                           .trim();
+    }
+    
+    // Create form data for request
+    const formData = new FormData();
+    formData.append('query', searchTitle);
+    formData.append('type', mediaType);
+    
+    // Add season if searching for TV season
+    if (season !== null && (mediaType === 'tv' || mediaType === 'season')) {
+        formData.append('season', season);
+    }
+    
+    console.log(`TMDB Debug: Making API request for "${searchTitle}"`);
+    
+    // Make the API request
+    fetch('./include/fetch-tmdb.php', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => {
+        console.log("TMDB Debug: Response received");
+        return response.json();
+    })
+    .then(data => {
+        // Remove loading indicator
+        loading.remove();
+        
+        console.log("TMDB Debug: API response data:", data);
+        
+        if (data.success) {
+            // Debug logging for collections
+            if (mediaType === 'collection') {
+                console.log("TMDB Debug: Processing collection result");
+                console.log("TMDB Debug: hasMultiplePosters =", data.hasMultiplePosters);
+                console.log("TMDB Debug: allPosters count =", data.allPosters ? data.allPosters.length : 0);
+            }
+            
+            // Check if we have multiple posters for collections
+            if (mediaType === 'collection' && 
+                data.hasMultiplePosters && 
+                Array.isArray(data.allPosters) && 
+                data.allPosters.length > 1) {
+                
+                console.log("TMDB Debug: Showing multi-poster modal with", data.allPosters.length, "posters");
+                
+                // DEBUG: Test modal creation
+                if (!document.getElementById('multiPosterModal')) {
+                    console.log("TMDB Debug: Creating multi-poster modal");
+                    createMultiPosterModal();
+                } else {
+                    console.log("TMDB Debug: Multi-poster modal already exists");
+                }
+                
+                // Show multi-poster selection modal
+                showMultiPosterModal(data.allPosters);
+            } else if (data.posterUrl) {
+                console.log("TMDB Debug: Using single poster URL");
+                
+                // Single poster handling
+                urlInput.value = data.posterUrl;
+                
+                // Trigger input event to enable the submit button if needed
+                const inputEvent = new Event('input', { bubbles: true });
+                urlInput.dispatchEvent(inputEvent);
+                
+                // Create poster preview
+                showManualUrlPreview(data.posterUrl);
+                
+                // Add season badge if this is a season result
+                if (mediaType === 'season' && season !== null) {
+                    const preview = container.querySelector('.tmdb-poster-preview');
+                    if (preview) {
+                        const badge = document.createElement('div');
+                        badge.className = 'season-badge';
+                        badge.textContent = season === 0 ? 'Specials' : `Season ${season}`;
+                        preview.appendChild(badge);
+                    }
+                }
+                
+                // Highlight the URL input but don't focus it (prevents keyboard on mobile)
+                urlInput.style.borderColor = 'var(--accent-primary)';
+                
+                // On desktop only, focus the input (won't trigger keyboard on mobile)
+                if (window.innerWidth > 768) {
+                    urlInput.focus();
+                }
+                
+                // Flash effect to draw attention to the URL being populated
+                urlInput.style.backgroundColor = 'rgba(229, 160, 13, 0.2)';
+                setTimeout(() => {
+                    urlInput.style.backgroundColor = '';
+                }, 1000);
+            } else {
+                console.log("TMDB Debug: No poster URL found in response");
+                
+                // No poster URL available
+                showErrorMessage(container, mediaType);
+            }
+        } else {
+            console.log("TMDB Debug: API returned error", data.error);
+            
+            // Show error message with enhanced styling
+            showErrorMessage(container, mediaType);
+        }
+    })
+    .catch(error => {
+        console.error("TMDB Debug: Fetch error", error);
+        
+        // Remove loading indicator
+        loading.remove();
+        
+        // Show connection error message
+        showConnectionErrorMessage(container);
+    });
+}
 
     // Clean up TMDB elements
     function cleanupTMDB() {
@@ -8116,6 +8076,804 @@ function addTMDBButton() {
     });
 }
 });
+
+/**
+ * Multi-Poster Selection Modal for TMDB Collections
+ *
+ * This script adds a modal that displays a scrollable grid of posters
+ * when multiple collection posters are available from the TMDB API.
+ */
+
+// Create the multi-poster selection modal
+function createMultiPosterModal() {
+    // Check if modal already exists
+    if (document.getElementById('multiPosterModal')) {
+        return;
+    }
+    
+    // Create modal HTML
+    const modalHTML = `
+    <div id="multiPosterModal" class="multi-poster-modal">
+        <div class="multi-poster-content">
+            <div class="multi-poster-header">
+                <h3>Select a Collection Poster</h3>
+                <button type="button" class="multi-poster-close-btn">×</button>
+            </div>
+            <div class="multi-poster-search-bar">
+                <input type="text" id="posterSearchInput" placeholder="Filter posters...">
+                <div class="poster-count"><span id="posterCount">0</span> posters found</div>
+            </div>
+            <div class="multi-poster-grid" id="posterGrid"></div>
+        </div>
+    </div>
+    `;
+    
+    // Add modal to document
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+    
+    // Add CSS for the modal (keeping the same styles, just removing notification styles)
+    if (!document.getElementById('multi-poster-styles')) {
+        const styleElement = document.createElement('style');
+        styleElement.id = 'multi-poster-styles';
+        styleElement.textContent = `
+            .multi-poster-modal {
+                display: none;
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.85);
+                z-index: 2000;
+                opacity: 0;
+                transition: opacity 0.3s ease;
+            }
+            
+            .multi-poster-modal.show {
+                opacity: 1;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+            }
+            
+            .multi-poster-content {
+                background: var(--bg-secondary);
+                border-radius: 12px;
+                width: 90%;
+                max-width: 800px;
+                max-height: 90vh;
+                display: flex;
+                flex-direction: column;
+                box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+                border: 1px solid var(--border-color);
+                overflow: hidden;
+            }
+            
+            .multi-poster-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 16px 24px;
+                border-bottom: 1px solid var(--border-color);
+            }
+            
+            .multi-poster-header h3 {
+                margin: 0;
+                color: var(--text-primary);
+                font-size: 1.25rem;
+            }
+            
+            .multi-poster-close-btn {
+                background: none;
+                border: none;
+                color: var(--text-secondary);
+                font-size: 28px;
+                cursor: pointer;
+                padding: 0;
+                line-height: 1;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                width: 32px;
+                height: 32px;
+                transition: all 0.2s;
+            }
+            
+            .multi-poster-close-btn:hover {
+                color: var(--text-primary);
+                transform: scale(1.1);
+            }
+            
+            .multi-poster-search-bar {
+                padding: 16px 24px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                flex-wrap: wrap;
+                gap: 12px;
+                border-bottom: 1px solid var(--border-color);
+            }
+            
+            #posterSearchInput {
+                flex: 1;
+                min-width: 200px;
+                padding: 10px 16px;
+                border-radius: 6px;
+                border: 1px solid var(--border-color);
+                background: var(--bg-tertiary);
+                color: var(--text-primary);
+                font-size: 14px;
+            }
+            
+            #posterSearchInput:focus {
+                outline: none;
+                border-color: var(--accent-primary);
+            }
+            
+            .poster-count {
+                color: var(--text-secondary);
+                font-size: 14px;
+            }
+            
+            .poster-count span {
+                font-weight: bold;
+                color: var(--accent-primary);
+            }
+            
+            .multi-poster-grid {
+                flex: 1;
+                overflow-y: auto;
+                padding: 24px;
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+                gap: 20px;
+                align-content: start;
+                max-height: 60vh;
+                scrollbar-width: thin;
+                scrollbar-color: var(--bg-tertiary) var(--bg-secondary);
+            }
+            
+            .multi-poster-grid::-webkit-scrollbar {
+                width: 8px;
+            }
+            
+            .multi-poster-grid::-webkit-scrollbar-track {
+                background: var(--bg-secondary);
+            }
+            
+            .multi-poster-grid::-webkit-scrollbar-thumb {
+                background-color: var(--bg-tertiary);
+                border-radius: 8px;
+                border: 2px solid var(--bg-secondary);
+            }
+            
+            .multi-poster-grid::-webkit-scrollbar-thumb:hover {
+                background-color: var(--accent-primary);
+            }
+            
+            .poster-item {
+                position: relative;
+                aspect-ratio: 2/3;
+                border-radius: 8px;
+                overflow: hidden;
+                cursor: pointer;
+                transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+                border: 2px solid transparent;
+                background: var(--bg-tertiary);
+            }
+            
+            .poster-item:hover {
+                transform: translateY(-5px);
+                border-color: var(--accent-primary);
+                box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+            }
+            
+            .poster-item img {
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+                transition: opacity 0.2s;
+            }
+            
+            .poster-item.loading img {
+                opacity: 0;
+            }
+            
+            .poster-item .poster-title {
+                position: absolute;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                padding: 8px;
+                background: rgba(0,0,0,0.75);
+                color: white;
+                font-size: 12px;
+                text-align: center;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            
+            .poster-loading {
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background: var(--bg-tertiary);
+                z-index: 1;
+            }
+            
+            .poster-spinner {
+                width: 30px;
+                height: 30px;
+                border: 3px solid rgba(229, 160, 13, 0.2);
+                border-top-color: var(--accent-primary);
+                border-radius: 50%;
+                animation: spin 1s infinite linear;
+            }
+            
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+            
+            .no-posters-found {
+                grid-column: 1 / -1;
+                text-align: center;
+                padding: 40px;
+                color: var(--text-secondary);
+            }
+            
+            /* Responsive adjustments */
+            @media (max-width: 640px) {
+                .multi-poster-grid {
+                    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+                    gap: 15px;
+                    padding: 15px;
+                }
+                
+                .multi-poster-header,
+                .multi-poster-search-bar {
+                    padding: 12px 16px;
+                }
+                
+                .multi-poster-header h3 {
+                    font-size: 1.125rem;
+                }
+            }
+        `;
+        document.head.appendChild(styleElement);
+    }
+    
+    // Get modal elements
+    const modal = document.getElementById('multiPosterModal');
+    const closeBtn = modal.querySelector('.multi-poster-close-btn');
+    const searchInput = document.getElementById('posterSearchInput');
+    
+    // Add event listeners
+    closeBtn.addEventListener('click', hideMultiPosterModal);
+    
+    // Close when clicking outside the content
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            hideMultiPosterModal();
+        }
+    });
+    
+    // Close on escape key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && modal.classList.contains('show')) {
+            hideMultiPosterModal();
+        }
+    });
+    
+    // Add search functionality
+    searchInput.addEventListener('input', filterPosters);
+}
+
+
+// Show the multi-poster modal with provided posters
+function showMultiPosterModal(posters) {
+    createMultiPosterModal(); // Make sure modal exists
+    
+    const modal = document.getElementById('multiPosterModal');
+    const grid = document.getElementById('posterGrid');
+    const posterCount = document.getElementById('posterCount');
+    const searchInput = document.getElementById('posterSearchInput');
+    
+    // Debug the posters data
+    console.log("Posters data:", posters);
+    
+    // Reset search input
+    searchInput.value = '';
+    
+    // Clear existing posters
+    grid.innerHTML = '';
+    
+    // Update poster count
+    posterCount.textContent = posters.length;
+    
+    // Prepare a document fragment for better performance
+    const fragment = document.createDocumentFragment();
+    
+    // Add posters to grid
+    if (posters.length === 0) {
+        const noPosters = document.createElement('div');
+        noPosters.className = 'no-posters-found';
+        noPosters.textContent = 'No posters found';
+        fragment.appendChild(noPosters);
+    } else {
+        posters.forEach((poster, index) => {
+            // Get the title with better fallback handling
+            const posterTitle = poster.name || poster.title || 'Unknown Collection';
+            
+            const posterElement = document.createElement('div');
+            posterElement.className = 'poster-item';
+            posterElement.dataset.url = poster.url;
+            posterElement.dataset.name = posterTitle;
+            posterElement.dataset.index = index;
+            
+            // Create loading spinner that will show until image loads
+            const loadingElement = document.createElement('div');
+            loadingElement.className = 'poster-loading';
+            loadingElement.innerHTML = '<div class="poster-spinner"></div>';
+            posterElement.appendChild(loadingElement);
+            
+            // Create image element
+            const imgElement = document.createElement('img');
+            imgElement.alt = posterTitle;
+            posterElement.appendChild(imgElement);
+            
+            // Create title element
+            const titleElement = document.createElement('div');
+            titleElement.className = 'poster-title';
+            titleElement.textContent = posterTitle;
+            posterElement.appendChild(titleElement);
+            
+            // Add click event to select poster
+            posterElement.addEventListener('click', function() {
+                // Immediately hide the modal
+                modal.classList.remove('show');
+                modal.style.display = 'none';
+                
+                // DIRECT UPDATE: Get the form elements and update immediately
+                const urlForm = document.getElementById('urlChangePosterForm');
+                if (urlForm) {
+                    const urlInput = urlForm.querySelector('input[name="image_url"]');
+                    if (urlInput) {
+                        // Get the poster URL from the dataset
+                        const posterUrl = this.dataset.url;
+                        
+                        // Update the input value
+                        urlInput.value = posterUrl;
+                        
+                        // Trigger input event for any listeners
+                        const inputEvent = new Event('input', { bubbles: true });
+                        urlInput.dispatchEvent(inputEvent);
+                        
+                        // Make sure the submit button is enabled
+                        const submitButton = urlForm.querySelector('button[type="submit"]');
+                        if (submitButton) {
+                            submitButton.disabled = false;
+                        }
+                        
+                        // Find the container for preview
+                        const container = urlForm.querySelector('.url-input-container');
+                        if (container) {
+                            // Remove any existing preview
+                            const existingPreview = container.querySelector('.tmdb-poster-preview, .tmdb-loading, .tmdb-error-container');
+                            if (existingPreview) {
+                                existingPreview.remove();
+                            }
+                            
+                            // Create a new poster preview
+                            const preview = document.createElement('div');
+                            preview.className = 'tmdb-poster-preview';
+                            
+                            // Create magnifying glass icon for zoom
+                            const icon = document.createElement('div');
+                            icon.className = 'tmdb-poster-icon';
+                            icon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="11" cy="11" r="8"></circle>
+                                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                            </svg>`;
+                            
+                            // Create image with loading behavior
+                            const img = document.createElement('img');
+                            img.alt = 'Poster preview';
+                            img.style.opacity = '0';
+                            img.style.transition = 'opacity 0.3s';
+                            
+                            img.onload = function() {
+                                img.style.opacity = '1';
+                            };
+                            
+                            img.src = posterUrl;
+                            
+                            // Add elements to preview
+                            preview.appendChild(img);
+                            preview.appendChild(icon);
+                            
+                            // Add preview to container
+                            container.appendChild(preview);
+                            
+                            // Highlight the URL input
+                            urlInput.style.borderColor = 'var(--accent-primary)';
+                            
+                            // Flash effect to indicate change
+                            urlInput.style.backgroundColor = 'rgba(229, 160, 13, 0.2)';
+                            setTimeout(() => {
+                                urlInput.style.backgroundColor = '';
+                            }, 1000);
+                        }
+                    }
+                }
+            });
+            
+            // Set the image source last to ensure the loading spinner shows first
+            imgElement.onload = () => {
+                // Remove loading spinner once image has loaded
+                loadingElement.style.display = 'none';
+            };
+            
+            imgElement.onerror = () => {
+                // Show error state if image fails to load
+                loadingElement.innerHTML = `
+                    <div style="display: flex; height: 100%; align-items: center; justify-content: center; 
+                                color: var(--text-secondary); flex-direction: column; text-align: center; padding: 10px;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" 
+                             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="14.31" y1="8" x2="20.05" y2="17.94"></line>
+                            <line x1="9.69" y1="8" x2="21.17" y2="8"></line>
+                            <line x1="7.38" y1="12" x2="13.12" y2="2.06"></line>
+                            <line x1="9.69" y1="16" x2="3.95" y2="6.06"></line>
+                            <line x1="14.31" y1="16" x2="2.83" y2="16"></line>
+                            <line x1="16.62" y1="12" x2="10.88" y2="21.94"></line>
+                        </svg>
+                        <small style="margin-top: 8px;">Failed to load</small>
+                    </div>
+                `;
+            };
+            
+            // Set image source after setting up handlers
+            imgElement.src = poster.url;
+            
+            fragment.appendChild(posterElement);
+        });
+    }
+    
+    // Add all posters to the grid at once for better performance
+    grid.appendChild(fragment);
+    
+    // Show modal
+    modal.style.display = 'flex';
+    // Force a reflow
+    modal.offsetHeight; 
+    modal.classList.add('show');
+}
+
+// Hide the multi-poster modal
+function hideMultiPosterModal() {
+    const modal = document.getElementById('multiPosterModal');
+    if (modal) {
+        modal.classList.remove('show');
+        setTimeout(() => {
+            modal.style.display = 'none';
+        }, 300); // Match transition duration
+    }
+}
+
+// Filter posters based on search input
+function filterPosters() {
+    const searchInput = document.getElementById('posterSearchInput');
+    const searchTerm = searchInput.value.toLowerCase().trim();
+    const posterItems = document.querySelectorAll('.poster-item');
+    const posterCount = document.getElementById('posterCount');
+    
+    let visibleCount = 0;
+    
+    posterItems.forEach(item => {
+        const posterName = item.dataset.name.toLowerCase();
+        if (posterName.includes(searchTerm)) {
+            item.style.display = '';
+            visibleCount++;
+        } else {
+            item.style.display = 'none';
+        }
+    });
+    
+    // Update the visible count
+    posterCount.textContent = visibleCount;
+}
+
+// Select a poster and update the preview
+function selectPoster(posterUrl) {
+    // Get the URL form
+    const urlForm = document.getElementById('urlChangePosterForm');
+    if (!urlForm) return;
+    
+    // Get input
+    const urlInput = urlForm.querySelector('input[name="image_url"]');
+    if (!urlInput) return;
+    
+    // Find the container
+    const container = urlForm.querySelector('.url-input-container');
+    if (!container) return;
+    
+    // Remove any existing preview
+    removeExistingPreview();
+    
+    // Fill in the URL input
+    urlInput.value = posterUrl;
+    
+    // Trigger input event to enable the submit button if needed
+    const inputEvent = new Event('input', { bubbles: true });
+    urlInput.dispatchEvent(inputEvent);
+    
+    // Create poster preview - do this synchronously to ensure it appears immediately
+    showManualUrlPreview(posterUrl);
+    
+    // Highlight the URL input
+    urlInput.style.borderColor = 'var(--accent-primary)';
+    
+    // Flash effect to draw attention to the URL being populated
+    urlInput.style.backgroundColor = 'rgba(229, 160, 13, 0.2)';
+    setTimeout(() => {
+        urlInput.style.backgroundColor = '';
+    }, 1000);
+    
+    // Make sure the submit button is enabled
+    const submitButton = urlForm.querySelector('button[type="submit"]');
+    if (submitButton) {
+        submitButton.disabled = false;
+    }
+}
+
+// Updated performTMDBSearch function to handle multi-poster selection
+function performTMDBSearch(title, mediaType, season = null) {
+    // Get the URL form
+    const urlForm = document.getElementById('urlChangePosterForm');
+    if (!urlForm) return;
+    
+    // Get input
+    const urlInput = urlForm.querySelector('input[name="image_url"]');
+    if (!urlInput) return;
+    
+    // Find the container
+    const container = urlForm.querySelector('.url-input-container');
+    if (!container) return;
+    
+    // Remove any existing preview
+    removeExistingPreview();
+    
+    // Show loading indicator
+    const loading = document.createElement('div');
+    loading.className = 'tmdb-loading';
+    loading.innerHTML = `
+        <div class="tmdb-spinner"></div>
+        <div>Searching...</div>
+    `;
+    
+    container.appendChild(loading);
+    
+    // For TV seasons, try to extract just the show name without season info
+    let searchTitle = title;
+    if (mediaType === 'season') {
+        // Remove "Season X", "SXX", and "Specials" from the title
+        searchTitle = title.replace(/\s*[-:]\s*Season\s*\d+/i, '')
+                           .replace(/\s*S\d+\b/i, '')
+                           .replace(/\s*[-:]\s*Specials/i, '')
+                           .replace(/\s+Specials$/i, '')
+                           .replace(/\s+Special$/i, '')
+                           .trim();
+    }
+    
+    // Create form data for request
+    const formData = new FormData();
+    formData.append('query', searchTitle);
+    formData.append('type', mediaType);
+    
+    // Add season if searching for TV season
+    if (season !== null && (mediaType === 'tv' || mediaType === 'season')) {
+        formData.append('season', season);
+    }
+    
+    // Make the API request
+    fetch('./include/fetch-tmdb.php', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        // Remove loading indicator
+        loading.remove();
+        
+        if (data.success) {
+            // Check if we have multiple posters for collections
+            if (mediaType === 'collection' && data.hasMultiplePosters && Array.isArray(data.allPosters) && data.allPosters.length > 1) {
+                // Ensure all posters have a name (debugging check)
+                console.log("Collection posters:", data.allPosters);
+                
+                // Show multi-poster selection modal
+                showMultiPosterModal(data.allPosters);
+            } else if (data.posterUrl) {
+                // Single poster handling (same as before)
+                // Fill in the URL input
+                urlInput.value = data.posterUrl;
+                
+                // Trigger input event to enable the submit button if needed
+                const inputEvent = new Event('input', { bubbles: true });
+                urlInput.dispatchEvent(inputEvent);
+                
+                // Create poster preview
+                showManualUrlPreview(data.posterUrl);
+                
+                // Add season badge if this is a season result
+                if (mediaType === 'season' && season !== null) {
+                    const preview = container.querySelector('.tmdb-poster-preview');
+                    if (preview) {
+                        const badge = document.createElement('div');
+                        badge.className = 'season-badge';
+                        badge.textContent = season === 0 ? 'Specials' : `Season ${season}`;
+                        preview.appendChild(badge);
+                    }
+                }
+                
+                // Highlight the URL input but don't focus it (prevents keyboard on mobile)
+                urlInput.style.borderColor = 'var(--accent-primary)';
+                
+                // On desktop only, focus the input (won't trigger keyboard on mobile)
+                if (window.innerWidth > 768) {
+                    urlInput.focus();
+                }
+                
+                // Flash effect to draw attention to the URL being populated
+                urlInput.style.backgroundColor = 'rgba(229, 160, 13, 0.2)';
+                setTimeout(() => {
+                    urlInput.style.backgroundColor = '';
+                }, 1000);
+                
+                // Make sure the submit button is enabled
+                const submitButton = urlForm.querySelector('button[type="submit"]');
+                if (submitButton) {
+                    submitButton.disabled = false;
+                }
+            } else {
+                // No poster URL available (shouldn't happen if data.success is true)
+                showErrorMessage(container, mediaType);
+            }
+        } else {
+            // Show error message with enhanced styling
+            showErrorMessage(container, mediaType);
+        }
+    })
+    .catch(error => {
+        // Remove loading indicator
+        loading.remove();
+        
+        // Show connection error message
+        showConnectionErrorMessage(container);
+    });
+}
+
+// Function to show error message with enhanced styling
+function showErrorMessage(container, mediaType) {
+    const errorMsg = document.createElement('div');
+    errorMsg.className = 'tmdb-error-container';
+    
+    // Add the error icon SVG with improved styling
+    errorMsg.innerHTML = `
+        <div class="error-content">
+            <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+            <div class="error-text">No poster found</div>
+            <div class="error-subtext">${mediaType === 'collection' ? 'Collection' : 
+                                      mediaType === 'season' ? 'Season' : 
+                                      mediaType === 'tv' ? 'TV Show' : 'Movie'} not found</div>
+        </div>
+    `;
+    
+    container.appendChild(errorMsg);
+    
+    // Make sure the error styles are added
+    ensureErrorStyles();
+}
+
+// Function to show connection error message
+function showConnectionErrorMessage(container) {
+    const errorMsg = document.createElement('div');
+    errorMsg.className = 'tmdb-error-container';
+    errorMsg.innerHTML = `
+        <div class="error-content">
+            <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+            <div class="error-text">Search failed</div>
+            <div class="error-subtext">Connection error</div>
+        </div>
+    `;
+    container.appendChild(errorMsg);
+    
+    // Make sure the error styles are added
+    ensureErrorStyles();
+}
+
+// Ensure error styles are added to the document
+function ensureErrorStyles() {
+    if (!document.getElementById('tmdb-error-styles')) {
+        const style = document.createElement('style');
+        style.id = 'tmdb-error-styles';
+        style.textContent = `
+            .tmdb-error-container {
+                width: 100px;
+                height: 150px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                border: 2px solid #FF4757;
+                background-color: rgba(33, 33, 33, 0.95);
+                border-radius: 8px;
+                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+                flex-shrink: 0;
+                overflow: hidden;
+                position: relative;
+                margin-bottom: 9px;
+            }
+            
+            /* Remove all hover effects */
+            .tmdb-error-container::before,
+            .tmdb-error-container::after,
+            .tmdb-error-container:hover::before,
+            .tmdb-error-container:hover::after {
+                display: none !important;
+            }
+            
+            .error-content {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                text-align: center;
+                color: #FF6B81;
+                height: 100%;
+                width: 100%;
+                padding: 8px;
+            }
+            
+            .error-text {
+                font-weight: bold;
+                margin-top: 8px;
+                font-size: 14px;
+                text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+                color: #FF6B81;
+            }
+            
+            .error-subtext {
+                font-size: 12px;
+                margin-top: 4px;
+                color: #FFC3C3;
+                text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+            }
+            
+            /* Specifically ensure no hover states */
+            .tmdb-error-container .tmdb-poster-icon,
+            .tmdb-error-container:hover .tmdb-poster-icon {
+                display: none !important;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+}
 </script>
 
 <script>
