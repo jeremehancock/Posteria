@@ -7680,121 +7680,209 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Perform TMDB search
-    function performTMDBSearch(title, mediaType, season = null) {
-        // Get the URL form
-        const urlForm = document.getElementById('urlChangePosterForm');
-        if (!urlForm) return;
-        
-        // Get input
-        const urlInput = urlForm.querySelector('input[name="image_url"]');
-        if (!urlInput) return;
-        
-        // Find the container
-        const container = urlForm.querySelector('.url-input-container');
-        if (!container) return;
-        
-        // Remove any existing preview
-        removeExistingPreview();
-        
-        // Show loading indicator
-        const loading = document.createElement('div');
-        loading.className = 'tmdb-loading';
-        loading.innerHTML = `
-            <div class="tmdb-spinner"></div>
-            <div>Searching...</div>
-        `;
-        
-        container.appendChild(loading);
-        
-        // For TV seasons, try to extract just the show name without season info
-        let searchTitle = title;
-        if (mediaType === 'season') {
-            // Remove "Season X", "SXX", and "Specials" from the title
-            searchTitle = title.replace(/\s*[-:]\s*Season\s*\d+/i, '')
-                               .replace(/\s*S\d+\b/i, '')
-                               .replace(/\s*[-:]\s*Specials/i, '')
-                               .replace(/\s+Specials$/i, '')
-                               .replace(/\s+Special$/i, '')
-                               .trim();
-        }
-        
-        // Create form data for request
-        const formData = new FormData();
-        formData.append('query', searchTitle);
-        formData.append('type', mediaType);
-        
-        // Add season if searching for TV season
-        if (season !== null && (mediaType === 'tv' || mediaType === 'season')) {
-            formData.append('season', season);
-        }
-        
-        // Make the API request
-        fetch('./include/fetch-tmdb.php', {
-            method: 'POST',
-            body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
-            // Remove loading indicator
-            loading.remove();
-            
-            if (data.success && data.posterUrl) {
-                // Fill in the URL input
-                urlInput.value = data.posterUrl;
-                
-                // Trigger input event to enable the submit button if needed
-                const inputEvent = new Event('input', { bubbles: true });
-                urlInput.dispatchEvent(inputEvent);
-                
-                // Create poster preview directly (manual input handler will be triggered by the input event)
-                showManualUrlPreview(data.posterUrl);
-                
-                // Add season badge if this is a season result
-                if (mediaType === 'season' && season !== null) {
-                    const preview = container.querySelector('.tmdb-poster-preview');
-                    if (preview) {
-                        const badge = document.createElement('div');
-                        badge.className = 'season-badge';
-                        badge.textContent = season === 0 ? 'Specials' : `Season ${season}`;
-                        preview.appendChild(badge);
-                    }
-                }
-                
-                // Highlight the URL input but don't focus it (prevents keyboard on mobile)
-                urlInput.style.borderColor = 'var(--accent-primary)';
-                
-                // On desktop only, focus the input (won't trigger keyboard on mobile)
-                if (window.innerWidth > 768) {
-                    urlInput.focus();
-                }
-                
-                // Flash effect to draw attention to the URL being populated
-                urlInput.style.backgroundColor = 'rgba(229, 160, 13, 0.2)';
-                setTimeout(() => {
-                    urlInput.style.backgroundColor = '';
-                }, 1000);
-            } else {
-                // Show error
-                const errorMsg = document.createElement('div');
-                errorMsg.className = 'tmdb-loading';
-                errorMsg.style.height = '100px'; // Smaller for error
-                errorMsg.innerHTML = `<div>No poster found</div>`;
-                container.appendChild(errorMsg);
-            }
-        })
-        .catch(error => {
-            // Remove loading indicator
-            loading.remove();
-            
-            // Show error
-            const errorMsg = document.createElement('div');
-            errorMsg.className = 'tmdb-loading';
-            errorMsg.style.height = '100px'; // Smaller for error
-            errorMsg.innerHTML = `<div>Search failed</div>`;
-            container.appendChild(errorMsg);
-        });
-    }
-    
+	function performTMDBSearch(title, mediaType, season = null) {
+		// Get the URL form
+		const urlForm = document.getElementById('urlChangePosterForm');
+		if (!urlForm) return;
+		
+		// Get input
+		const urlInput = urlForm.querySelector('input[name="image_url"]');
+		if (!urlInput) return;
+		
+		// Find the container
+		const container = urlForm.querySelector('.url-input-container');
+		if (!container) return;
+		
+		// Remove any existing preview
+		removeExistingPreview();
+		
+		// Show loading indicator
+		const loading = document.createElement('div');
+		loading.className = 'tmdb-loading';
+		loading.innerHTML = `
+		    <div class="tmdb-spinner"></div>
+		    <div>Searching...</div>
+		`;
+		
+		container.appendChild(loading);
+		
+		// For TV seasons, try to extract just the show name without season info
+		let searchTitle = title;
+		if (mediaType === 'season') {
+		    // Remove "Season X", "SXX", and "Specials" from the title
+		    searchTitle = title.replace(/\s*[-:]\s*Season\s*\d+/i, '')
+		                       .replace(/\s*S\d+\b/i, '')
+		                       .replace(/\s*[-:]\s*Specials/i, '')
+		                       .replace(/\s+Specials$/i, '')
+		                       .replace(/\s+Special$/i, '')
+		                       .trim();
+		}
+		
+		// Create form data for request
+		const formData = new FormData();
+		formData.append('query', searchTitle);
+		formData.append('type', mediaType);
+		
+		// Add season if searching for TV season
+		if (season !== null && (mediaType === 'tv' || mediaType === 'season')) {
+		    formData.append('season', season);
+		}
+		
+		// Make the API request
+		fetch('./include/fetch-tmdb.php', {
+		    method: 'POST',
+		    body: formData
+		})
+		.then(response => response.json())
+		.then(data => {
+		    // Remove loading indicator
+		    loading.remove();
+		    
+		    if (data.success && data.posterUrl) {
+		        // Fill in the URL input
+		        urlInput.value = data.posterUrl;
+		        
+		        // Trigger input event to enable the submit button if needed
+		        const inputEvent = new Event('input', { bubbles: true });
+		        urlInput.dispatchEvent(inputEvent);
+		        
+		        // Create poster preview directly (manual input handler will be triggered by the input event)
+		        showManualUrlPreview(data.posterUrl);
+		        
+		        // Add season badge if this is a season result
+		        if (mediaType === 'season' && season !== null) {
+		            const preview = container.querySelector('.tmdb-poster-preview');
+		            if (preview) {
+		                const badge = document.createElement('div');
+		                badge.className = 'season-badge';
+		                badge.textContent = season === 0 ? 'Specials' : `Season ${season}`;
+		                preview.appendChild(badge);
+		            }
+		        }
+		        
+		        // Highlight the URL input but don't focus it (prevents keyboard on mobile)
+		        urlInput.style.borderColor = 'var(--accent-primary)';
+		        
+		        // On desktop only, focus the input (won't trigger keyboard on mobile)
+		        if (window.innerWidth > 768) {
+		            urlInput.focus();
+		        }
+		        
+		        // Flash effect to draw attention to the URL being populated
+		        urlInput.style.backgroundColor = 'rgba(229, 160, 13, 0.2)';
+		        setTimeout(() => {
+		            urlInput.style.backgroundColor = '';
+		        }, 1000);
+		    } else {
+		        // Enhanced error message styling
+		        const errorMsg = document.createElement('div');
+		        errorMsg.className = 'tmdb-error-container';
+		        
+		        // Add the error icon SVG with improved styling
+		        errorMsg.innerHTML = `
+		            <div class="error-content">
+		                <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+		                    <circle cx="12" cy="12" r="10"></circle>
+		                    <line x1="12" y1="8" x2="12" y2="12"></line>
+		                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+		                </svg>
+		                <div class="error-text">No poster found</div>
+		                <div class="error-subtext">${mediaType === 'collection' ? 'Collection' : 
+		                                          mediaType === 'season' ? 'Season' : 
+		                                          mediaType === 'tv' ? 'TV Show' : 'Movie'} not found</div>
+		            </div>
+		        `;
+		        
+		        container.appendChild(errorMsg);
+		        
+		        // Add CSS for the error styling if it doesn't exist
+		        if (!document.getElementById('tmdb-error-styles')) {
+		            const style = document.createElement('style');
+		            style.id = 'tmdb-error-styles';
+		            style.textContent = `
+		                .tmdb-error-container {
+		                    width: 100px;
+		                    height: 150px;
+		                    display: flex;
+		                    align-items: center;
+		                    justify-content: center;
+		                    border: 2px solid #FF4757;
+		                    background-color: rgba(33, 33, 33, 0.95);
+		                    border-radius: 8px;
+		                    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+		                    flex-shrink: 0;
+		                    overflow: hidden;
+		                    position: relative;
+		                    margin-bottom: 9px;
+		                }
+		                
+		                /* Remove all hover effects */
+		                .tmdb-error-container::before,
+		                .tmdb-error-container::after,
+		                .tmdb-error-container:hover::before,
+		                .tmdb-error-container:hover::after {
+		                    display: none !important;
+		                }
+		                
+		                .error-content {
+		                    display: flex;
+		                    flex-direction: column;
+		                    align-items: center;
+		                    justify-content: center;
+		                    text-align: center;
+		                    color: #FF6B81;
+		                    height: 100%;
+		                    width: 100%;
+		                    padding: 8px;
+		                }
+		                
+		                .error-text {
+		                    font-weight: bold;
+		                    margin-top: 8px;
+		                    font-size: 14px;
+		                    text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+		                    color: #FF6B81;
+		                }
+		                
+		                .error-subtext {
+		                    font-size: 12px;
+		                    margin-top: 4px;
+		                    color: #FFC3C3;
+		                    text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+		                }
+		                
+		                /* Specifically ensure no hover states */
+		                .tmdb-error-container .tmdb-poster-icon,
+		                .tmdb-error-container:hover .tmdb-poster-icon {
+		                    display: none !important;
+		                }
+		            `;
+		            document.head.appendChild(style);
+		        }
+		    }
+		})
+		.catch(error => {
+		    // Remove loading indicator
+		    loading.remove();
+		    
+		    // Enhanced error message for network/system errors
+		    const errorMsg = document.createElement('div');
+		    errorMsg.className = 'tmdb-error-container';
+		    errorMsg.innerHTML = `
+		        <div class="error-content">
+		            <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+		                <polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon>
+		                <line x1="12" y1="8" x2="12" y2="12"></line>
+		                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+		            </svg>
+		            <div class="error-text">Search failed</div>
+		            <div class="error-subtext">Connection error</div>
+		        </div>
+		    `;
+		    container.appendChild(errorMsg);
+		});
+	}
+
     // Clean up TMDB elements
     function cleanupTMDB() {
         // Remove search button
@@ -7915,6 +8003,118 @@ document.addEventListener('DOMContentLoaded', function() {
     } else {
         initialize();
     }
+    
+// This function should be modified to allow collection searches
+function addTMDBButton() {
+    // Get the form
+    const urlForm = document.getElementById('urlChangePosterForm');
+    if (!urlForm || !urlForm.classList.contains('active')) return;
+    
+    // Don't add if already exists
+    if (urlForm.querySelector('.tmdb-search-btn')) return;
+    
+    // Get the URL input group
+    const urlInputGroup = urlForm.querySelector('.upload-input-group');
+    if (!urlInputGroup) return;
+    
+    // Create a flex container for the URL input and poster
+    if (!urlForm.querySelector('.url-input-container')) {
+        // Wrap the input group in a container
+        const container = document.createElement('div');
+        container.className = 'url-input-container';
+        
+        // Replace the input group with the container
+        urlInputGroup.parentNode.insertBefore(container, urlInputGroup);
+        container.appendChild(urlInputGroup);
+        
+        // Get the URL input element
+        const urlInput = urlInputGroup.querySelector('input[name="image_url"]');
+        if (urlInput) {
+            // Add event listener for manual URL entry with both input and change events
+            const checkUrl = function() {
+                handleManualUrlInput(this.value);
+            };
+            
+            urlInput.addEventListener('input', checkUrl);
+            urlInput.addEventListener('change', checkUrl);
+            urlInput.addEventListener('paste', function(e) {
+                // Short delay after paste to ensure value is updated
+                setTimeout(() => {
+                    handleManualUrlInput(this.value);
+                }, 100);
+            });
+            
+            // Check if there's already a value in the input
+            if (urlInput.value) {
+                setTimeout(() => {
+                    handleManualUrlInput(urlInput.value);
+                }, 300);
+            }
+        }
+    }
+    
+    // Get title from filename
+    const filenameElement = document.getElementById('changePosterFilename');
+    if (!filenameElement) return;
+    
+    const filename = filenameElement.textContent;
+    let title = filename.replace('Changing poster:', '').trim();
+    title = title.replace(/\([^)]*\)/g, '').trim(); // Remove content in parentheses
+    title = title.replace(/\[[^\]]*\]/g, '').trim(); // Remove content in brackets
+    
+    // Determine if this is a movie, TV show, or season by checking directory
+    const directoryInput = document.getElementById('urlChangePosterDirectory');
+    let directory = '';
+    
+    if (directoryInput) {
+        directory = directoryInput.value;
+    }
+    
+    // Create the search button
+    const searchButton = document.createElement('button');
+    searchButton.type = 'button'; // Prevent form submission
+    searchButton.className = 'tmdb-search-btn';
+    searchButton.innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        Get TMDB Poster
+    `;
+    
+    // Store the season number as data attribute for TV seasons
+    let seasonNumber = null;
+    if (directory === 'tv-seasons') {
+        seasonNumber = extractSeasonFromTitle(title);
+        searchButton.setAttribute('data-season', seasonNumber);
+    }
+    
+    // Add the button after the URL input container
+    const container = urlForm.querySelector('.url-input-container');
+    container.insertAdjacentElement('afterend', searchButton);
+    
+    // Add click handler for search button
+    searchButton.addEventListener('click', function() {
+        let mediaType = 'movie'; // Default
+        let season = null;
+        
+        // Determine the media type based on directory
+        if (directory === 'tv-shows') {
+            mediaType = 'tv';
+        } else if (directory === 'tv-seasons') {
+            mediaType = 'season';
+            // Use the season number we determined earlier
+            season = parseInt(this.getAttribute('data-season'), 10);
+            if (isNaN(season)) {
+                season = 1; // Fallback
+            }
+        } else if (directory === 'collections') {
+            mediaType = 'collection';
+        }
+        
+        performTMDBSearch(title, mediaType, season);
+    });
+}
 });
 </script>
 

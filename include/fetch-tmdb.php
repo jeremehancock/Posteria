@@ -90,6 +90,9 @@ if ($type === 'movie') {
         // If we can't parse the format, just use what we have
         $apiUrl .= 'q=' . urlencode($query) . '&type=tv&season=1';
     }
+} elseif ($type === 'collection') {
+    // Handle collections
+    $apiUrl .= 'q=' . urlencode($query) . '&type=collection';
 } else {
     echo json_encode([
         'success' => false,
@@ -219,6 +222,14 @@ if ($type === 'movie') {
         if (!empty($result['poster']) && is_array($result['poster'])) {
             $posterUrl = $result['poster']['original'] ?? $result['poster']['large'] ?? $result['poster']['medium'] ?? $result['poster']['small'] ?? null;
         }
+    }
+} elseif ($type === 'collection') {
+    // Collection handling
+    $title = $result['name'] ?? 'Unknown Collection';
+    
+    // Get collection poster
+    if (!empty($result['poster']) && is_array($result['poster'])) {
+        $posterUrl = $result['poster']['original'] ?? $result['poster']['large'] ?? $result['poster']['medium'] ?? $result['poster']['small'] ?? null;
     }
 }
 
