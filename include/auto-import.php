@@ -571,9 +571,14 @@ function generatePlexFilename($title, $id, $extension, $mediaType = '', $library
  * Sanitize filename to remove invalid characters
  */
 function sanitizeFilename($filename) {
-    // Remove any character that isn't alphanumeric, space, underscore, dash, or dot
-    $filename = preg_replace('/[^\w\s\.-]/', '', $filename);
-    $filename = preg_replace('/\s+/', ' ', $filename); // Remove multiple spaces
+    // Remove only characters that are unsafe for filenames
+    // Unsafe characters: / \ : * ? " < > |
+    $filename = preg_replace('/[\/\\\:\*\?"<>\|]/', '', $filename);
+    
+    // Replace multiple spaces with a single space
+    $filename = preg_replace('/\s+/', ' ', $filename);
+    
+    // Trim the result
     return trim($filename);
 }
 
