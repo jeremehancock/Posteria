@@ -530,9 +530,10 @@ function downloadPlexImage($serverUrl, $token, $thumb, $targetPath)
 }
 
 /**
- * Find existing poster file by rating key
+ * Find existing poster file by rating key - updated version
+ * This matches the updated version in the main application
  */
-function findExistingPosterByRatingKey($directory, $ratingKey)
+function findExistingPosterByRatingKey($directory, $ratingKey, $mediaType = '', $libraryType = '')
 {
     if (!is_dir($directory)) {
         return false;
@@ -543,7 +544,29 @@ function findExistingPosterByRatingKey($directory, $ratingKey)
         if (is_file($file) && strpos($file, "**Plex**") !== false) {
             $pattern = '/\[' . preg_quote($ratingKey, '/') . '\]/';
             if (preg_match($pattern, basename($file))) {
-                return basename($file);
+                // For collections, we need special handling based on library type
+                if ($mediaType === 'collections' && !empty($libraryType)) {
+                    $filename = basename($file);
+                    $typeMarker = ($libraryType === 'movie') ? '(Movies)' : '(TV)';
+                    $oppositeMarker = ($libraryType === 'movie') ? '(TV)' : '(Movies)';
+
+                    // If this file has the opposite marker (wrong library type), skip it
+                    if (strpos($filename, $oppositeMarker) !== false) {
+                        logMessage("Skipping collection with wrong library type: " . $filename);
+                        continue;
+                    }
+
+                    // If this file has no type marker or the correct one, use it
+                    if (
+                        strpos($filename, $typeMarker) !== false ||
+                        (strpos($filename, '(Movies)') === false && strpos($filename, '(TV)') === false)
+                    ) {
+                        return basename($file);
+                    }
+                } else {
+                    // For other media types, just return the filename
+                    return basename($file);
+                }
             }
         }
     }

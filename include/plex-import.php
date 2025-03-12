@@ -1179,7 +1179,8 @@ try {
         return strpos($filename, "[[" . $libraryName . "]]") !== false;
     }
 
-    // Modified improvedMarkOrphanedPosters function
+    // Find the improvedMarkOrphanedPosters function and make this change:
+
     function improvedMarkOrphanedPosters(
         $targetDir,
         $currentImportIds,
@@ -1223,6 +1224,14 @@ try {
             // For multi-library, use all valid IDs
             $allValidIds = getAllValidIds($mediaType);
             $allValidIds = array_merge($allValidIds, $currentImportIds);
+
+            // IMPORTANT CHANGE FOR COLLECTIONS: When doing multi-library imports, 
+            // don't mark movie collections as orphaned during TV library processing and vice versa
+            if ($mediaType === 'collections' && !empty($libraryType)) {
+                // Skip orphan detection for other library types during multi-library import
+                // We'll only detect orphans that match the current library type
+                logDebug("Multi-library collection import: Skipping orphan detection for non-matching library types");
+            }
         }
         $allValidIds = array_unique($allValidIds);
 
@@ -1249,6 +1258,17 @@ try {
             if ($isSingleLibrary && !empty($currentLibraryName)) {
                 if (!fileMatchesLibrary($filename, $currentLibraryName)) {
                     continue; // Skip files from other libraries
+                }
+            }
+
+            // IMPORTANT ADDITION: For collections in multi-library import, only process matching library type
+            if (!$isSingleLibrary && $mediaType === 'collections' && !empty($libraryType)) {
+                $typeMarker = ($libraryType === 'movie') ? '(Movies)' : '(TV)';
+                $oppositeMarker = ($libraryType === 'movie') ? '(TV)' : '(Movies)';
+
+                // Skip collections from the other library type
+                if (strpos($filename, $oppositeMarker) !== false) {
+                    continue; // Skip collections from other library type
                 }
             }
 
@@ -2097,31 +2117,23 @@ try {
                             // Make sure we have an array of collections, never null
                             $allCollections = isset($result['data']) && is_array($result['data']) ? $result['data'] : [];
 
-                            // Get the library type (movie or show) to correctly label collections
+                            // Get the library type (movie or show) for the CURRENT library only
                             $libraryType = '';
-                            // First check if we already stored the library type in the session
-                            if (isset($_SESSION['current_library_type'])) {
-                                $libraryType = $_SESSION['current_library_type'];
-                            } else {
-                                // Otherwise, fetch the library details to determine its type
-                                $librariesResult = getPlexLibraries($plex_config['server_url'], $plex_config['token']);
-                                if ($librariesResult['success'] && !empty($librariesResult['data'])) {
-                                    foreach ($librariesResult['data'] as $lib) {
-                                        if ($lib['id'] == $currentLibraryId) {
-                                            $libraryType = $lib['type']; // 'movie' or 'show'
-                                            // Store in session for subsequent batch calls
-                                            $_SESSION['current_library_type'] = $libraryType;
-                                            break;
-                                        }
+                            $librariesResult = getPlexLibraries($plex_config['server_url'], $plex_config['token']);
+                            if ($librariesResult['success'] && !empty($librariesResult['data'])) {
+                                foreach ($librariesResult['data'] as $lib) {
+                                    if ($lib['id'] == $currentLibraryId) {
+                                        $libraryType = $lib['type']; // 'movie' or 'show'
+                                        $_SESSION['current_library_type'] = $libraryType; // Store in session
+                                        break;
                                     }
                                 }
                             }
 
-                            logDebug("Collections batch processing", [
-                                'collections_count' => count($allCollections),
-                                'startIndex' => $startIndex,
-                                'batchSize' => $batchSize,
-                                'libraryType' => $libraryType
+                            logDebug("Processing collections for library {$currentLibraryId}", [
+                                'libraryName' => $libraryName,
+                                'libraryType' => $libraryType,
+                                'collections_count' => count($allCollections)
                             ]);
 
                             // Process this batch - make sure we don't go out of bounds
@@ -2160,6 +2172,8 @@ try {
                             // Handle orphaned posters if this is the final batch
                             $orphanedResults = null;
                             if ($isCompleteAll) {
+                                // Only run orphan detection on the very last library of a multi-library import
+
                                 // Safely get imported IDs from current batch
                                 $allImportedIds = isset($batchResults['importedIds']) && is_array($batchResults['importedIds'])
                                     ? $batchResults['importedIds']
@@ -2169,6 +2183,9 @@ try {
                                 if (isset($_SESSION[$collectionSessionKey]) && is_array($_SESSION[$collectionSessionKey])) {
                                     $allImportedIds = array_merge($allImportedIds, $_SESSION[$collectionSessionKey]);
                                 }
+
+                                // Store these IDs in persistent storage
+                                storeValidIds($allImportedIds, $mediaType, $currentLibraryId, true);
 
                                 // Use the enhanced orphan detection that checks for missing libraries
                                 $orphanedResults = enhancedMarkOrphanedPosters(
@@ -2188,11 +2205,15 @@ try {
 
                                 // Clear only the temporary session for the current import
                                 unset($_SESSION[$collectionSessionKey]);
+
                                 // Also clean up the library type after processing is complete
                                 if (isset($_SESSION['current_library_type'])) {
                                     unset($_SESSION['current_library_type']);
                                 }
                             } else {
+                                // For middle libraries in a multi-library import, DON'T run orphan detection yet
+                                // Just accumulate the IDs for the final detection
+
                                 // Ensure we have an array in the session for this library type
                                 if (!isset($_SESSION[$collectionSessionKey]) || !is_array($_SESSION[$collectionSessionKey])) {
                                     $_SESSION[$collectionSessionKey] = [];
@@ -2204,6 +2225,16 @@ try {
                                     : [];
 
                                 $_SESSION[$collectionSessionKey] = array_merge($_SESSION[$collectionSessionKey], $importedIds);
+
+                                // IMPORTANT: Still store the valid IDs in persistent storage
+                                storeValidIds($importedIds, $mediaType, $currentLibraryId, true);
+
+                                // Set empty orphan results to avoid null/undefined issues
+                                $orphanedResults = [
+                                    'orphaned' => 0,
+                                    'unmarked' => 0,
+                                    'details' => []
+                                ];
                             }
 
                             // Get accumulated totals from previous libraries/batches if available
@@ -2271,7 +2302,7 @@ try {
                             exit;
                         }
                     } else {
-                        // Process all collections at once
+                        // Process all collections at once (non-batch method)
                         $result = getAllPlexCollections($plex_config['server_url'], $plex_config['token'], $currentLibraryId);
                         if (!$result['success']) {
                             throw new Exception($result['error']);
