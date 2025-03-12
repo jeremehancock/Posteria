@@ -4843,7 +4843,6 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 						}
 					} catch (error) {
 						// Stop processing and show error
-						console.error("Import error:", error);
 						throw error;
 					}
 				}
@@ -7465,6 +7464,8 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
+    window.handleManualUrlInput = handleManualUrlInput;
+    
     // Extract season number from title
     function extractSeasonFromTitle(title) {
         // First check for "Specials" - this has priority
@@ -7684,25 +7685,21 @@ function performTMDBSearch(title, mediaType, season = null) {
     // Get the URL form
     const urlForm = document.getElementById('urlChangePosterForm');
     if (!urlForm) {
-        console.error("TMDB Debug: urlChangePosterForm not found");
         return;
     }
     
     // Get input
     const urlInput = urlForm.querySelector('input[name="image_url"]');
     if (!urlInput) {
-        console.error("TMDB Debug: URL input not found");
         return;
     }
     
     // Find the container
     const container = urlForm.querySelector('.url-input-container');
     if (!container) {
-        console.error("TMDB Debug: URL input container not found");
         return;
     }
     
-    console.log(`TMDB Debug: Starting search for "${title}" as ${mediaType}`);
     
     // Remove any existing preview
     removeExistingPreview();
@@ -7739,7 +7736,6 @@ function performTMDBSearch(title, mediaType, season = null) {
         formData.append('season', season);
     }
     
-    console.log(`TMDB Debug: Making API request for "${searchTitle}"`);
     
     // Make the API request
     fetch('./include/fetch-tmdb.php', {
@@ -7747,43 +7743,31 @@ function performTMDBSearch(title, mediaType, season = null) {
         body: formData
     })
     .then(response => {
-        console.log("TMDB Debug: Response received");
         return response.json();
     })
     .then(data => {
         // Remove loading indicator
         loading.remove();
-        
-        console.log("TMDB Debug: API response data:", data);
+       
         
         if (data.success) {
-            // Debug logging for collections
-            if (mediaType === 'collection') {
-                console.log("TMDB Debug: Processing collection result");
-                console.log("TMDB Debug: hasMultiplePosters =", data.hasMultiplePosters);
-                console.log("TMDB Debug: allPosters count =", data.allPosters ? data.allPosters.length : 0);
-            }
-            
+
             // Check if we have multiple posters for collections
             if (mediaType === 'collection' && 
                 data.hasMultiplePosters && 
                 Array.isArray(data.allPosters) && 
                 data.allPosters.length > 1) {
-                
-                console.log("TMDB Debug: Showing multi-poster modal with", data.allPosters.length, "posters");
+               
                 
                 // DEBUG: Test modal creation
                 if (!document.getElementById('multiPosterModal')) {
-                    console.log("TMDB Debug: Creating multi-poster modal");
                     createMultiPosterModal();
                 } else {
-                    console.log("TMDB Debug: Multi-poster modal already exists");
                 }
                 
                 // Show multi-poster selection modal
                 showMultiPosterModal(data.allPosters);
             } else if (data.posterUrl) {
-                console.log("TMDB Debug: Using single poster URL");
                 
                 // Single poster handling
                 urlInput.value = data.posterUrl;
@@ -7820,20 +7804,16 @@ function performTMDBSearch(title, mediaType, season = null) {
                     urlInput.style.backgroundColor = '';
                 }, 1000);
             } else {
-                console.log("TMDB Debug: No poster URL found in response");
                 
                 // No poster URL available
                 showErrorMessage(container, mediaType);
             }
         } else {
-            console.log("TMDB Debug: API returned error", data.error);
-            
             // Show error message with enhanced styling
             showErrorMessage(container, mediaType);
         }
     })
     .catch(error => {
-        console.error("TMDB Debug: Fetch error", error);
         
         // Remove loading indicator
         loading.remove();
@@ -8385,9 +8365,6 @@ function showMultiPosterModal(posters) {
     const posterCount = document.getElementById('posterCount');
     const searchInput = document.getElementById('posterSearchInput');
     
-    // Debug the posters data
-    console.log("Posters data:", posters);
-    
     // Reset search input
     searchInput.value = '';
     
@@ -8462,54 +8439,12 @@ function showMultiPosterModal(posters) {
                         }
                         
                         // Find the container for preview
-                        const container = urlForm.querySelector('.url-input-container');
-                        if (container) {
-                            // Remove any existing preview
-                            const existingPreview = container.querySelector('.tmdb-poster-preview, .tmdb-loading, .tmdb-error-container');
-                            if (existingPreview) {
-                                existingPreview.remove();
-                            }
-                            
-                            // Create a new poster preview
-                            const preview = document.createElement('div');
-                            preview.className = 'tmdb-poster-preview';
-                            
-                            // Create magnifying glass icon for zoom
-                            const icon = document.createElement('div');
-                            icon.className = 'tmdb-poster-icon';
-                            icon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <circle cx="11" cy="11" r="8"></circle>
-                                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                            </svg>`;
-                            
-                            // Create image with loading behavior
-                            const img = document.createElement('img');
-                            img.alt = 'Poster preview';
-                            img.style.opacity = '0';
-                            img.style.transition = 'opacity 0.3s';
-                            
-                            img.onload = function() {
-                                img.style.opacity = '1';
-                            };
-                            
-                            img.src = posterUrl;
-                            
-                            // Add elements to preview
-                            preview.appendChild(img);
-                            preview.appendChild(icon);
-                            
-                            // Add preview to container
-                            container.appendChild(preview);
-                            
-                            // Highlight the URL input
-                            urlInput.style.borderColor = 'var(--accent-primary)';
-                            
-                            // Flash effect to indicate change
-                            urlInput.style.backgroundColor = 'rgba(229, 160, 13, 0.2)';
-                            setTimeout(() => {
-                                urlInput.style.backgroundColor = '';
-                            }, 1000);
-                        }
+						const container = urlForm.querySelector('.url-input-container');
+						if (container) {
+							// Instead of manually creating a preview element,
+							// use the existing function that already has the click handler attached
+							handleManualUrlInput(posterUrl);
+						}
                     }
                 }
             });
@@ -8697,7 +8632,6 @@ function performTMDBSearch(title, mediaType, season = null) {
             // Check if we have multiple posters for collections
             if (mediaType === 'collection' && data.hasMultiplePosters && Array.isArray(data.allPosters) && data.allPosters.length > 1) {
                 // Ensure all posters have a name (debugging check)
-                console.log("Collection posters:", data.allPosters);
                 
                 // Show multi-poster selection modal
                 showMultiPosterModal(data.allPosters);
