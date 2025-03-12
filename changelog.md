@@ -155,3 +155,9 @@
 ### Fixed
 
 - Fixed issue of not being able to search for orphaned files
+
+## [1.3.1]
+
+### Fixed
+
+- Fixed bug in auto import causing it to fail
