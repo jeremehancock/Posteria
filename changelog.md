@@ -136,3 +136,9 @@
 ### Fixed
 
 - Cleaned up code formatting
+
+## [1.2.8]
+
+### Fixed
+
+- Removed unused code
