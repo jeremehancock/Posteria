@@ -76,8 +76,6 @@ $config = [
 	'maxFileSize' => getIntEnvWithFallback('MAX_FILE_SIZE', 5 * 1024 * 1024) // 5MB default
 ];
 
-$loginError = '';
-
 // Get current directory filter from URL parameter
 $currentDirectory = isset($_GET['directory']) ? trim($_GET['directory']) : '';
 if (!empty($currentDirectory) && !isset($config['directories'][$currentDirectory])) {
@@ -652,40 +650,6 @@ if (isLoggedIn() && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['actio
 	}
 
 	echo json_encode($response);
-	exit;
-}
-
-// Handle file move
-if (isLoggedIn() && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'move') {
-	header('Content-Type: application/json');
-
-	$filename = isset($_POST['filename']) ? $_POST['filename'] : '';
-	$sourceDirectory = isset($_POST['source_directory']) ? $_POST['source_directory'] : '';
-	$targetDirectory = isset($_POST['target_directory']) ? $_POST['target_directory'] : '';
-
-	if (
-		empty($filename) || empty($sourceDirectory) || empty($targetDirectory) ||
-		!isset($config['directories'][$sourceDirectory]) || !isset($config['directories'][$targetDirectory])
-	) {
-		echo json_encode(['success' => false, 'error' => 'Invalid request']);
-		exit;
-	}
-
-	$sourcePath = $config['directories'][$sourceDirectory] . $filename;
-	$targetPath = $config['directories'][$targetDirectory] . $filename;
-
-	// Security checks
-	if (!isValidFilename($filename) || !file_exists($sourcePath)) {
-		echo json_encode(['success' => false, 'error' => 'Invalid file']);
-		exit;
-	}
-
-	// Check if a file with the same name exists in target directory
-	if (file_exists($targetPath)) {
-		echo json_encode(['success' => false, 'error' => 'A file with this name already exists in the target directory']);
-		exit;
-	}
-
 	exit;
 }
 
@@ -3772,8 +3736,6 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			// Input elements
 			const deleteFilenameInput = document.getElementById('deleteFilename');
 			const deleteDirectoryInput = document.getElementById('deleteDirectory');
-			const oldFilenameInput = document.getElementById('oldFilename');
-			const newFilenameInput = document.getElementById('newFilename');
 			const fileChangePosterInput = document.getElementById('fileChangePosterInput');
 
 			// Error elements
