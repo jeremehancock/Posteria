@@ -369,17 +369,32 @@ function normalizeString($str)
 	return $str;
 }
 
-// Updated filter images function using the improved fuzzy search
 function filterImages($images, $searchQuery)
 {
 	if (empty($searchQuery)) {
 		return $images;
 	}
 
+	$searchQueryLower = strtolower(trim($searchQuery));
 	$filteredImages = [];
+
+	// Special case for searching "orphaned"
+	$searchingForOrphaned = ($searchQueryLower === 'orphaned');
+
 	foreach ($images as $image) {
 		$filename = pathinfo($image['filename'], PATHINFO_FILENAME);
+		$fullFilename = strtolower($image['filename']);
 
+		// Check for special search terms first
+		if ($searchingForOrphaned) {
+			// If searching for orphaned, just check if file doesn't have Plex tag
+			if (strpos($fullFilename, '**plex**') === false) {
+				$filteredImages[] = $image;
+			}
+			continue;
+		}
+
+		// Regular search for other terms
 		// Clean filename for searching - removes tags and metadata formatting
 		$cleanFilename = $filename;
 		// Remove Plex and Orphaned tags
@@ -3528,13 +3543,16 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 					data-full-text="<?php echo htmlspecialchars(pathinfo($image['filename'], PATHINFO_FILENAME)); ?>">
 					<?php
 					$filename = pathinfo($image['filename'], PATHINFO_FILENAME);
-					// First remove Plex and Orphaned tags
-					$filename = str_replace(['**Plex**', '**Orphaned**'], '', $filename);
-					// Then remove both single [ID] and double [[Library]] brackets with their contents
-					$filename = preg_replace('/\[\[[^\]]*\]\]|\[[^\]]*\]/', '', $filename);
-					// Trim any resulting extra spaces
-					$filename = trim($filename);
-					echo htmlspecialchars($filename);
+					// Check if this is an orphaned file (doesn't contain Plex tag)
+					$isOrphaned = (strpos(strtolower($image['filename']), '**plex**') === false);
+
+					// Create a clean version of the filename (without tags and brackets)
+					$cleanFilename = str_replace(['**Plex**', '**Orphaned**'], '', $filename);
+					$cleanFilename = preg_replace('/\[\[[^\]]*\]\]|\[[^\]]*\]/', '', $cleanFilename);
+					$cleanFilename = trim($cleanFilename);
+
+					// Display the clean filename, but append "[Orphaned]" if it's orphaned
+					echo htmlspecialchars($cleanFilename) . ($isOrphaned ? ' [Orphaned]' : '');
 					?>
 				</div>
 			</div>

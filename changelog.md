@@ -149,3 +149,9 @@
 
 - Fixed edge case issue where multi library import followed by single would create orphans incorrectly
 - Fixed edge case issue of multi library import for Collections creating duplicates when followed by single library import
+
+## [1.3.0]
+
+### Fixed
+
+- Fixed issue of not being able to search for orphaned files
