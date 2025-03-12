@@ -218,25 +218,38 @@ function getImageFiles($config, $currentDirectory = '') {
     return $files;
 }
 
-// Fuzzy search implementation
-function fuzzySearch($pattern, $str) {
-    $pattern = strtolower($pattern);
-    $str = strtolower($str);
-    $patternLength = strlen($pattern);
-    $strLength = strlen($str);
+// Improved fuzzy search implementation that handles special characters
+function improvedFuzzySearch($pattern, $str) {
+    // Check if pattern is directly in the original string (case insensitive)
+    if (stripos($str, $pattern) !== false) {
+        return true;
+    }
+    
+    // Normalize both strings by removing accents and special characters for comparison
+    $normalizedPattern = normalizeString(strtolower($pattern));
+    $normalizedStr = normalizeString(strtolower($str));
+    
+    // Direct check with normalized strings
+    if (stripos($normalizedStr, $normalizedPattern) !== false) {
+        return true;
+    }
+    
+    // Continue with character-by-character fuzzy matching if direct matches fail
+    $patternLength = mb_strlen($normalizedPattern);
+    $strLength = mb_strlen($normalizedStr);
     
     if ($patternLength > $strLength) {
         return false;
     }
     
     if ($patternLength === $strLength) {
-        return $pattern === $str;
+        return $normalizedPattern === $normalizedStr;
     }
     
     $previousIndex = -1;
     for ($i = 0; $i < $patternLength; $i++) {
-        $currentChar = $pattern[$i];
-        $index = strpos($str, $currentChar, $previousIndex + 1);
+        $currentChar = mb_substr($normalizedPattern, $i, 1);
+        $index = mb_strpos($normalizedStr, $currentChar, $previousIndex + 1);
         
         if ($index === false) {
             return false;
@@ -248,7 +261,55 @@ function fuzzySearch($pattern, $str) {
     return true;
 }
 
-// Filter images based on search query
+// Function to normalize strings by removing accents and special characters
+function normalizeString($str) {
+    // Check if the Transliterator extension is available
+    if (function_exists('transliterator_transliterate')) {
+        // Convert accented characters to their ASCII equivalents
+        $str = transliterator_transliterate('Any-Latin; Latin-ASCII', $str);
+    } else {
+        // Fallback for servers without the Transliterator extension
+        $replacements = [
+            // Common accented characters and their replacements
+            'à' => 'a', 'á' => 'a', 'â' => 'a', 'ã' => 'a', 'ä' => 'a', 'å' => 'a', 'æ' => 'ae',
+            'ç' => 'c', 'č' => 'c',
+            'è' => 'e', 'é' => 'e', 'ê' => 'e', 'ë' => 'e',
+            'ì' => 'i', 'í' => 'i', 'î' => 'i', 'ï' => 'i',
+            'ñ' => 'n', 'ń' => 'n',
+            'ò' => 'o', 'ó' => 'o', 'ô' => 'o', 'õ' => 'o', 'ö' => 'o', 'ø' => 'o',
+            'ù' => 'u', 'ú' => 'u', 'û' => 'u', 'ü' => 'u',
+            'ý' => 'y', 'ÿ' => 'y',
+            'š' => 's', 'ś' => 's', 'ß' => 'ss',
+            'ž' => 'z', 'ź' => 'z',
+            'đ' => 'd',
+            'ł' => 'l',
+            'ō' => 'o', 'ū' => 'u', // Special case for Shōgun example
+            // Uppercase variants
+            'À' => 'A', 'Á' => 'A', 'Â' => 'A', 'Ã' => 'A', 'Ä' => 'A', 'Å' => 'A', 'Æ' => 'AE',
+            'Ç' => 'C', 'Č' => 'C',
+            'È' => 'E', 'É' => 'E', 'Ê' => 'E', 'Ë' => 'E',
+            'Ì' => 'I', 'Í' => 'I', 'Î' => 'I', 'Ï' => 'I',
+            'Ñ' => 'N', 'Ń' => 'N',
+            'Ò' => 'O', 'Ó' => 'O', 'Ô' => 'O', 'Õ' => 'O', 'Ö' => 'O', 'Ø' => 'O',
+            'Ù' => 'U', 'Ú' => 'U', 'Û' => 'U', 'Ü' => 'U',
+            'Ý' => 'Y', 'Ÿ' => 'Y',
+            'Š' => 'S', 'Ś' => 'S',
+            'Ž' => 'Z', 'Ź' => 'Z',
+            'Đ' => 'D',
+            'Ł' => 'L',
+            'Ō' => 'O', 'Ū' => 'U'
+        ];
+        
+        $str = strtr($str, $replacements);
+    }
+    
+    // Remove any remaining non-alphanumeric characters except spaces
+    $str = preg_replace('/[^\p{L}\p{N}\s]/u', '', $str);
+    
+    return $str;
+}
+
+// Updated filter images function using the improved fuzzy search
 function filterImages($images, $searchQuery) {
     if (empty($searchQuery)) {
         return $images;
@@ -257,7 +318,18 @@ function filterImages($images, $searchQuery) {
     $filteredImages = [];
     foreach ($images as $image) {
         $filename = pathinfo($image['filename'], PATHINFO_FILENAME);
-        if (fuzzySearch($searchQuery, $filename)) {
+        
+        // Clean filename for searching - removes tags and metadata formatting
+        $cleanFilename = $filename;
+        // Remove Plex and Orphaned tags
+        $cleanFilename = str_replace(['**Plex**', '**Orphaned**'], '', $cleanFilename);
+        // Remove both single [ID] and double [[Library]] brackets with their contents
+        $cleanFilename = preg_replace('/\[\[[^\]]*\]\]|\[[^\]]*\]/', '', $cleanFilename);
+        // Trim any resulting extra spaces
+        $cleanFilename = trim($cleanFilename);
+        
+        // Check if the search query matches the clean filename
+        if (improvedFuzzySearch($searchQuery, $cleanFilename)) {
             $filteredImages[] = $image;
         }
     }
