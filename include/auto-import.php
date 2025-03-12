@@ -870,9 +870,13 @@ function processBatch($items, $serverUrl, $token, $targetDir, $mediaType = '', $
     return $results;
 }
 
-/**
- * Modified handleOrphanedPosters function that uses isValidMediaId helper
- */
+// Add this helper function
+function fileMatchesLibrary($filename, $libraryName)
+{
+    // Look for library name in double brackets [[LibraryName]]
+    return strpos($filename, "[[" . $libraryName . "]]") !== false;
+}
+
 function handleOrphanedPosters(
     $targetDir,
     $currentImportIds,
@@ -893,83 +897,64 @@ function handleOrphanedPosters(
         return $results;
     }
 
-    // Skip orphaning process if we're not storing IDs
-    if (empty($libraryId) || empty($mediaType)) {
-        logMessage("Skipping orphan check because libraryId or mediaType is empty");
-        return $results;
+    // Get the current library name
+    $currentLibraryName = '';
+    if (!empty($libraryId)) {
+        $currentLibraryName = getLibraryNameById(
+            $GLOBALS['plex_config']['server_url'],
+            $GLOBALS['plex_config']['token'],
+            $libraryId
+        );
     }
 
-    // Log the current import IDs for debugging
-    logDebug("Current import IDs for library $libraryId count: " . count($currentImportIds));
-    if (!empty($currentImportIds)) {
-        logDebug("First few import IDs: " . implode(", ", array_slice($currentImportIds, 0, 5)));
-    }
+    // Get all valid IDs based on media type
+    $allValidIds = getAllValidIds($mediaType);
 
-    // Store the current import IDs for this library
-    if (!empty($currentImportIds)) {
-        // Using the existing storage function from plex-id-storage.php
-        logDebug("Storing " . count($currentImportIds) . " valid IDs for $mediaType library $libraryId");
-        storeValidIds($currentImportIds, $mediaType, $libraryId, true);
+    // Add current import IDs
+    $allValidIds = array_merge($allValidIds, $currentImportIds);
+    $allValidIds = array_unique($allValidIds);
 
-        // Make sure to sync to storage
-        syncSessionToStorage();
-    }
+    logDebug("Processing orphan detection", [
+        'mediaType' => $mediaType,
+        'currentLibrary' => $currentLibraryName,
+        'validIdCount' => count($allValidIds)
+    ]);
 
-    // Get all files in the directory
+    // Process files
     $files = glob($targetDir . '/*');
-    if (empty($files)) {
-        logMessage("No files found in directory: {$targetDir}");
-        return $results;
-    }
-
-    logDebug("Found " . count($files) . " files in $targetDir");
-
-    // Process files and check for orphans
-    $plexTag = '**Plex**';
-
     foreach ($files as $file) {
-        if (!is_file($file)) {
+        if (!is_file($file))
             continue;
-        }
 
         $filename = basename($file);
-
-        // Skip files that are already marked as orphaned
-        if (strpos($filename, $orphanedTag) !== false) {
+        if (strpos($filename, $orphanedTag) !== false)
             continue;
+        if (strpos($filename, '**Plex**') === false)
+            continue;
+
+        // Only process files from this library
+        if (!empty($currentLibraryName)) {
+            if (!fileMatchesLibrary($filename, $currentLibraryName)) {
+                continue; // Skip files from other libraries
+            }
         }
 
-        // Skip files that don't have the Plex tag
-        if (strpos($filename, $plexTag) === false) {
-            continue;
-        }
-
-        // Extract the ID from the filename
-        $idMatch = [];
+        // Extract ID and check if it's valid
         if (preg_match('/\[([a-f0-9]+)\]/', $filename, $idMatch)) {
             $fileId = $idMatch[1];
+            if (!in_array($fileId, $allValidIds)) {
+                $newFilename = str_replace('**Plex**', $orphanedTag, $filename);
+                $newPath = $targetDir . '/' . $newFilename;
 
-            // Check against ALL valid IDs using our helper function
-            if (!isValidMediaId($mediaType, $fileId)) {
-                // Don't mark as orphaned if it's in the current import
-                if (!in_array($fileId, $currentImportIds)) {
-                    logDebug("Marking as orphaned: $filename (ID: $fileId not found in valid IDs)");
-
-                    // Replace **Plex** with **Orphaned** in the filename
-                    $newFilename = str_replace($plexTag, $orphanedTag, $filename);
-                    $newPath = $targetDir . '/' . $newFilename;
-
-                    if (rename($file, $newPath)) {
-                        $results['orphaned']++;
-                        $results['details'][] = "$filename -> $newFilename";
-                    } else {
-                        $results['unmarked']++;
-                    }
+                if (rename($file, $newPath)) {
+                    $results['orphaned']++;
+                    $results['details'][] = [
+                        'oldName' => $filename,
+                        'newName' => $newFilename
+                    ];
                 } else {
-                    logDebug("ID $fileId found in current import IDs, not marking as orphaned");
+                    $results['unmarked']++;
                 }
-            } else {
-                logDebug("ID $fileId found in valid IDs, keeping as Plex file");
             }
         }
     }

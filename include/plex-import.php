@@ -1172,12 +1172,14 @@ try {
         syncSessionToStorage();
     }
 
-    /**
-     * Improved function to detect orphaned files more consistently
-     * 
-     * This replaces the existing implementation to ensure all media types
-     * are handled the same way and orphaned detection works across libraries.
-     */
+    // Add this helper function to check if a file belongs to a specific library
+    function fileMatchesLibrary($filename, $libraryName)
+    {
+        // Look for library name in double brackets [[LibraryName]]
+        return strpos($filename, "[[" . $libraryName . "]]") !== false;
+    }
+
+    // Modified improvedMarkOrphanedPosters function
     function improvedMarkOrphanedPosters(
         $targetDir,
         $currentImportIds,
@@ -1195,134 +1197,67 @@ try {
         ];
 
         if (!is_dir($targetDir)) {
-            logDebug("Target directory does not exist: {$targetDir}");
             return $results;
         }
 
-        // First, ensure the current import IDs are stored correctly
-        if (!empty($currentImportIds) && !empty($libraryId) && !empty($mediaType)) {
-            // In refresh mode, we replace instead of merge
-            storeValidIds($currentImportIds, $mediaType, $libraryId, $refreshMode);
+        // Check if this is a single-library import
+        $libraryIds = isset($_POST['libraryIds']) ? explode(',', $_POST['libraryIds']) : [];
+        $isSingleLibrary = count($libraryIds) === 1;
 
-            // Force synchronization to ensure all storage is up to date
-            syncSessionToStorage();
+        // Get the library name for the current library
+        $currentLibraryName = '';
+        if ($isSingleLibrary) {
+            $currentLibraryName = getLibraryNameById(
+                $GLOBALS['plex_config']['server_url'],
+                $GLOBALS['plex_config']['token'],
+                $libraryId
+            );
         }
 
-        // Get ALL valid IDs for this media type across ALL libraries
-        $allValidIds = getAllValidIds($mediaType);
+        // Get valid IDs based on import type
+        $allValidIds = [];
+        if ($isSingleLibrary) {
+            // For single library, only use current import IDs
+            $allValidIds = $currentImportIds;
+        } else {
+            // For multi-library, use all valid IDs
+            $allValidIds = getAllValidIds($mediaType);
+            $allValidIds = array_merge($allValidIds, $currentImportIds);
+        }
+        $allValidIds = array_unique($allValidIds);
 
-        // Log the state for debugging
-        logDebug("Orphaned detection for {$mediaType} - library {$libraryId}", [
-            'importedIdsCount' => count($currentImportIds),
-            'validIdsCount' => count($allValidIds),
-            'refreshMode' => $refreshMode ? 'Replace' : 'Merge'
+        logDebug("Processing orphan detection", [
+            'mediaType' => $mediaType,
+            'isSingleLibrary' => $isSingleLibrary,
+            'currentLibrary' => $currentLibraryName,
+            'validIdCount' => count($allValidIds)
         ]);
 
-        // Get all files in the directory
+        // Process files
         $files = glob($targetDir . '/*');
-        if (empty($files)) {
-            logDebug("No files found in directory: {$targetDir}");
-            return $results;
-        }
-
-        $plexTag = '**Plex**';
-
-        // For seasons with show titles, prepare normalized values for comparison
-        $normalizedShowTitle = '';
-        if ($mediaType === 'seasons' && !empty($showTitle)) {
-            // First, convert HTML entities to their corresponding characters
-            $decodedTitle = html_entity_decode($showTitle, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-
-            // Only remove unsafe characters but preserve accents, ampersands, etc.
-            $normalizedShowTitle = preg_replace('/[\/\\\:\*\?"<>\|]/', '', $decodedTitle);
-            $normalizedShowTitle = trim(strtolower($normalizedShowTitle));
-
-            logDebug("Normalized show title for comparison: '{$normalizedShowTitle}' from '{$showTitle}'");
-        }
-
         foreach ($files as $file) {
-            if (!is_file($file)) {
+            if (!is_file($file))
                 continue;
-            }
 
             $filename = basename($file);
-
-            // Skip files that are already marked as orphaned
-            if (strpos($filename, $orphanedTag) !== false) {
+            if (strpos($filename, $orphanedTag) !== false)
                 continue;
-            }
-
-            // Skip files that don't have the Plex tag
-            if (strpos($filename, $plexTag) === false) {
+            if (strpos($filename, '**Plex**') === false)
                 continue;
-            }
 
-            // Special handling for different media types
-            if ($mediaType === 'collections') {
-                // Process collection files differently based on library type
-                if (!empty($libraryType)) {
-                    // Check if this is a collection file
-                    $isCollection = strpos($filename, 'Collection') !== false ||
-                        strpos($filename, '(Movies)') !== false ||
-                        strpos($filename, '(TV)') !== false;
-
-                    if ($isCollection) {
-                        // Check if this collection matches our library type
-                        $isMatch = false;
-
-                        if ($libraryType === 'movie' && strpos($filename, '(Movies)') !== false) {
-                            $isMatch = true;
-                        } else if ($libraryType === 'show' && strpos($filename, '(TV)') !== false) {
-                            $isMatch = true;
-                        } else if (
-                            strpos($filename, '(Movies)') === false &&
-                            strpos($filename, '(TV)') === false
-                        ) {
-                            // Generic collection without type marker - consider it a match
-                            $isMatch = true;
-                        }
-
-                        // Only process matching collections
-                        if (!$isMatch) {
-                            continue;
-                        }
-                    }
-                }
-            } else if ($mediaType === 'seasons') {
-                if (!empty($normalizedShowTitle)) {
-                    // First decode HTML entities and then normalize the filename for comparison
-                    // using the same method as for show title - preserving special characters
-                    $decodedFilename = html_entity_decode($filename, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-                    $normalizedFilename = preg_replace('/[\/\\\:\*\?"<>\|]/', '', $decodedFilename);
-                    $normalizedFilename = trim(strtolower($normalizedFilename));
-
-                    // If we have a show title, check if the normalized filename contains it
-                    if (strpos($normalizedFilename, $normalizedShowTitle) === false) {
-                        // This season belongs to a different show, skip it
-                        continue;
-                    }
+            // For single library import, only process files from this library
+            if ($isSingleLibrary && !empty($currentLibraryName)) {
+                if (!fileMatchesLibrary($filename, $currentLibraryName)) {
+                    continue; // Skip files from other libraries
                 }
             }
 
-            // Extract the ID from the filename
-            $idMatch = [];
+            // Extract ID and check if it's valid
             if (preg_match('/\[([a-f0-9]+)\]/', $filename, $idMatch)) {
                 $fileId = $idMatch[1];
-
-                // Check against ALL valid IDs, not just current import
                 if (!in_array($fileId, $allValidIds)) {
-                    // Replace **Plex** with **Orphaned** in the filename
-                    $newFilename = str_replace($plexTag, $orphanedTag, $filename);
+                    $newFilename = str_replace('**Plex**', $orphanedTag, $filename);
                     $newPath = $targetDir . '/' . $newFilename;
-
-                    logDebug("Marking file as orphaned", [
-                        'oldName' => $filename,
-                        'newName' => $newFilename,
-                        'fileId' => $fileId,
-                        'mediaType' => $mediaType,
-                        'libraryId' => $libraryId,
-                        'found_in_validIds' => false
-                    ]);
 
                     if (rename($file, $newPath)) {
                         $results['orphaned']++;
@@ -1332,28 +1267,10 @@ try {
                         ];
                     } else {
                         $results['unmarked']++;
-                        logDebug("Failed to rename orphaned file", [
-                            'oldPath' => $file,
-                            'newPath' => $newPath,
-                            'error' => error_get_last()
-                        ]);
                     }
-                } else {
-                    logDebug("File ID found in valid IDs, not orphaned", [
-                        'filename' => $filename,
-                        'fileId' => $fileId
-                    ]);
                 }
-            } else {
-                logDebug("No ID match found in filename: {$filename}");
             }
         }
-
-        logDebug("Orphaned detection complete", [
-            'mediaType' => $mediaType,
-            'orphaned' => $results['orphaned'],
-            'unmarked' => $results['unmarked']
-        ]);
 
         return $results;
     }
