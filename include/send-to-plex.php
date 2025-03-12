@@ -32,27 +32,27 @@
 header('Content-Type: application/json');
 
 // Make sure we catch all errors
-set_error_handler(function($errno, $errstr, $errfile, $errline) {
+set_error_handler(function ($errno, $errstr, $errfile, $errline) {
     logDebug("PHP Error", [
         'errno' => $errno,
         'errstr' => $errstr,
         'errfile' => $errfile,
         'errline' => $errline
     ]);
-    
+
     // Return true to prevent the standard PHP error handler from running
     return true;
 });
 
 // Make sure all exceptions are caught
-set_exception_handler(function($exception) {
+set_exception_handler(function ($exception) {
     logDebug("Uncaught Exception", [
         'message' => $exception->getMessage(),
         'file' => $exception->getFile(),
         'line' => $exception->getLine(),
         'trace' => $exception->getTraceAsString()
     ]);
-    
+
     // Send a JSON response with the error
     header('Content-Type: application/json');
     echo json_encode(['success' => false, 'error' => 'Unhandled exception: ' . $exception->getMessage()]);
@@ -64,18 +64,21 @@ ini_set('display_errors', 0);
 error_reporting(E_ALL);
 
 // Define helper functions
-function getEnvWithFallback($key, $default) {
+function getEnvWithFallback($key, $default)
+{
     $value = getenv($key);
     return $value !== false ? $value : $default;
 }
 
-function getIntEnvWithFallback($key, $default) {
+function getIntEnvWithFallback($key, $default)
+{
     $value = getenv($key);
     return $value !== false ? intval($value) : $default;
 }
 
 // Log function for debugging
-function logDebug($message, $data = null) {
+function logDebug($message, $data = null)
+{
     $logMessage = date('Y-m-d H:i:s') . ": " . $message;
     if ($data !== null) {
         $logMessage .= "\nData: " . print_r($data, true);
@@ -138,7 +141,8 @@ try {
     $_SESSION['login_time'] = time();
 
     // Helper functions (reused from your existing code)
-    function getPlexHeaders($token) {
+    function getPlexHeaders($token)
+    {
         return [
             'Accept' => 'application/json',
             'X-Plex-Token' => $token,
@@ -148,9 +152,10 @@ try {
         ];
     }
 
-    function makeApiRequest($url, $headers, $method = 'GET', $data = null, $expectJson = true) {
+    function makeApiRequest($url, $headers, $method = 'GET', $data = null, $expectJson = true)
+    {
         global $plex_config;
-        
+
         logDebug("Making API request", [
             'url' => $url,
             'method' => $method,
@@ -158,7 +163,7 @@ try {
             'data' => $data,
             'expectJson' => $expectJson
         ]);
-        
+
         $ch = curl_init();
         $curlOptions = [
             CURLOPT_URL => $url,
@@ -171,7 +176,7 @@ try {
             CURLOPT_TIMEOUT => $plex_config['request_timeout'],
             CURLOPT_VERBOSE => true
         ];
-        
+
         if ($method === 'POST') {
             $curlOptions[CURLOPT_POST] = true;
             if ($data !== null) {
@@ -185,15 +190,15 @@ try {
         } else if ($method === 'DELETE') {
             $curlOptions[CURLOPT_CUSTOMREQUEST] = 'DELETE';
         }
-        
+
         curl_setopt_array($ch, $curlOptions);
-        
+
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $error = curl_error($ch);
         $info = curl_getinfo($ch);
         curl_close($ch);
-        
+
         // Log the response info
         logDebug("API response", [
             'http_code' => $httpCode,
@@ -202,17 +207,17 @@ try {
             'curl_info' => $info,
             'response_preview' => $expectJson ? substr($response, 0, 500) . (strlen($response) > 500 ? '...' : '') : '[BINARY DATA]'
         ]);
-        
+
         if ($response === false) {
             logDebug("API request failed: " . $error);
             throw new Exception("API request failed: " . $error);
         }
-        
+
         if ($httpCode < 200 || $httpCode >= 300) {
             logDebug("API request returned HTTP code: " . $httpCode);
             throw new Exception("API request returned HTTP code: " . $httpCode);
         }
-        
+
         // Only validate JSON if we expect JSON
         if ($expectJson && !empty($response)) {
             // Try to parse JSON to verify it's valid
@@ -222,14 +227,15 @@ try {
                 throw new Exception("Invalid JSON response: " . json_last_error_msg());
             }
         }
-        
+
         return $response;
     }
 
     // Function to remove Overlay label by executing the bash script
-    function removeOverlayLabel($ratingKey, $mediaType) {
+    function removeOverlayLabel($ratingKey, $mediaType)
+    {
         global $plex_config;
-        
+
         // Check if the feature is enabled
         if (empty($plex_config['remove_overlay_label'])) {
             return [
@@ -237,11 +243,11 @@ try {
                 'error' => 'Overlay label removal is disabled in configuration'
             ];
         }
-        
+
         try {
             // Define the path to the script - adjust this to match your actual path
             $scriptPath = __DIR__ . '/remove-overlay-label.sh';
-            
+
             // Check if the script exists
             if (!file_exists($scriptPath)) {
                 return [
@@ -249,30 +255,30 @@ try {
                     'error' => 'Overlay label removal script not found at: ' . $scriptPath
                 ];
             }
-            
+
             // Ensure the script is executable
             if (!is_executable($scriptPath)) {
                 chmod($scriptPath, 0755);
             }
-            
+
             // Ensure Plex server URL doesn't have trailing slash
             $plexServerUrl = rtrim($plex_config['server_url'], '/');
-            
+
             // Build the command to execute
-            $command = escapeshellcmd($scriptPath) . ' ' . 
-                       escapeshellarg($ratingKey) . ' ' . 
-                       escapeshellarg($plexServerUrl) . ' ' . 
-                       escapeshellarg($plex_config['token']) . ' 2>&1';
-            
+            $command = escapeshellcmd($scriptPath) . ' ' .
+                escapeshellarg($ratingKey) . ' ' .
+                escapeshellarg($plexServerUrl) . ' ' .
+                escapeshellarg($plex_config['token']) . ' 2>&1';
+
             // Execute the script and capture output
             $output = [];
             $returnCode = 0;
             exec($command, $output, $returnCode);
-            
+
             // Log the complete output
             $outputStr = implode("\n", $output);
             logDebug("Overlay label removal output: " . $outputStr);
-            
+
             // Check return code
             if ($returnCode === 0) {
                 return [
@@ -302,10 +308,10 @@ try {
             echo json_encode(['success' => false, 'error' => 'Missing required parameters']);
             exit;
         }
-        
+
         $filename = $_POST['filename'];
         $directory = $_POST['directory'];
-        
+
         // Define directories based on your existing code
         $directories = [
             'movies' => '../posters/movies/',
@@ -313,15 +319,15 @@ try {
             'tv-seasons' => '../posters/tv-seasons/',
             'collections' => '../posters/collections/'
         ];
-        
+
         // Check if the directory is valid
         if (!isset($directories[$directory])) {
             echo json_encode(['success' => false, 'error' => 'Invalid directory']);
             exit;
         }
-        
+
         $filePath = $directories[$directory] . $filename;
-        
+
         // Check if the file exists
         if (!file_exists($filePath)) {
             echo json_encode(['success' => false, 'error' => 'File not found: ' . $filePath]);
@@ -334,10 +340,10 @@ try {
             echo json_encode(['success' => false, 'error' => 'Could not extract ratingKey from filename']);
             exit;
         }
-        
+
         $ratingKey = $matches[1];
         logDebug("Extracted ratingKey", ['ratingKey' => $ratingKey]);
-        
+
         // Determine media type based on directory
         $mediaType = '';
         switch ($directory) {
@@ -357,14 +363,14 @@ try {
                 echo json_encode(['success' => false, 'error' => 'Unsupported media type']);
                 exit;
         }
-        
+
         // Read the image file
         $imageData = file_get_contents($filePath);
         if ($imageData === false) {
             echo json_encode(['success' => false, 'error' => 'Failed to read image file']);
             exit;
         }
-        
+
         // Construct URL for poster upload based on media type
         $plexServerUrl = rtrim($plex_config['server_url'], '/');
         $uploadUrl = "";
@@ -373,7 +379,7 @@ try {
         if ($mediaType === 'collection') {
             // Create a unique boundary for multipart data
             $boundary = md5(uniqid());
-            
+
             // Let's try multiple methods and endpoints
             $methods = [
                 // Method 1: Upload to posters endpoint with POST (most common method)
@@ -402,24 +408,24 @@ try {
                     'multipart' => true
                 ]
             ];
-            
+
             $success = false;
             $lastHttpCode = 0;
             $lastError = '';
-            
+
             // Try each method until one succeeds
             foreach ($methods as $index => $method) {
                 logDebug("Trying collection poster upload method " . ($index + 1), $method);
-                
+
                 // Create headers for the Plex API request for collections
                 $headers = [];
                 foreach (getPlexHeaders($plex_config['token']) as $key => $value) {
                     $headers[] = $key . ': ' . $value;
                 }
-                
+
                 // Add content type header
                 $headers[] = 'Content-Type: ' . $method['content_type'];
-                
+
                 // Prepare data based on whether we're using multipart or not
                 $postData = $imageData;
                 if (isset($method['multipart']) && $method['multipart']) {
@@ -430,7 +436,7 @@ try {
                     $postData .= $imageData . "\r\n";
                     $postData .= "--{$boundary}--\r\n";
                 }
-                
+
                 // Now we set up the curl request
                 $ch = curl_init();
                 $curlOptions = [
@@ -443,7 +449,7 @@ try {
                     CURLOPT_TIMEOUT => $plex_config['request_timeout'],
                     CURLOPT_VERBOSE => true
                 ];
-                
+
                 if ($method['method'] === 'POST') {
                     $curlOptions[CURLOPT_POST] = true;
                     $curlOptions[CURLOPT_POSTFIELDS] = $postData;
@@ -451,22 +457,22 @@ try {
                     $curlOptions[CURLOPT_CUSTOMREQUEST] = 'PUT';
                     $curlOptions[CURLOPT_POSTFIELDS] = $postData;
                 }
-                
+
                 curl_setopt_array($ch, $curlOptions);
-                
+
                 // Execute the request for collection
                 $response = curl_exec($ch);
                 $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
                 $error = curl_error($ch);
                 curl_close($ch);
-                
+
                 // Log the result
                 logDebug("Method " . ($index + 1) . " result", [
                     'http_code' => $httpCode,
                     'error' => $error,
                     'response_preview' => substr($response, 0, 200)
                 ]);
-                
+
                 // Check if this method succeeded
                 if ($httpCode >= 200 && $httpCode < 300) {
                     $success = true;
@@ -478,19 +484,19 @@ try {
                     $lastError = $error;
                 }
             }
-            
+
             // If successful, try to trigger a refresh of the collection
             if ($success) {
                 // Wait briefly for Plex to process the upload
                 sleep(1);
-                
+
                 // Attempt to refresh the collection to apply the change
                 $refreshUrl = "{$plexServerUrl}/library/metadata/{$ratingKey}/refresh";
                 $refreshHeaders = [];
                 foreach (getPlexHeaders($plex_config['token']) as $key => $value) {
                     $refreshHeaders[] = $key . ': ' . $value;
                 }
-                
+
                 // Make the refresh request
                 $refreshCh = curl_init();
                 curl_setopt_array($refreshCh, [
@@ -501,34 +507,34 @@ try {
                     CURLOPT_SSL_VERIFYPEER => false,
                     CURLOPT_SSL_VERIFYHOST => false
                 ]);
-                
+
                 $refreshResponse = curl_exec($refreshCh);
                 $refreshHttpCode = curl_getinfo($refreshCh, CURLINFO_HTTP_CODE);
                 curl_close($refreshCh);
-                
+
                 logDebug("Collection refresh attempt", [
                     'http_code' => $refreshHttpCode
                 ]);
-                
+
                 // Check if we should attempt to remove overlay label
                 $labelResult = [
                     'success' => false,
                     'attempted' => false
                 ];
-                
+
                 if (!empty($plex_config['remove_overlay_label'])) {
                     logDebug("Attempting to remove Overlay label for collection: $ratingKey");
                     $labelResult = removeOverlayLabel($ratingKey, $mediaType);
                     $labelResult['attempted'] = true;
                 }
-                
+
                 // Return result with label removal info if attempted
                 if ($labelResult['attempted']) {
                     echo json_encode([
-                        'success' => true, 
-                        'message' => 'Collection poster successfully sent to Plex. ' . 
-                                    ($labelResult['success'] ? 'Overlay label was also removed.' : 'However, failed to remove Overlay label: ' . 
-                                    (isset($labelResult['error']) ? $labelResult['error'] : 'Unknown error')),
+                        'success' => true,
+                        'message' => 'Collection poster successfully sent to Plex. ' .
+                            ($labelResult['success'] ? 'Overlay label was also removed.' : 'However, failed to remove Overlay label: ' .
+                                (isset($labelResult['error']) ? $labelResult['error'] : 'Unknown error')),
                         'label_removal' => $labelResult['success'],
                         'label_message' => isset($labelResult['message']) ? $labelResult['message'] : '',
                         'label_error' => isset($labelResult['error']) ? $labelResult['error'] : ''
@@ -536,7 +542,7 @@ try {
                 } else {
                     // Return success response
                     echo json_encode([
-                        'success' => true, 
+                        'success' => true,
                         'message' => 'Collection poster successfully sent to Plex. You may need to refresh your Plex interface to see the change.'
                     ]);
                 }
@@ -548,51 +554,51 @@ try {
                 ]);
                 echo json_encode(['success' => false, 'error' => "Failed to upload collection poster. HTTP code: {$lastHttpCode}"]);
             }
-            
+
             exit;
         } else {
             // For movies, shows, and seasons
             $uploadUrl = "{$plexServerUrl}/library/metadata/{$ratingKey}/posters";
-            
+
             // Create headers for the Plex API request
             $headers = [];
             foreach (getPlexHeaders($plex_config['token']) as $key => $value) {
                 $headers[] = $key . ': ' . $value;
             }
-            
+
             // Add content type for image upload
             $headers[] = 'Content-Type: image/jpeg';
-            
+
             logDebug("Uploading poster to Plex", [
                 'url' => $uploadUrl,
                 'mediaType' => $mediaType,
                 'ratingKey' => $ratingKey,
                 'imageSize' => strlen($imageData)
             ]);
-            
+
             try {
                 // Use makeApiRequest for the upload
                 $response = makeApiRequest($uploadUrl, $headers, 'POST', $imageData, false);
-                
+
                 // Check if we should attempt to remove overlay label
                 $labelResult = [
                     'success' => false,
                     'attempted' => false
                 ];
-                
+
                 if (!empty($plex_config['remove_overlay_label'])) {
                     logDebug("Attempting to remove Overlay label for item: $ratingKey ($mediaType)");
                     $labelResult = removeOverlayLabel($ratingKey, $mediaType);
                     $labelResult['attempted'] = true;
                 }
-                
+
                 // Return result with label removal info if attempted
                 if ($labelResult['attempted']) {
                     echo json_encode([
-                        'success' => true, 
-                        'message' => 'Poster successfully sent to Plex. ' . 
-                                    ($labelResult['success'] ? 'Overlay label was also removed.' : 'However, failed to remove Overlay label: ' . 
-                                    (isset($labelResult['error']) ? $labelResult['error'] : 'Unknown error')),
+                        'success' => true,
+                        'message' => 'Poster successfully sent to Plex. ' .
+                            ($labelResult['success'] ? 'Overlay label was also removed.' : 'However, failed to remove Overlay label: ' .
+                                (isset($labelResult['error']) ? $labelResult['error'] : 'Unknown error')),
                         'label_removal' => $labelResult['success'],
                         'label_message' => isset($labelResult['message']) ? $labelResult['message'] : '',
                         'label_error' => isset($labelResult['error']) ? $labelResult['error'] : ''
@@ -600,15 +606,15 @@ try {
                 } else {
                     // Return success response without label information
                     echo json_encode([
-                        'success' => true, 
+                        'success' => true,
                         'message' => 'Poster successfully sent to Plex'
                     ]);
                 }
-                
+
             } catch (Exception $e) {
                 echo json_encode(['success' => false, 'error' => 'Error uploading to Plex: ' . $e->getMessage()]);
             }
-            
+
             exit;
         }
     }

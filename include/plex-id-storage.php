@@ -42,7 +42,8 @@ define('PLEX_IDS_STORAGE_FILE', dirname(__DIR__) . '/data/plex_valid_ids.json');
 /**
  * Ensures the data directory exists
  */
-function ensureDataDirectoryExists() {
+function ensureDataDirectoryExists()
+{
     $dir = dirname(PLEX_IDS_STORAGE_FILE);
     if (!is_dir($dir)) {
         mkdir($dir, 0755, true);
@@ -54,7 +55,8 @@ function ensureDataDirectoryExists() {
  * 
  * @return array The stored valid IDs
  */
-function loadValidIdsFromStorage() {
+function loadValidIdsFromStorage()
+{
     if (file_exists(PLEX_IDS_STORAGE_FILE)) {
         $content = file_get_contents(PLEX_IDS_STORAGE_FILE);
         if ($content) {
@@ -73,7 +75,8 @@ function loadValidIdsFromStorage() {
  * @param array $ids The complete valid IDs structure to save
  * @return bool Success indicator
  */
-function saveValidIdsToStorage($ids) {
+function saveValidIdsToStorage($ids)
+{
     ensureDataDirectoryExists();
     $json = json_encode($ids, JSON_PRETTY_PRINT);
     return file_put_contents(PLEX_IDS_STORAGE_FILE, $json) !== false;
@@ -86,7 +89,8 @@ function saveValidIdsToStorage($ids) {
  * @param string $libraryId The Plex library ID
  * @return bool Success indicator
  */
-function clearStoredIds($mediaType, $libraryId = null) {
+function clearStoredIds($mediaType, $libraryId = null)
+{
     // Clear from session
     if (isset($_SESSION['valid_plex_ids'])) {
         if ($libraryId === null) {
@@ -103,7 +107,7 @@ function clearStoredIds($mediaType, $libraryId = null) {
             }
         }
     }
-    
+
     // Also clear from persistent storage
     $storedIds = loadValidIdsFromStorage();
     if (!empty($storedIds)) {
@@ -122,7 +126,7 @@ function clearStoredIds($mediaType, $libraryId = null) {
         }
         saveValidIdsToStorage($storedIds);
     }
-    
+
     return true;
 }
 
@@ -134,47 +138,48 @@ function clearStoredIds($mediaType, $libraryId = null) {
  * @param string $libraryId The Plex library ID these items came from
  * @param bool $replaceExisting Whether to replace existing IDs (true) or merge with them (false)
  */
-function storeValidIds($newIds, $mediaType, $libraryId, $replaceExisting = false) {
+function storeValidIds($newIds, $mediaType, $libraryId, $replaceExisting = false)
+{
     // Store in session for current browsing session
     if (!isset($_SESSION['valid_plex_ids'])) {
         $_SESSION['valid_plex_ids'] = [];
     }
-    
+
     if (!isset($_SESSION['valid_plex_ids'][$mediaType])) {
         $_SESSION['valid_plex_ids'][$mediaType] = [];
     }
-    
+
     // If replace mode, clear existing IDs for this library first
     if ($replaceExisting && isset($_SESSION['valid_plex_ids'][$mediaType][$libraryId])) {
         unset($_SESSION['valid_plex_ids'][$mediaType][$libraryId]);
     }
-    
+
     // Store or update IDs for this specific library in session
     $_SESSION['valid_plex_ids'][$mediaType][$libraryId] = $newIds;
-    
+
     // Also store in persistent storage
     $storedIds = loadValidIdsFromStorage();
-    
+
     if (!isset($storedIds[$mediaType])) {
         $storedIds[$mediaType] = [];
     }
-    
+
     // If replace mode, clear existing IDs for this library first
     if ($replaceExisting && isset($storedIds[$mediaType][$libraryId])) {
         unset($storedIds[$mediaType][$libraryId]);
     }
-    
+
     // Store or update IDs for this specific library in persistent storage
     $storedIds[$mediaType][$libraryId] = $newIds;
     saveValidIdsToStorage($storedIds);
-    
+
     logDebug("Stored valid IDs in both session and persistent storage", [
         'mediaType' => $mediaType,
         'libraryId' => $libraryId,
         'newCount' => count($newIds),
         'replaceMode' => $replaceExisting ? 'Yes' : 'No'
     ]);
-    
+
     return true;
 }
 
@@ -184,9 +189,10 @@ function storeValidIds($newIds, $mediaType, $libraryId, $replaceExisting = false
  * @param string $mediaType Type of media (movies, shows, seasons, collections)
  * @return array Array of all valid IDs for this media type
  */
-function getAllValidIds($mediaType) {
+function getAllValidIds($mediaType)
+{
     $allIds = [];
-    
+
     // First check session
     if (isset($_SESSION['valid_plex_ids']) && isset($_SESSION['valid_plex_ids'][$mediaType])) {
         foreach ($_SESSION['valid_plex_ids'][$mediaType] as $libraryIds) {
@@ -195,7 +201,7 @@ function getAllValidIds($mediaType) {
             }
         }
     }
-    
+
     // Then check persistent storage
     $storedIds = loadValidIdsFromStorage();
     if (isset($storedIds[$mediaType])) {
@@ -206,15 +212,15 @@ function getAllValidIds($mediaType) {
             }
         }
     }
-    
+
     // Remove duplicates
     $allIds = array_unique($allIds);
-    
+
     logDebug("Retrieved all valid IDs from both session and persistent storage", [
         'mediaType' => $mediaType,
         'totalIdCount' => count($allIds)
     ]);
-    
+
     return $allIds;
 }
 
@@ -225,30 +231,35 @@ function getAllValidIds($mediaType) {
  * @param string $libraryId Specific library ID to get IDs for (optional)
  * @return array IDs for the specified library or all libraries
  */
-function getLibrarySpecificIds($mediaType, $libraryId = null) {
+function getLibrarySpecificIds($mediaType, $libraryId = null)
+{
     if ($libraryId === null) {
         return getAllValidIds($mediaType);
     }
-    
+
     $libraryIds = [];
-    
+
     // Check session first
-    if (isset($_SESSION['valid_plex_ids']) && 
-        isset($_SESSION['valid_plex_ids'][$mediaType]) && 
-        isset($_SESSION['valid_plex_ids'][$mediaType][$libraryId])) {
+    if (
+        isset($_SESSION['valid_plex_ids']) &&
+        isset($_SESSION['valid_plex_ids'][$mediaType]) &&
+        isset($_SESSION['valid_plex_ids'][$mediaType][$libraryId])
+    ) {
         $libraryIds = $_SESSION['valid_plex_ids'][$mediaType][$libraryId];
     }
-    
+
     // Then check persistent storage
     $storedIds = loadValidIdsFromStorage();
-    if (isset($storedIds[$mediaType]) && 
-        isset($storedIds[$mediaType][$libraryId])) {
+    if (
+        isset($storedIds[$mediaType]) &&
+        isset($storedIds[$mediaType][$libraryId])
+    ) {
         // Merge with session IDs
         $libraryIds = array_merge($libraryIds, $storedIds[$mediaType][$libraryId]);
         // Remove duplicates
         $libraryIds = array_unique($libraryIds);
     }
-    
+
     return $libraryIds;
 }
 
@@ -256,7 +267,8 @@ function getLibrarySpecificIds($mediaType, $libraryId = null) {
  * Initializes session data from persistent storage on login
  * Call this function after user successfully logs in
  */
-function initializeSessionFromStorage() {
+function initializeSessionFromStorage()
+{
     if (!isset($_SESSION['valid_plex_ids'])) {
         $_SESSION['valid_plex_ids'] = loadValidIdsFromStorage();
         logDebug("Initialized session valid_plex_ids from persistent storage");
@@ -267,7 +279,8 @@ function initializeSessionFromStorage() {
  * Synchronizes session data to persistent storage
  * This should be called periodically during user's session
  */
-function syncSessionToStorage() {
+function syncSessionToStorage()
+{
     if (isset($_SESSION['valid_plex_ids'])) {
         saveValidIdsToStorage($_SESSION['valid_plex_ids']);
         logDebug("Synchronized session valid_plex_ids to persistent storage");
@@ -277,14 +290,15 @@ function syncSessionToStorage() {
 /**
  * Reset both persistent and session storage for testing
  */
-function resetAllStoredIds() {
+function resetAllStoredIds()
+{
     if (isset($_SESSION['valid_plex_ids'])) {
         unset($_SESSION['valid_plex_ids']);
     }
-    
+
     if (file_exists(PLEX_IDS_STORAGE_FILE)) {
         unlink(PLEX_IDS_STORAGE_FILE);
     }
-    
+
     logDebug("Reset all stored valid IDs (both session and persistent)");
 }

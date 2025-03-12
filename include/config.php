@@ -28,7 +28,8 @@
 # SOFTWARE.
 
 // Helper function to convert string values to booleans
-function getBoolEnvWithFallback($key, $default) {
+function getBoolEnvWithFallback($key, $default)
+{
     $value = getenv($key);
     if ($value === false) {
         return $default;
@@ -37,12 +38,13 @@ function getBoolEnvWithFallback($key, $default) {
     if (is_string($value)) {
         return strtolower($value) === 'true' || $value === '1' || $value === 'yes';
     }
-    return (bool)$value;
+    return (bool) $value;
 }
 
 // Define helper functions if they don't exist
 if (!function_exists('getEnvWithFallback')) {
-    function getEnvWithFallback($key, $default) {
+    function getEnvWithFallback($key, $default)
+    {
         $value = getenv($key);
         return $value !== false ? $value : $default;
     }
@@ -50,7 +52,8 @@ if (!function_exists('getEnvWithFallback')) {
 }
 
 if (!function_exists('getIntEnvWithFallback')) {
-    function getIntEnvWithFallback($key, $default) {
+    function getIntEnvWithFallback($key, $default)
+    {
         $value = getenv($key);
         return $value !== false ? intval($value) : $default;
     }
@@ -58,9 +61,9 @@ if (!function_exists('getIntEnvWithFallback')) {
 }
 
 $auth_config = [
-	'username' => getEnvWithFallback('AUTH_USERNAME', 'admin'),
-	'password' => getEnvWithFallback('AUTH_PASSWORD', 'changeme'),
-	'session_duration' => getIntEnvWithFallback('SESSION_DURATION', 3600) // 1 hour default
+    'username' => getEnvWithFallback('AUTH_USERNAME', 'admin'),
+    'password' => getEnvWithFallback('AUTH_PASSWORD', 'changeme'),
+    'session_duration' => getIntEnvWithFallback('SESSION_DURATION', 3600) // 1 hour default
 ];
 
 $plex_config = [
@@ -75,11 +78,11 @@ $plex_config = [
 $auto_import_config = [
     // Whether auto-import is enabled
     'enabled' => getBoolEnvWithFallback('AUTO_IMPORT_ENABLED', true),
-    
+
     // Schedule interval - supported formats: '24h', '12h', '6h', '1d', '7d', etc.
     // h = hours, d = days, w = weeks, m = minutes
     'schedule' => getEnvWithFallback('AUTO_IMPORT_SCHEDULE', '24h'),
-    
+
     // What to import
     'import_movies' => getBoolEnvWithFallback('AUTO_IMPORT_MOVIES', true),
     'import_shows' => getBoolEnvWithFallback('AUTO_IMPORT_SHOWS', true),

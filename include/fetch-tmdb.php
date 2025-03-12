@@ -51,89 +51,95 @@ $query = trim($_POST['query']);
 $type = trim($_POST['type']);
 $season = isset($_POST['season']) ? intval($_POST['season']) : null;
 
-function generateClientInfoHeader() {
+function generateClientInfoHeader()
+{
     $payload = [
-        'name' => 'Posteria',         
-        'ts' => round(microtime(true) * 1000), 
-        'v' => '1.0',                 
-        'platform' => 'php'           
+        'name' => 'Posteria',
+        'ts' => round(microtime(true) * 1000),
+        'v' => '1.0',
+        'platform' => 'php'
     ];
-    
+
     // Convert to JSON and encode as Base64
     return base64_encode(json_encode($payload));
 }
 
 // Function to normalize titles for comparison (strict matching)
-function normalizeTitle($title) {
+function normalizeTitle($title)
+{
     // Convert to lowercase
     $title = strtolower($title);
-    
+
     // Remove common articles 
     $title = preg_replace('/^(the|a|an) /', '', $title);
-    
+
     // Remove non-alphanumeric characters except spaces
     $title = preg_replace('/[^\p{L}\p{N}\s]/u', '', $title);
-    
+
     // Replace multiple spaces with a single space
     $title = preg_replace('/\s+/', ' ', $title);
-    
+
     return trim($title);
 }
 
 // MODIFIED: Strict title matching for collections allowing base title or base title + "Collection"
-function isCollectionMatch($searchTitle, $resultTitle) {
+function isCollectionMatch($searchTitle, $resultTitle)
+{
     // Normalize both titles
     $normalizedSearch = normalizeTitle(stripYear($searchTitle));
     $normalizedResult = normalizeTitle(stripYear($resultTitle));
-    
+
     // Strip "Collection" from search term if it exists
     $baseSearchTitle = stripCollectionWord($normalizedSearch);
-    
+
     // Match only if the result is exactly the base title OR base title + "Collection"
     return (
-        $normalizedResult === $baseSearchTitle || 
+        $normalizedResult === $baseSearchTitle ||
         $normalizedResult === ($baseSearchTitle . ' collection')
     );
 }
 
 // Function to check if titles are an exact match (strict)
-function isTitleExactMatch($title1, $title2) {
+function isTitleExactMatch($title1, $title2)
+{
     // Normalize both titles
     $normalizedTitle1 = normalizeTitle($title1);
     $normalizedTitle2 = normalizeTitle($title2);
-    
+
     // Return true only if normalized titles match exactly
     return ($normalizedTitle1 === $normalizedTitle2);
 }
 
 // Strip year from query for better searching
-function stripYear($title) {
+function stripYear($title)
+{
     // Remove year in parentheses pattern: "Movie Title (2023)"
     $title = preg_replace('/\s*\(\d{4}\)\s*$/', '', $title);
-    
+
     // Remove year in parentheses pattern if it's in the middle: "Movie Title (2023) Extra Info"
     $title = preg_replace('/\s*\(\d{4}\)\s*/', ' ', $title);
-    
+
     // Remove just year pattern if it's at the end: "Movie Title 2023"
     $title = preg_replace('/\s+\d{4}\s*$/', '', $title);
-    
+
     return trim($title);
 }
 
 // Strip the word "Collection" from the search query for collection searches
-function stripCollectionWord($title) {
+function stripCollectionWord($title)
+{
     // Remove the word "Collection" at the end (with space)
     $title = preg_replace('/\s+Collection$/i', '', $title);
-    
+
     // Remove " - Collection" at the end
     $title = preg_replace('/\s+-\s+Collection$/i', '', $title);
-    
+
     // Remove "Collection" as a separate word anywhere in the string
     $title = preg_replace('/\bCollection\b/i', '', $title);
-    
+
     // Replace multiple spaces with a single space
     $title = preg_replace('/\s+/', ' ', $title);
-    
+
     return trim($title);
 }
 
@@ -153,7 +159,7 @@ if ($type === 'movie') {
     $apiUrl .= 'movie=' . urlencode($cleanQuery);
 } elseif ($type === 'tv') {
     $apiUrl .= 'q=' . urlencode($cleanQuery) . '&type=tv';
-    
+
     // Add season parameter if provided
     if ($season !== null) {
         $apiUrl .= '&season=' . $season;
@@ -164,12 +170,12 @@ if ($type === 'movie') {
     if (preg_match('/^(.+?)(?:\s*[-:]\s*Season\s*(\d+))?$/i', $cleanQuery, $matches)) {
         $showTitle = trim($matches[1]);
         $seasonNumber = isset($matches[2]) ? intval($matches[2]) : 1; // Default to season 1 if not specified
-        
+
         // If season was explicitly provided in POST, use that instead
         if ($season !== null) {
             $seasonNumber = $season;
         }
-        
+
         $apiUrl .= 'q=' . urlencode($showTitle) . '&type=tv&season=' . $seasonNumber;
     } else {
         // If we can't parse the format, just use what we have
@@ -275,33 +281,33 @@ $allResults = $data['results'];
 if ($type === 'movie') {
     // Get base movie title without year for matching
     $baseTitle = $searchQuery;
-    
+
     // Process each movie result
     foreach ($allResults as $movieResult) {
         $movieTitle = $movieResult['title'] ?? 'Unknown Movie';
         $movieCompareTitle = $movieTitle; // Store the plain title for comparison
-        
+
         // Strip year from the movie title for comparison
         $movieCompareTitle = stripYear($movieCompareTitle);
-        
+
         // Filter out results that don't match the search query exactly for movies
         if (!isTitleExactMatch($baseTitle, $movieCompareTitle)) {
             continue; // Skip this result if titles don't match
         }
-        
+
         // Add year if available (for display only)
         if (!empty($movieResult['release_date'])) {
             $year = substr($movieResult['release_date'], 0, 4);
             $movieTitle .= " ($year)";
         }
-        
+
         // Get movie poster
         if (!empty($movieResult['poster']) && is_array($movieResult['poster'])) {
-            $moviePosterUrl = $movieResult['poster']['original'] ?? 
-                             $movieResult['poster']['large'] ?? 
-                             $movieResult['poster']['medium'] ?? 
-                             $movieResult['poster']['small'] ?? null;
-                             
+            $moviePosterUrl = $movieResult['poster']['original'] ??
+                $movieResult['poster']['large'] ??
+                $movieResult['poster']['medium'] ??
+                $movieResult['poster']['small'] ?? null;
+
             if ($moviePosterUrl) {
                 $allPosters[] = [
                     'url' => $moviePosterUrl,
@@ -310,7 +316,7 @@ if ($type === 'movie') {
             }
         }
     }
-    
+
     // Set the primary result info (first result, if no filtered results)
     // This is for backward compatibility
     if ($result) {
@@ -319,45 +325,45 @@ if ($type === 'movie') {
             $year = substr($result['release_date'], 0, 4);
             $title .= " ($year)";
         }
-        
+
         // Get primary poster URL
         if (!empty($result['poster']) && is_array($result['poster'])) {
-            $posterUrl = $result['poster']['original'] ?? 
-                        $result['poster']['large'] ?? 
-                        $result['poster']['medium'] ?? 
-                        $result['poster']['small'] ?? null;
+            $posterUrl = $result['poster']['original'] ??
+                $result['poster']['large'] ??
+                $result['poster']['medium'] ??
+                $result['poster']['small'] ?? null;
         }
     }
 } elseif ($type === 'tv') {
     // Get base TV show title without year for matching
     $baseTitle = $searchQuery;
-    
+
     // Process each TV show result
     foreach ($allResults as $tvResult) {
         $tvTitle = $tvResult['name'] ?? $tvResult['title'] ?? 'Unknown TV Show';
         $tvCompareTitle = $tvTitle; // Store the plain title for comparison
-        
+
         // Strip year from the TV title for comparison
         $tvCompareTitle = stripYear($tvCompareTitle);
-        
+
         // Filter out results that don't match the search query exactly for TV shows
         if (!isTitleExactMatch($baseTitle, $tvCompareTitle)) {
             continue; // Skip this result if titles don't match
         }
-        
+
         // Add year if available (for display only)
         if (!empty($tvResult['first_air_date'])) {
             $year = substr($tvResult['first_air_date'], 0, 4);
             $tvTitle .= " ($year)";
         }
-        
+
         // Get TV show poster
         if (!empty($tvResult['poster']) && is_array($tvResult['poster'])) {
-            $tvPosterUrl = $tvResult['poster']['original'] ?? 
-                          $tvResult['poster']['large'] ?? 
-                          $tvResult['poster']['medium'] ?? 
-                          $tvResult['poster']['small'] ?? null;
-                          
+            $tvPosterUrl = $tvResult['poster']['original'] ??
+                $tvResult['poster']['large'] ??
+                $tvResult['poster']['medium'] ??
+                $tvResult['poster']['small'] ?? null;
+
             if ($tvPosterUrl) {
                 $allPosters[] = [
                     'url' => $tvPosterUrl,
@@ -366,7 +372,7 @@ if ($type === 'movie') {
             }
         }
     }
-    
+
     // Set the primary result info (first result, if no filtered results)
     // This is for backward compatibility
     if ($result) {
@@ -375,13 +381,13 @@ if ($type === 'movie') {
             $year = substr($result['first_air_date'], 0, 4);
             $title .= " ($year)";
         }
-        
+
         // Get primary poster URL
         if (!empty($result['poster']) && is_array($result['poster'])) {
-            $posterUrl = $result['poster']['original'] ?? 
-                        $result['poster']['large'] ?? 
-                        $result['poster']['medium'] ?? 
-                        $result['poster']['small'] ?? null;
+            $posterUrl = $result['poster']['original'] ??
+                $result['poster']['large'] ??
+                $result['poster']['medium'] ??
+                $result['poster']['small'] ?? null;
         }
     }
 } elseif ($type === 'season') {
@@ -389,7 +395,7 @@ if ($type === 'movie') {
     $searchShowTitle = preg_replace('/\s*-\s*Season\s*\d+\s*/', '', $searchQuery);
     $searchShowTitle = stripYear($searchShowTitle);
     $searchShowTitle = trim($searchShowTitle);
-    
+
     // Extract primary season info from first result
     if ($result) {
         $title = $result['name'] ?? $result['title'] ?? 'Unknown TV Show';
@@ -398,41 +404,41 @@ if ($type === 'movie') {
             $title .= " ($year)";
         }
     }
-    
+
     // Process each show to get its season
     foreach ($allResults as $showResult) {
         $showTitle = $showResult['name'] ?? $showResult['title'] ?? 'Unknown TV Show';
         $showCompareTitle = $showTitle; // Store the plain title for comparison
-        
+
         // Strip year from the show title for comparison
         $showCompareTitle = stripYear($showCompareTitle);
-        
+
         // Filter out results that don't match the search query exactly for TV seasons
         if (!isTitleExactMatch($searchShowTitle, $showCompareTitle)) {
             continue; // Skip this result if show titles don't match exactly
         }
-        
+
         // Add year if available (for display only)
         if (!empty($showResult['first_air_date'])) {
             $year = substr($showResult['first_air_date'], 0, 4);
             $showTitle .= " ($year)";
         }
-        
+
         // Check if there's a season object with poster
         if (!empty($showResult['season']) && is_array($showResult['season'])) {
             $showSeasonNumber = $showResult['season']['season_number'] ?? $season;
             $seasonName = $showResult['season']['name'] ?? ($showSeasonNumber === 0 ? "Specials" : "Season $showSeasonNumber");
-            
+
             // Add season information to the title
             $seasonTitle = "$showTitle - $seasonName";
-            
+
             // Get season poster from the season object
             if (!empty($showResult['season']['poster']) && is_array($showResult['season']['poster'])) {
-                $seasonPosterUrl = $showResult['season']['poster']['original'] ?? 
-                                 $showResult['season']['poster']['large'] ?? 
-                                 $showResult['season']['poster']['medium'] ?? 
-                                 $showResult['season']['poster']['small'] ?? null;
-                                 
+                $seasonPosterUrl = $showResult['season']['poster']['original'] ??
+                    $showResult['season']['poster']['large'] ??
+                    $showResult['season']['poster']['medium'] ??
+                    $showResult['season']['poster']['small'] ?? null;
+
                 if ($seasonPosterUrl) {
                     $allPosters[] = [
                         'url' => $seasonPosterUrl,
@@ -444,16 +450,16 @@ if ($type === 'movie') {
         } else {
             // Fallback to show poster if season poster not available
             if (!empty($showResult['poster']) && is_array($showResult['poster'])) {
-                $showPosterUrl = $showResult['poster']['original'] ?? 
-                                $showResult['poster']['large'] ?? 
-                                $showResult['poster']['medium'] ?? 
-                                $showResult['poster']['small'] ?? null;
-                
+                $showPosterUrl = $showResult['poster']['original'] ??
+                    $showResult['poster']['large'] ??
+                    $showResult['poster']['medium'] ??
+                    $showResult['poster']['small'] ?? null;
+
                 if ($showPosterUrl) {
                     // Include a fallback in case we couldn't get proper season poster
                     $fallbackSeasonNumber = $season ?? 1;
                     $seasonName = $fallbackSeasonNumber === 0 ? "Specials" : "Season $fallbackSeasonNumber";
-                    
+
                     $allPosters[] = [
                         'url' => $showPosterUrl,
                         'name' => "$showTitle - $seasonName (Show Poster)",
@@ -464,32 +470,32 @@ if ($type === 'movie') {
             }
         }
     }
-    
+
     if ($result) {
         // Check if there's a season object with poster for the primary result
         if (!empty($result['season']) && is_array($result['season'])) {
             $seasonNumber = $result['season']['season_number'] ?? $season;
             $seasonName = $result['season']['name'] ?? ($seasonNumber === 0 ? "Specials" : "Season $seasonNumber");
-            
+
             // Add season information to the title
             $title .= " - $seasonName";
-            
+
             // Get season poster from the season object
             if (!empty($result['season']['poster']) && is_array($result['season']['poster'])) {
-                $posterUrl = $result['season']['poster']['original'] ?? 
-                            $result['season']['poster']['large'] ?? 
-                            $result['season']['poster']['medium'] ?? 
-                            $result['season']['poster']['small'] ?? null;
+                $posterUrl = $result['season']['poster']['original'] ??
+                    $result['season']['poster']['large'] ??
+                    $result['season']['poster']['medium'] ??
+                    $result['season']['poster']['small'] ?? null;
             }
         } else {
             // Fallback to show poster if season poster not available
             if (!empty($result['poster']) && is_array($result['poster'])) {
-                $posterUrl = $result['poster']['original'] ?? 
-                            $result['poster']['large'] ?? 
-                            $result['poster']['medium'] ?? 
-                            $result['poster']['small'] ?? null;
+                $posterUrl = $result['poster']['original'] ??
+                    $result['poster']['large'] ??
+                    $result['poster']['medium'] ??
+                    $result['poster']['small'] ?? null;
             }
-            
+
             // Add fallback season name
             $fallbackSeasonNumber = $season ?? 1;
             $seasonName = $fallbackSeasonNumber === 0 ? "Specials" : "Season $fallbackSeasonNumber";
@@ -499,34 +505,34 @@ if ($type === 'movie') {
 } elseif ($type === 'collection') {
     // Get the base search term (without "Collection")
     $baseSearchTerm = $searchQuery;
-    
+
     // Collection-specific matching
     $strictMatches = []; // Store strictly matching collections
-    
+
     // Process each collection result
     foreach ($allResults as $index => $collectionResult) {
         // Get collection title
         $collectionTitle = $collectionResult['title'] ?? $collectionResult['name'] ?? 'Unknown Collection';
-        
+
         // Check if this collection title is an exact match for our search
         if (isCollectionMatch($originalSearchTitle, $collectionTitle)) {
             // Get collection poster
             if (!empty($collectionResult['poster']) && is_array($collectionResult['poster'])) {
-                $collectionPosterUrl = $collectionResult['poster']['original'] ?? 
-                                    $collectionResult['poster']['large'] ?? 
-                                    $collectionResult['poster']['medium'] ?? 
-                                    $collectionResult['poster']['small'] ?? null;
-                                    
+                $collectionPosterUrl = $collectionResult['poster']['original'] ??
+                    $collectionResult['poster']['large'] ??
+                    $collectionResult['poster']['medium'] ??
+                    $collectionResult['poster']['small'] ?? null;
+
                 if ($collectionPosterUrl) {
                     $posterEntry = [
                         'url' => $collectionPosterUrl,
                         'name' => $collectionTitle,
                         'isExactMatch' => true
                     ];
-                    
+
                     $strictMatches[] = $posterEntry;
                     $allPosters[] = $posterEntry;
-                    
+
                     // If this is the first result, make it the primary result for backward compatibility
                     if ($index === 0) {
                         $result = $collectionResult;
@@ -535,26 +541,26 @@ if ($type === 'movie') {
             }
         }
     }
-    
+
     // Set primary result to first strict match if available
     if (!empty($strictMatches)) {
         $primaryMatch = $strictMatches[0];
         $title = $primaryMatch['name'];
         $posterUrl = $primaryMatch['url'];
-    } 
+    }
     // Otherwise fallback to the first result (backward compatibility)
     else if ($result) {
         $title = $result['name'] ?? $result['title'] ?? 'Unknown Collection';
-        
+
         // Get collection poster
         if (!empty($result['poster']) && is_array($result['poster'])) {
-            $posterUrl = $result['poster']['original'] ?? 
-                        $result['poster']['large'] ?? 
-                        $result['poster']['medium'] ?? 
-                        $result['poster']['small'] ?? null;
+            $posterUrl = $result['poster']['original'] ??
+                $result['poster']['large'] ??
+                $result['poster']['medium'] ??
+                $result['poster']['small'] ?? null;
         }
     }
-    
+
     // If no exact matches were found at all, clear all posters
     if (empty($strictMatches)) {
         $allPosters = [];
