@@ -85,3 +85,8 @@
 ### Fixed
 - Updated TMDB search to return all posters that match the media title
 
+## [1.2.6]
+### Fixed
+- Search not handling special characters
+- Updated import to handle special characters. This will cause duplicate posters for previous users. The "Reset" option is recommended and then a full import to ensure the duplicates.
+
