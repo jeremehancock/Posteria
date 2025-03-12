@@ -240,12 +240,17 @@ try {
 	initializeSessionFromStorage();
 
     // Helper Functions
-    function sanitizeFilename($filename) {
-        // Remove any character that isn't alphanumeric, space, underscore, dash, or dot
-        $filename = preg_replace('/[^\w\s\.-]/', '', $filename);
-        $filename = preg_replace('/\s+/', ' ', $filename); // Remove multiple spaces
-        return trim($filename);
-    }
+	function sanitizeFilename($filename) {
+		// Specifically disallow only unsafe characters for filenames
+		// Unsafe characters: / \ : * ? " < > |
+		$filename = preg_replace('/[\/\\\:\*\?"<>\|]/', '', $filename);
+		
+		// Replace multiple spaces with a single space
+		$filename = preg_replace('/\s+/', ' ', $filename);
+		
+		// Trim the result
+		return trim($filename);
+	}
 
 	function generatePlexFilename($title, $id, $extension, $mediaType = '', $libraryType = '', $libraryName = '') {
 		$basename = sanitizeFilename($title);
@@ -1180,17 +1185,17 @@ try {
         $plexTag = '**Plex**';
         
         // For seasons with show titles, prepare normalized values for comparison
-        $normalizedShowTitle = '';
-        if ($mediaType === 'seasons' && !empty($showTitle)) {
-            // First, convert HTML entities to their corresponding characters
-            $decodedTitle = html_entity_decode($showTitle, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-            
-            // Then, remove all non-alphanumeric characters except spaces
-            $normalizedShowTitle = preg_replace('/[^a-zA-Z0-9\s]/', '', $decodedTitle);
-            $normalizedShowTitle = trim(strtolower($normalizedShowTitle));
-            
-            logDebug("Normalized show title for comparison: '{$normalizedShowTitle}' from '{$showTitle}'");
-        }
+		$normalizedShowTitle = '';
+		if ($mediaType === 'seasons' && !empty($showTitle)) {
+			// First, convert HTML entities to their corresponding characters
+			$decodedTitle = html_entity_decode($showTitle, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+			
+			// Only remove unsafe characters but preserve accents, ampersands, etc.
+			$normalizedShowTitle = preg_replace('/[\/\\\:\*\?"<>\|]/', '', $decodedTitle);
+			$normalizedShowTitle = trim(strtolower($normalizedShowTitle));
+			
+			logDebug("Normalized show title for comparison: '{$normalizedShowTitle}' from '{$showTitle}'");
+		}
         
         foreach ($files as $file) {
             if (!is_file($file)) {
@@ -1239,19 +1244,19 @@ try {
                     }
                 }
             } else if ($mediaType === 'seasons') {
-                // For seasons, only process if they belong to the show we're currently handling
-                if (!empty($normalizedShowTitle)) {
-                    // First decode HTML entities and then normalize the filename for comparison
-                    $decodedFilename = html_entity_decode($filename, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-                    $normalizedFilename = preg_replace('/[^a-zA-Z0-9\s]/', '', $decodedFilename);
-                    $normalizedFilename = trim(strtolower($normalizedFilename));
-                    
-                    // If we have a show title, check if the normalized filename contains it
-                    if (strpos($normalizedFilename, $normalizedShowTitle) === false) {
-                        // This season belongs to a different show, skip it
-                        continue;
-                    }
-                }
+				if (!empty($normalizedShowTitle)) {
+					// First decode HTML entities and then normalize the filename for comparison
+					// using the same method as for show title - preserving special characters
+					$decodedFilename = html_entity_decode($filename, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+					$normalizedFilename = preg_replace('/[\/\\\:\*\?"<>\|]/', '', $decodedFilename);
+					$normalizedFilename = trim(strtolower($normalizedFilename));
+					
+					// If we have a show title, check if the normalized filename contains it
+					if (strpos($normalizedFilename, $normalizedShowTitle) === false) {
+						// This season belongs to a different show, skip it
+						continue;
+					}
+				}
             }
             
             // Extract the ID from the filename
