@@ -29,7 +29,7 @@
 # SOFTWARE.
 #
 # Script to remove "Overlay" label from Plex media
-# 
+#
 # Usage: ./remove-overlay-label.sh <ratingKey> <plexServerUrl> <plexToken>
 
 if [ $# -lt 3 ]; then
@@ -58,12 +58,12 @@ MEDIA_TYPE=$(echo "$METADATA" | grep -o 'type="[^"]*"' | head -1 | cut -d'"' -f2
 
 # Convert to type ID
 case "$MEDIA_TYPE" in
-    "movie") TYPE_ID="1" ;;
-    "show") TYPE_ID="2" ;;
-    "season") TYPE_ID="3" ;;
-    "episode") TYPE_ID="4" ;;
-    "collection") TYPE_ID="18" ;;
-    *) TYPE_ID="1" ;;  # Default to movie
+"movie") TYPE_ID="1" ;;
+"show") TYPE_ID="2" ;;
+"season") TYPE_ID="3" ;;
+"episode") TYPE_ID="4" ;;
+"collection") TYPE_ID="18" ;;
+*) TYPE_ID="1" ;; # Default to movie
 esac
 
 # Extract media title
@@ -88,12 +88,12 @@ while read -r label; do
     [ -z "$label" ] && continue
     encoded_label=$(echo "$label" | sed 's/ /%20/g' | sed 's/&/%26/g')
     LABEL_PARAMS+="&label%5B$i%5D.tag.tag=$encoded_label"
-    i=$((i+1))
-done <<< "$OTHER_LABELS"
+    i=$((i + 1))
+done <<<"$OTHER_LABELS"
 
 # First, unlock the label field
 curl -s -X PUT -H "X-Plex-Token: $PLEX_TOKEN" \
-    "$PLEX_SERVER_URL/library/metadata/$RATING_KEY?label.locked=0" > /dev/null
+    "$PLEX_SERVER_URL/library/metadata/$RATING_KEY?label.locked=0" >/dev/null
 
 # Wait for unlock to take effect
 sleep 1
@@ -108,24 +108,24 @@ HTTP_CODE=$(echo "$RESULT" | grep -m1 "HTTP/" | grep -o "[0-9][0-9][0-9]")
 if [[ "$HTTP_CODE" =~ ^2[0-9][0-9]$ ]]; then
     # Refresh metadata
     curl -s -X PUT -H "X-Plex-Token: $PLEX_TOKEN" \
-        "$PLEX_SERVER_URL/library/metadata/$RATING_KEY/refresh" > /dev/null
-    
+        "$PLEX_SERVER_URL/library/metadata/$RATING_KEY/refresh" >/dev/null
+
     # Wait for refresh to take effect
     sleep 1
-    
+
     # Refresh library section
     curl -s -X GET -H "X-Plex-Token: $PLEX_TOKEN" \
-        "$PLEX_SERVER_URL/library/sections/$LIBRARY_SECTION_ID/refresh" > /dev/null
-    
+        "$PLEX_SERVER_URL/library/sections/$LIBRARY_SECTION_ID/refresh" >/dev/null
+
     # Add a longer delay to ensure all changes take effect
     sleep 3
-    
+
     # Verify the label removal
     VERIFY_METADATA=$(curl -s -H "Accept: application/xml" -H "X-Plex-Token: $PLEX_TOKEN" \
         "$PLEX_SERVER_URL/library/metadata/$RATING_KEY")
-    
+
     OVERLAY_STILL_EXISTS=$(echo "$VERIFY_METADATA" | grep -o '<Label[^>]*tag="Overlay"')
-    
+
     if [ -z "$OVERLAY_STILL_EXISTS" ]; then
         echo "SUCCESS: Overlay label has been successfully removed!"
         exit 0

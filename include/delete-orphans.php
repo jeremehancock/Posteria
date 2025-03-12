@@ -47,12 +47,14 @@ $config = [
 ];
 
 // Check if user is logged in
-function isLoggedIn() {
+function isLoggedIn()
+{
     return isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true;
 }
 
 // Validate filename for security
-function isValidFilename($filename) {
+function isValidFilename($filename)
+{
     // Check for slashes and backslashes
     if (strpos($filename, '/') !== false || strpos($filename, '\\') !== false) {
         return false;
@@ -61,9 +63,10 @@ function isValidFilename($filename) {
 }
 
 // Get image files from directory
-function getImageFiles($config, $currentDirectory = '') {
+function getImageFiles($config, $currentDirectory = '')
+{
     $files = [];
-    
+
     if (empty($currentDirectory)) {
         // Get files from all directories
         foreach ($config['directories'] as $dirKey => $dirPath) {
@@ -102,12 +105,12 @@ function getImageFiles($config, $currentDirectory = '') {
             }
         }
     }
-    
+
     // Sort files alphabetically
-    usort($files, function($a, $b) {
+    usort($files, function ($a, $b) {
         return strnatcasecmp($a['filename'], $b['filename']);
     });
-    
+
     return $files;
 }
 
@@ -124,11 +127,11 @@ if (!isLoggedIn()) {
 // Get all orphaned files
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'get_orphaned_files') {
     header('Content-Type: application/json');
-    
+
     // Get all images
     $allImages = getImageFiles($config, '');
     $orphanedImages = [];
-    
+
     // Filter orphaned images
     foreach ($allImages as $image) {
         if (strpos(strtolower($image['filename']), '**plex**') === false) {
@@ -138,7 +141,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             ];
         }
     }
-    
+
     echo json_encode([
         'success' => true,
         'files' => $orphanedImages,
@@ -150,10 +153,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 // Delete a single orphaned file
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'delete_orphaned_file') {
     header('Content-Type: application/json');
-    
+
     $filename = isset($_POST['filename']) ? $_POST['filename'] : '';
     $directory = isset($_POST['directory']) ? $_POST['directory'] : '';
-    
+
     if (empty($filename) || empty($directory) || !isset($config['directories'][$directory])) {
         echo json_encode([
             'success' => false,
@@ -161,9 +164,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         ]);
         exit;
     }
-    
+
     $filepath = $config['directories'][$directory] . $filename;
-    
+
     // Security check: Ensure the file is within allowed directory and is orphaned
     if (!isValidFilename($filename) || !file_exists($filepath) || strpos(strtolower($filename), '**plex**') !== false) {
         echo json_encode([
@@ -172,7 +175,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         ]);
         exit;
     }
-    
+
     if (unlink($filepath)) {
         echo json_encode([
             'success' => true

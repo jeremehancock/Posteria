@@ -3,17 +3,17 @@ set -e
 
 # Check if cron is already running and stop it if needed
 if [ -f /var/run/crond.pid ]; then
-    echo "Removing stale cron PID file..."
-    rm -f /var/run/crond.pid
+  echo "Removing stale cron PID file..."
+  rm -f /var/run/crond.pid
 fi
 
 # Save environment variables to a file that will be accessible to cron jobs
-env | grep -E '^(PLEX_|AUTO_IMPORT_|AUTH_)' > /var/www/html/include/docker-env.sh
+env | grep -E '^(PLEX_|AUTO_IMPORT_|AUTH_)' >/var/www/html/include/docker-env.sh
 chmod 600 /var/www/html/include/docker-env.sh
 sed -i 's/^/export /' /var/www/html/include/docker-env.sh
 
 # Create auto-import.sh script
-cat > /var/www/html/include/auto-import.sh << 'EOL'
+cat >/var/www/html/include/auto-import.sh <<'EOL'
 #!/bin/bash
 
 # Set path
@@ -44,8 +44,8 @@ chmod +x /var/www/html/include/auto-import.sh
 echo "*/5 * * * * /var/www/html/include/auto-import.sh" | crontab -
 
 # Setup proper crontab file as a backup method with correct formatting
-echo "# Posteria auto-import cron job" > /etc/cron.d/posteria-autoimport
-echo "*/5 * * * * root /var/www/html/include/auto-import.sh" >> /etc/cron.d/posteria-autoimport
+echo "# Posteria auto-import cron job" >/etc/cron.d/posteria-autoimport
+echo "*/5 * * * * root /var/www/html/include/auto-import.sh" >>/etc/cron.d/posteria-autoimport
 chmod 0644 /etc/cron.d/posteria-autoimport
 
 # Display crontab for verification
@@ -60,10 +60,10 @@ echo "Cron started with PID: $CRON_PID"
 
 # Make sure the directories exist and have correct permissions
 for dir in movies tv-shows tv-seasons collections; do
-    directory="/var/www/html/posters/$dir"
-    mkdir -p "$directory"
-    chown -R www-data:www-data "$directory"
-    chmod -R 775 "$directory"
+  directory="/var/www/html/posters/$dir"
+  mkdir -p "$directory"
+  chown -R www-data:www-data "$directory"
+  chmod -R 775 "$directory"
 done
 
 # Create data directory for logs if it doesn't exist

@@ -32,27 +32,27 @@
 header('Content-Type: application/json');
 
 // Make sure we catch all errors
-set_error_handler(function($errno, $errstr, $errfile, $errline) {
+set_error_handler(function ($errno, $errstr, $errfile, $errline) {
     logDebug("PHP Error", [
         'errno' => $errno,
         'errstr' => $errstr,
         'errfile' => $errfile,
         'errline' => $errline
     ]);
-    
+
     // Return true to prevent the standard PHP error handler from running
     return true;
 });
 
 // Make sure all exceptions are caught
-set_exception_handler(function($exception) {
+set_exception_handler(function ($exception) {
     logDebug("Uncaught Exception", [
         'message' => $exception->getMessage(),
         'file' => $exception->getFile(),
         'line' => $exception->getLine(),
         'trace' => $exception->getTraceAsString()
     ]);
-    
+
     // Send a JSON response with the error
     header('Content-Type: application/json');
     echo json_encode(['success' => false, 'error' => 'Unhandled exception: ' . $exception->getMessage()]);
@@ -64,18 +64,21 @@ ini_set('display_errors', 0);
 error_reporting(E_ALL);
 
 // Define helper functions
-function getEnvWithFallback($key, $default) {
+function getEnvWithFallback($key, $default)
+{
     $value = getenv($key);
     return $value !== false ? $value : $default;
 }
 
-function getIntEnvWithFallback($key, $default) {
+function getIntEnvWithFallback($key, $default)
+{
     $value = getenv($key);
     return $value !== false ? intval($value) : $default;
 }
 
 // Log function for debugging
-function logDebug($message, $data = null) {
+function logDebug($message, $data = null)
+{
     $logMessage = date('Y-m-d H:i:s') . ": " . $message;
     if ($data !== null) {
         $logMessage .= "\nData: " . print_r($data, true);
@@ -135,9 +138,10 @@ try {
 
     // Refresh session time
     $_SESSION['login_time'] = time();
-    
+
     // Helper Functions
-    function sanitizeFilename($filename) {
+    function sanitizeFilename($filename)
+    {
         // Remove any character that isn't alphanumeric, space, underscore, dash, or dot
         $filename = preg_replace('/[^\w\s\.-]/', '', $filename);
         $filename = preg_replace('/\s+/', ' ', $filename); // Remove multiple spaces
@@ -145,15 +149,16 @@ try {
     }
 
     // Copy of the function from plex-import.php to handle library names
-    function addLibraryNameToFilename($filename, $libraryName) {
+    function addLibraryNameToFilename($filename, $libraryName)
+    {
         // Format library name with double brackets
         $bracketedLibraryName = "[[{$libraryName}]]";
-        
+
         // Don't add if it's already there
         if (strpos($filename, $bracketedLibraryName) !== false) {
             return $filename;
         }
-        
+
         // Find the position of "**Plex**" in the filename
         $plexPos = strpos($filename, '**Plex**');
         if ($plexPos === false) {
@@ -162,7 +167,7 @@ try {
             $baseFilename = pathinfo($filename, PATHINFO_FILENAME);
             return $baseFilename . ' ' . $bracketedLibraryName . '.' . $ext;
         }
-        
+
         // Insert the library name before "**Plex**"
         $beforePlex = substr($filename, 0, $plexPos);
         $afterPlex = substr($filename, $plexPos);
@@ -170,7 +175,8 @@ try {
     }
 
     // Helper Functions (reused from plex-import.php)
-    function getPlexHeaders($token) {
+    function getPlexHeaders($token)
+    {
         return [
             'Accept' => 'application/json',
             'X-Plex-Token' => $token,
@@ -180,15 +186,16 @@ try {
         ];
     }
 
-    function makeApiRequest($url, $headers, $expectJson = true) {
+    function makeApiRequest($url, $headers, $expectJson = true)
+    {
         global $plex_config;
-        
+
         logDebug("Making API request", [
             'url' => $url,
             'headers' => $headers,
             'expectJson' => $expectJson
         ]);
-        
+
         $ch = curl_init();
         curl_setopt_array($ch, [
             CURLOPT_URL => $url,
@@ -201,13 +208,13 @@ try {
             CURLOPT_TIMEOUT => $plex_config['request_timeout'],
             CURLOPT_VERBOSE => true
         ]);
-        
+
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $error = curl_error($ch);
         $info = curl_getinfo($ch);
         curl_close($ch);
-        
+
         // Log the response info
         logDebug("API response", [
             'http_code' => $httpCode,
@@ -216,17 +223,17 @@ try {
             'curl_info' => $info,
             'response_preview' => $expectJson ? substr($response, 0, 500) . (strlen($response) > 500 ? '...' : '') : '[BINARY DATA]'
         ]);
-        
+
         if ($response === false) {
             logDebug("API request failed: " . $error);
             throw new Exception("API request failed: " . $error);
         }
-        
+
         if ($httpCode < 200 || $httpCode >= 300) {
             logDebug("API request returned HTTP code: " . $httpCode);
             throw new Exception("API request returned HTTP code: " . $httpCode);
         }
-        
+
         // Only validate JSON if we expect JSON
         if ($expectJson && !empty($response)) {
             // Try to parse JSON to verify it's valid
@@ -236,19 +243,20 @@ try {
                 throw new Exception("Invalid JSON response: " . json_last_error_msg());
             }
         }
-        
+
         return $response;
     }
 
     // Get image data from Plex
-    function getPlexImageData($serverUrl, $token, $thumb) {
+    function getPlexImageData($serverUrl, $token, $thumb)
+    {
         try {
             $url = rtrim($serverUrl, '/') . $thumb;
             $headers = [];
             foreach (getPlexHeaders($token) as $key => $value) {
                 $headers[] = $key . ': ' . $value;
             }
-            
+
             // Pass false to indicate we don't expect JSON for image downloads
             $imageData = makeApiRequest($url, $headers, false);
             return ['success' => true, 'data' => $imageData];
@@ -256,26 +264,27 @@ try {
             return ['success' => false, 'error' => $e->getMessage()];
         }
     }
-    
+
     // Function to get library details from Plex
-    function getPlexLibraries($serverUrl, $token) {
+    function getPlexLibraries($serverUrl, $token)
+    {
         try {
             logDebug("Getting Plex libraries", ['server_url' => $serverUrl]);
-            
+
             $url = rtrim($serverUrl, '/') . "/library/sections";
             $headers = [];
             foreach (getPlexHeaders($token) as $key => $value) {
                 $headers[] = $key . ': ' . $value;
             }
-            
+
             $response = makeApiRequest($url, $headers);
             $data = json_decode($response, true);
-            
+
             if (!isset($data['MediaContainer']['Directory'])) {
                 logDebug("No libraries found in Plex response");
                 return ['success' => false, 'error' => 'No libraries found'];
             }
-            
+
             $libraries = [];
             foreach ($data['MediaContainer']['Directory'] as $lib) {
                 $type = $lib['type'] ?? '';
@@ -287,18 +296,19 @@ try {
                     ];
                 }
             }
-            
+
             logDebug("Found Plex libraries", ['count' => count($libraries), 'libraries' => $libraries]);
-            
+
             return ['success' => true, 'data' => $libraries];
         } catch (Exception $e) {
             logDebug("Error getting Plex libraries: " . $e->getMessage());
             return ['success' => false, 'error' => $e->getMessage()];
         }
     }
-    
+
     // Function to find the library for a media item
-    function findLibraryForMediaItem($serverUrl, $token, $ratingKey) {
+    function findLibraryForMediaItem($serverUrl, $token, $ratingKey)
+    {
         try {
             // First, get the metadata to determine what kind of item this is
             $metadataUrl = rtrim($serverUrl, '/') . "/library/metadata/{$ratingKey}";
@@ -306,23 +316,23 @@ try {
             foreach (getPlexHeaders($token) as $key => $value) {
                 $headers[] = $key . ': ' . $value;
             }
-            
+
             $response = makeApiRequest($metadataUrl, $headers);
             $metadata = json_decode($response, true);
-            
+
             if (!isset($metadata['MediaContainer']['Metadata'][0])) {
                 return ['success' => false, 'error' => 'Item metadata not found'];
             }
-            
+
             $item = $metadata['MediaContainer']['Metadata'][0];
-            
+
             // For collections, we need to handle them differently
             if (isset($item['type']) && $item['type'] === 'collection') {
                 // Collections don't have a direct library association in the API
                 // We need to check what type of items it contains
                 if (isset($item['librarySectionID'])) {
                     $libraryId = $item['librarySectionID'];
-                    
+
                     // Get the library details
                     $libraries = getPlexLibraries($serverUrl, $token);
                     if ($libraries['success']) {
@@ -333,14 +343,14 @@ try {
                         }
                     }
                 }
-                
+
                 return ['success' => false, 'error' => 'Could not determine library for collection'];
             }
-            
+
             // For regular items, get the library section ID
             if (isset($item['librarySectionID'])) {
                 $libraryId = $item['librarySectionID'];
-                
+
                 // Get the library details
                 $libraries = getPlexLibraries($serverUrl, $token);
                 if ($libraries['success']) {
@@ -351,10 +361,10 @@ try {
                     }
                 }
             }
-            
+
             // If we get here, we couldn't find the library
             return ['success' => false, 'error' => 'Library not found for media item'];
-            
+
         } catch (Exception $e) {
             return ['success' => false, 'error' => 'Error finding library: ' . $e->getMessage()];
         }
@@ -366,9 +376,9 @@ try {
             echo json_encode(['success' => false, 'error' => 'Missing required parameters']);
             exit;
         }
-        
+
         $filename = $_POST['filename'];
-        
+
         // Extract the ratingKey from the filename
         // Format is typically "Title [ratingKey] Plex.jpg"
         $matches = [];
@@ -376,31 +386,31 @@ try {
             echo json_encode(['success' => false, 'error' => 'Could not extract ratingKey from filename']);
             exit;
         }
-        
+
         $ratingKey = $matches[1];
         logDebug("Extracted ratingKey for import", ['ratingKey' => $ratingKey, 'filename' => $filename]);
-        
+
         // Determine the media type based on filename or directory
         $mediaType = isset($_POST['directory']) ? $_POST['directory'] : '';
-        
+
         // Determine the endpoint based on the media type
         $endpoint = '';
-        
+
         // URL to get metadata from Plex
         $plexServerUrl = rtrim($plex_config['server_url'], '/');
         $metadataUrl = "{$plexServerUrl}/library/metadata/{$ratingKey}";
-        
+
         // Headers for the Plex API request
         $headers = [];
         foreach (getPlexHeaders($plex_config['token']) as $key => $value) {
             $headers[] = $key . ': ' . $value;
         }
-        
+
         try {
             // Get the item metadata to find the thumb URL
             $response = makeApiRequest($metadataUrl, $headers);
             $metadata = json_decode($response, true);
-            
+
             if (!isset($metadata['MediaContainer']['Metadata'][0]['thumb'])) {
                 // For collections, try with collections endpoint
                 if ($mediaType === 'collections') {
@@ -408,7 +418,7 @@ try {
                     $response = makeApiRequest($collectionsUrl, $headers);
                     $metadata = json_decode($response, true);
                 }
-                
+
                 // If still no thumb, try with art instead of thumb
                 if (!isset($metadata['MediaContainer']['Metadata'][0]['thumb'])) {
                     if (isset($metadata['MediaContainer']['Metadata'][0]['art'])) {
@@ -423,15 +433,15 @@ try {
             } else {
                 $thumb = $metadata['MediaContainer']['Metadata'][0]['thumb'];
             }
-            
+
             // Get the poster image data
             $imageResult = getPlexImageData($plexServerUrl, $plex_config['token'], $thumb);
-            
+
             if (!$imageResult['success']) {
                 echo json_encode(['success' => false, 'error' => 'Failed to download poster from Plex: ' . $imageResult['error']]);
                 exit;
             }
-            
+
             // Define directories based on your existing code
             $directories = [
                 'movies' => '../posters/movies/',
@@ -439,16 +449,16 @@ try {
                 'tv-seasons' => '../posters/tv-seasons/',
                 'collections' => '../posters/collections/'
             ];
-            
+
             // Make sure we have a valid directory
             if (!isset($directories[$mediaType])) {
                 echo json_encode(['success' => false, 'error' => 'Invalid directory type']);
                 exit;
             }
-            
+
             // NEW CODE: Get the library information for this item
             $libraryResult = findLibraryForMediaItem($plexServerUrl, $plex_config['token'], $ratingKey);
-            
+
             $libraryName = '';
             if ($libraryResult['success']) {
                 $libraryName = $libraryResult['library']['title'];
@@ -463,11 +473,11 @@ try {
                 ]);
                 // Continue anyway, just without a library name
             }
-            
+
             // NEW CODE: Update the filename to include the library name if it's not already there
             if (!empty($libraryName)) {
                 $updatedFilename = addLibraryNameToFilename($filename, $libraryName);
-                
+
                 // If the filename was updated, log it
                 if ($updatedFilename !== $filename) {
                     logDebug("Updated filename to include library name", [
@@ -477,24 +487,24 @@ try {
                     $filename = $updatedFilename;
                 }
             }
-            
+
             // Handle the existing file
             $originalFilename = $_POST['filename']; // Original filename from the request
             $originalPath = $directories[$mediaType] . $originalFilename;
-            
+
             // Check if we need to rename the file due to adding library name
             $needsRename = ($filename !== $originalFilename);
-            
+
             if ($needsRename) {
                 $targetPath = $directories[$mediaType] . $filename;
-                
+
                 // First, try to rename the existing file if it exists
                 if (file_exists($originalPath)) {
                     logDebug("Renaming file to include library name", [
                         'originalPath' => $originalPath,
                         'newPath' => $targetPath
                     ]);
-                    
+
                     // Rename first, then we'll update the content
                     if (!rename($originalPath, $targetPath)) {
                         logDebug("Failed to rename file", [
@@ -502,7 +512,7 @@ try {
                             'newPath' => $targetPath,
                             'error' => error_get_last()
                         ]);
-                        
+
                         // If rename fails, continue with the original path
                         $targetPath = $originalPath;
                         $filename = $originalFilename;
@@ -512,7 +522,7 @@ try {
                     logDebug("Original file not found for renaming", [
                         'originalPath' => $originalPath
                     ]);
-                    
+
                     // Original file doesn't exist, use the new path with library name
                     $targetPath = $directories[$mediaType] . $filename;
                 }
@@ -520,17 +530,17 @@ try {
                 // No rename needed, use the original path
                 $targetPath = $originalPath;
             }
-            
+
             // Save the image file (either to the renamed path or the original path)
             if (file_put_contents($targetPath, $imageResult['data'])) {
                 chmod($targetPath, 0644);
-                
+
                 // Add timestamp to avoid browser caching
                 $timestamp = time();
                 $filePathWithTimestamp = $targetPath . "?t=" . $timestamp;
-                
+
                 echo json_encode([
-                    'success' => true, 
+                    'success' => true,
                     'message' => 'Poster successfully imported from Plex' . ($needsRename ? ' and renamed to include library name' : ''),
                     'filename' => $filename,
                     'originalFilename' => $originalFilename,
@@ -541,11 +551,11 @@ try {
             } else {
                 echo json_encode(['success' => false, 'error' => 'Failed to save poster file']);
             }
-            
+
         } catch (Exception $e) {
             echo json_encode(['success' => false, 'error' => 'Error importing from Plex: ' . $e->getMessage()]);
         }
-        
+
         exit;
     }
 
