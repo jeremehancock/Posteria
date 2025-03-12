@@ -78,3 +78,10 @@
 ### Added
 - Added TMDB support for TV Seasons
 
+## [1.2.5]
+### Added
+- Added TMDB support for Collections
+
+### Fixed
+- Updated TMDB search to return all posters that match the media title
+
