@@ -161,3 +161,9 @@
 ### Fixed
 
 - Fixed bug in auto import causing it to fail
+
+## [1.3.2]
+
+### Fixed
+
+- Removed season badges from TMDB results for TV Seasons since they weren't always accurate
