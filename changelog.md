@@ -167,3 +167,9 @@
 ### Fixed
 
 - Removed season badges from TMDB results for TV Seasons since they weren't always accurate
+
+## [1.3.3]
+
+### Added
+
+- Updated the filter buttons to maintain the current search

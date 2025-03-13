@@ -3415,9 +3415,10 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 
 		<div class="filter-container">
 			<div class="filter-buttons">
-				<a href="?" class="filter-button <?php echo empty($currentDirectory) ? 'active' : ''; ?>">All</a>
+				<a href="<?php echo !empty($searchQuery) ? '?search=' . urlencode($searchQuery) : '?'; ?>"
+					class="filter-button <?php echo empty($currentDirectory) ? 'active' : ''; ?>">All</a>
 				<?php foreach ($config['directories'] as $dirKey => $dirPath): ?>
-				<a href="?directory=<?php echo urlencode($dirKey); ?>"
+				<a href="?directory=<?php echo urlencode($dirKey); ?><?php echo !empty($searchQuery) ? '&search=' . urlencode($searchQuery) : ''; ?>"
 					class="filter-button <?php echo $currentDirectory === $dirKey ? 'active' : ''; ?>">
 					<?php echo formatDirectoryName($dirKey); ?>
 				</a>
@@ -7072,6 +7073,41 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 							// Update stats
 							document.querySelector('.gallery-stats').innerHTML =
 								newDoc.querySelector('.gallery-stats').innerHTML;
+
+							// Update filter buttons to include the current search parameter
+							const searchValue = searchForm.querySelector('.search-input').value;
+							if (searchValue) {
+								// Update All button
+								const allFilterButton = document.querySelector('.filter-buttons a:first-child');
+								if (allFilterButton) {
+									allFilterButton.href = `?search=${encodeURIComponent(searchValue)}`;
+								}
+
+								// Update directory filter buttons
+								const directoryButtons = document.querySelectorAll('.filter-buttons a:not(:first-child)');
+								directoryButtons.forEach(button => {
+									const href = button.getAttribute('href');
+									const directoryMatch = href.match(/\?directory=([^&]*)/);
+									if (directoryMatch && directoryMatch[1]) {
+										button.href = `?directory=${directoryMatch[1]}&search=${encodeURIComponent(searchValue)}`;
+									}
+								});
+							} else {
+								// Reset buttons to default if search is cleared
+								const allFilterButton = document.querySelector('.filter-buttons a:first-child');
+								if (allFilterButton) {
+									allFilterButton.href = '?';
+								}
+
+								const directoryButtons = document.querySelectorAll('.filter-buttons a:not(:first-child)');
+								directoryButtons.forEach(button => {
+									const href = button.getAttribute('href');
+									const directoryMatch = href.match(/\?directory=([^&]*)/);
+									if (directoryMatch && directoryMatch[1]) {
+										button.href = `?directory=${directoryMatch[1]}`;
+									}
+								});
+							}
 
 							// Update pagination
 							const paginationContainer = document.querySelector('.pagination');
