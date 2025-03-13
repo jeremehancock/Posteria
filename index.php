@@ -7563,20 +7563,6 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			transform: scale(1.1);
 		}
 		
-		/* Season info badge */
-		.season-badge {
-			position: absolute;
-			top: 10px;
-			left: 10px;
-			background: rgba(229, 160, 13, 0.9);
-			color: #000;
-			padding: 5px 10px;
-			border-radius: 4px;
-			font-weight: bold;
-			font-size: 12px;
-			box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-			z-index: 10;
-		}
 		
 		/* Multi Poster Modal */
 		.multi-poster-modal {
@@ -7778,35 +7764,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			border-radius: 50%;
 			animation: spin 1s infinite linear;
 		}
-		
-		.modal-season-badge {
-			position: absolute;
-			top: 10px;
-			left: 10px;
-			background: rgba(229, 160, 13, 0.9);
-			color: #000;
-			padding: 5px 10px;
-			border-radius: 4px;
-			font-size: 12px;
-			font-weight: bold;
-			box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-			z-index: 10;
-		}
-		
-		/* Special styling for fallback badges */
-		.modal-season-badge.fallback-badge {
-			background: rgba(255, 159, 67, 0.7);
-			padding-right: 20px;
-		}
-		
-		.modal-season-badge.fallback-badge::after {
-			content: '★';
-			position: absolute;
-			right: 5px;
-			top: 5px;
-			font-size: 10px;
-		}
-		
+
 		.no-posters-found {
 			grid-column: 1 / -1;
 			text-align: center;
@@ -8378,22 +8336,6 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 						titleElement.className = 'poster-title';
 						titleElement.textContent = poster.name || '';
 						posterElement.appendChild(titleElement);
-
-						// For season posters, add a season badge
-						if (mediaType === 'season' && (poster.season !== undefined || season !== null)) {
-							const seasonNumber = poster.season !== undefined ? poster.season : season;
-							if (seasonNumber !== null) {
-								const seasonBadge = document.createElement('div');
-								seasonBadge.className = 'modal-season-badge';
-								seasonBadge.textContent = seasonNumber === 0 ? 'Specials' : `S${seasonNumber}`;
-								posterElement.appendChild(seasonBadge);
-
-								// Add a special style for fallback posters
-								if (poster.isFallback) {
-									seasonBadge.classList.add('fallback-badge');
-								}
-							}
-						}
 
 						// Add click event to select poster
 						posterElement.addEventListener('click', function () {
