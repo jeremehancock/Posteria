@@ -73,6 +73,7 @@ services:
       - ./posters/tv-shows:/var/www/html/posters/tv-shows
       - ./posters/tv-seasons:/var/www/html/posters/tv-seasons
       - ./posters/collections:/var/www/html/posters/collections
+      - ./data:/var/www/html/data                                                       # Logs are found here
     restart: unless-stopped
 ```
 
