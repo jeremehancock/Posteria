@@ -20,6 +20,7 @@ Here's the updated version with the PWA line added:
 - 🧹 Orphan Poster detection
 - 🎨 Support for JPG, JPEG, PNG, and WebP formats
 - 🛒 Available in the [Unraid Community App Store](https://unraid.net/community/apps?q=posteria#r)
+  - Thanks to [@ctrlaltd1337ed](https://github.com/ctrlaltd1337ed/unraid-templates) for putting this together.
 
 ## Support this project
 
