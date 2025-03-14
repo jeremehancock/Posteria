@@ -180,3 +180,9 @@
 
 - Added support for pulling posters from Fanart.tv as well as TMDB
 - Added attribution link for both Fanart.tv and TMDB
+
+## [1.3.5]
+
+### Fixed
+
+- Fixed duplicate error preview when no poster is found during TMDB/Fanart.tv search
