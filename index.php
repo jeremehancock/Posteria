@@ -7369,7 +7369,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 
 	<script>
 		/**
-		 * Enhanced TMDB Integration for Posteria
+		 * Enhanced TMDB & Fanart.tv Integration for Posteria
 		 * 
 		 * This script adds support for fetching posters from TMDB for:
 		 * - Movies
@@ -7409,6 +7409,24 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		.tmdb-search-btn svg {
 			width: 22px;
 			height: 22px;
+		}
+		
+		/* Attribution styling */
+		.tmdb-attribution {
+			margin-top: 10px;
+			font-size: 12px;
+			color: var(--text-secondary);
+		}
+		
+		.tmdb-attribution a {
+			color: var(--accent-primary);
+			text-decoration: none;
+			transition: color 0.2s;
+		}
+		
+		.tmdb-attribution a:hover {
+			color: var(--accent-hover);
+			text-decoration: underline;
 		}
 		
 		/* Form layout with flex */
@@ -8067,7 +8085,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				<circle cx="11" cy="11" r="8"></circle>
 				<line x1="21" y1="21" x2="16.65" y2="16.65"></line>
 			</svg>
-			Get TMDB Poster
+			Find Posters
 		`;
 
 				// Store the season number as data attribute for TV seasons
@@ -8077,9 +8095,22 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 					searchButton.setAttribute('data-season', seasonNumber);
 				}
 
+				// Create the attribution div
+				const attributionDiv = document.createElement('div');
+				attributionDiv.className = 'tmdb-attribution';
+				attributionDiv.innerHTML = `
+			<span>Powered by: 
+				<a href="https://www.themoviedb.org/" target="_blank" rel="noopener noreferrer">TMDB</a> & 
+				<a href="https://fanart.tv/" target="_blank" rel="noopener noreferrer">Fanart.tv</a>
+			</span>
+		`;
+
 				// Add the button after the URL input container
 				const container = urlForm.querySelector('.url-input-container');
 				container.insertAdjacentElement('afterend', searchButton);
+
+				// Add the attribution div after the search button
+				searchButton.insertAdjacentElement('afterend', attributionDiv);
 
 				// Add click handler for search button
 				searchButton.addEventListener('click', function () {
@@ -8545,7 +8576,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				}
 
 				// Make the API request
-				fetch('./include/fetch-tmdb.php', {
+				fetch('./include/fetch-posters.php', {
 					method: 'POST',
 					body: formData
 				})
@@ -8655,6 +8686,12 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				const searchButton = document.querySelector('.tmdb-search-btn');
 				if (searchButton) {
 					searchButton.remove();
+				}
+
+				// Remove attribution div
+				const attributionDiv = document.querySelector('.tmdb-attribution');
+				if (attributionDiv) {
+					attributionDiv.remove();
 				}
 
 				// Unwrap the URL input group

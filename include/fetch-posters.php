@@ -28,7 +28,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-// Simple API fetch handler for the TMDB tab in Posteria
+// Simple API fetch handler for the TMDB and Fanart.tv button in Posteria
 
 // Set content type to JSON
 header('Content-Type: application/json');
@@ -154,7 +154,7 @@ if ($type === 'collection') {
 // Store the original search title before sending to API
 $originalSearchTitle = $query;
 
-$apiUrl = 'https://posteria.app/api/tmdb/fetch/?';
+$apiUrl = 'https://posteria.app/api/fetch/posters/?';
 if ($type === 'movie') {
     $apiUrl .= 'movie=' . urlencode($cleanQuery);
 } elseif ($type === 'tv') {
