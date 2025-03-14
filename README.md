@@ -13,12 +13,13 @@ Here's the updated version with the PWA line added:
 - 📲 Installable as a PWA (Progressive Web App)
 - 🔒 Simple authentication system
 - ⚡ Easy poster upload from local files or URLs
-- 🎬 Grab posters directly from TMDB & Fanart.tv
+- 🎬 Grab posters directly from [TMDB](https://www.themoviedb.org/) & Fanart.tv
 - 📥 Import posters from Plex
 - 📤 Export posters to Plex
 - 🤖 Schedule Auto Imports
 - 🧹 Orphan Poster detection
 - 🎨 Support for JPG, JPEG, PNG, and WebP formats
+- 🛒 Available in the [Unraid Community App Store](https://unraid.net/community/apps?q=posteria#r)
 
 ## Support this project
 
