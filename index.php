@@ -8543,13 +8543,19 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				// Remove any existing preview
 				removeExistingPreview();
 
+				// Also remove any existing error containers
+				const existingError = container.querySelector('.tmdb-error-container');
+				if (existingError) {
+					existingError.remove();
+				}
+
 				// Show loading indicator
 				const loading = document.createElement('div');
 				loading.className = 'tmdb-loading';
 				loading.innerHTML = `
-			<div class="tmdb-spinner"></div>
-			<div>Searching...</div>
-		`;
+				<div class="tmdb-spinner"></div>
+				<div>Searching...</div>
+			`;
 
 				container.appendChild(loading);
 
@@ -8641,42 +8647,55 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 
 			// Function to show error message with enhanced styling
 			function showErrorMessage(container, mediaType) {
+				// First, remove any existing error containers
+				const existingError = container.querySelector('.tmdb-error-container');
+				if (existingError) {
+					existingError.remove();
+				}
+
+				// Create a new error message container
 				const errorMsg = document.createElement('div');
 				errorMsg.className = 'tmdb-error-container';
 
 				// Add the error icon SVG with improved styling
 				errorMsg.innerHTML = `
-			<div class="error-content">
-				<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-					<circle cx="12" cy="12" r="10"></circle>
-					<line x1="12" y1="8" x2="12" y2="12"></line>
-					<line x1="12" y1="16" x2="12.01" y2="16"></line>
-				</svg>
-				<div class="error-text">No poster found</div>
-				<div class="error-subtext">${mediaType === 'collection' ? 'Collection' :
+				<div class="error-content">
+					<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+						<circle cx="12" cy="12" r="10"></circle>
+						<line x1="12" y1="8" x2="12" y2="12"></line>
+						<line x1="12" y1="16" x2="12.01" y2="16"></line>
+					</svg>
+					<div class="error-text">No poster found</div>
+					<div class="error-subtext">${mediaType === 'collection' ? 'Collection' :
 						mediaType === 'season' ? 'Season' :
 							mediaType === 'tv' ? 'TV Show' : 'Movie'} not found</div>
-			</div>
-		`;
+				</div>
+			`;
 
 				container.appendChild(errorMsg);
 			}
 
 			// Function to show connection error message
 			function showConnectionErrorMessage(container) {
+				// First, remove any existing error containers
+				const existingError = container.querySelector('.tmdb-error-container');
+				if (existingError) {
+					existingError.remove();
+				}
+
 				const errorMsg = document.createElement('div');
 				errorMsg.className = 'tmdb-error-container';
 				errorMsg.innerHTML = `
-			<div class="error-content">
-				<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-					<polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon>
-					<line x1="12" y1="8" x2="12" y2="12"></line>
-					<line x1="12" y1="16" x2="12.01" y2="16"></line>
-				</svg>
-				<div class="error-text">Search failed</div>
-				<div class="error-subtext">Connection error</div>
-			</div>
-		`;
+				<div class="error-content">
+					<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+						<polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon>
+						<line x1="12" y1="8" x2="12" y2="12"></line>
+						<line x1="12" y1="16" x2="12.01" y2="16"></line>
+					</svg>
+					<div class="error-text">Search failed</div>
+					<div class="error-subtext">Connection error</div>
+				</div>
+			`;
 				container.appendChild(errorMsg);
 			}
 
