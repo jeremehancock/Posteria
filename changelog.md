@@ -173,3 +173,10 @@
 ### Added
 
 - Updated the filter buttons to maintain the current search
+
+## [1.3.4]
+
+### Added
+
+- Added support for pulling posters from Fanart.tv as well as TMDB
+- Added attribution link for both Fanart.tv and TMDB
