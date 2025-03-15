@@ -186,3 +186,9 @@
 ### Fixed
 
 - Fixed duplicate error preview when no poster is found during TMDB/Fanart.tv search
+
+## [1.3.6]
+
+### Fixed
+
+- Get from Plex option adding Library Name to filename

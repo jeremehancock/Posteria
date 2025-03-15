@@ -474,17 +474,24 @@ try {
                 // Continue anyway, just without a library name
             }
 
-            // NEW CODE: Update the filename to include the library name if it's not already there
+            // NEW CODE: Update the filename to include the library name if it's not already there except for collections
             if (!empty($libraryName)) {
-                $updatedFilename = addLibraryNameToFilename($filename, $libraryName);
-
-                // If the filename was updated, log it
-                if ($updatedFilename !== $filename) {
-                    logDebug("Updated filename to include library name", [
-                        'oldFilename' => $filename,
-                        'newFilename' => $updatedFilename
+                if ($mediaType === 'collections') {
+                    logDebug("Skipping library name addition for collection", [
+                        'collectionName' => $filename,
+                        'libraryName' => $libraryName
                     ]);
-                    $filename = $updatedFilename;
+                } else {
+                    $updatedFilename = addLibraryNameToFilename($filename, $libraryName);
+
+                    // If the filename was updated, log it
+                    if ($updatedFilename !== $filename) {
+                        logDebug("Updated filename to include library name", [
+                            'oldFilename' => $filename,
+                            'newFilename' => $updatedFilename
+                        ]);
+                        $filename = $updatedFilename;
+                    }
                 }
             }
 
