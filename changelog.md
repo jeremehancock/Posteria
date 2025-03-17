@@ -192,3 +192,9 @@
 ### Fixed
 
 - Get from Plex option adding Library Name to filename
+
+## [1.3.7]
+
+### Fixed
+
+- Various issues with special characters in the Poster name and/or the Library Name
