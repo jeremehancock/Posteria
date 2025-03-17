@@ -5352,12 +5352,15 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 					if (imgPath && imgPath.includes(filename)) {
 						// Add a timestamp to force a cache refresh
 						const timestamp = new Date().getTime();
-						const newSrc = imgPath + '?t=' + timestamp;
+
+						// Properly encode the path with special characters
+						const encodedPath = encodeURI(imgPath).replace(/#/g, '%23');
+						const newSrc = encodedPath + '?t=' + timestamp;
 
 						// Set the new source
 						img.src = '';
-						img.setAttribute('data-src', newSrc);
-						img.src = newSrc;
+						img.setAttribute('data-src', imgPath + '?t=' + timestamp); // Keep original in data-src
+						img.src = newSrc; // Use encoded version for src
 
 						// Reset loading state
 						img.classList.remove('loaded');
@@ -6381,9 +6384,12 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				if (imageElement) {
 					// For a renamed file, we'll use the new path directly instead of trying to modify the old path
 					if (newPath) {
+						// Properly encode the new path with special characters
+						const encodedPath = encodeURI(newPath).replace(/#/g, '%23');
+
 						imageElement.src = '';  // Clear the src first
 						imageElement.setAttribute('data-src', newPath);
-						imageElement.src = newPath;
+						imageElement.src = encodedPath;
 
 						// Reset loading state
 						imageElement.classList.remove('loaded');
@@ -6413,13 +6419,14 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 								directory === 'tv-seasons' ? 'posters/tv-seasons/' :
 									'posters/collections/';
 
-						// Construct the complete new URL
+						// Construct the complete new URL (using encodeURIComponent to properly handle all special chars)
 						const newUrl = siteBaseUrl + dirPath + encodeURIComponent(newFilename);
 
 						// Update the copy URL button's data-url attribute
 						copyUrlBtn.setAttribute('data-url', newUrl);
 
 					} catch (e) {
+						// Silent error handling
 					}
 				}
 
@@ -6443,6 +6450,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 								downloadLink.setAttribute('href', newHref);
 							}
 						} catch (e) {
+							// Silent error handling
 						}
 					}
 				}
@@ -6559,9 +6567,11 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			}
 
 			function copyUrlHandler() {
-				// Get the URL and encode spaces
+				// Get the URL and properly encode special characters including #
 				const url = this.getAttribute('data-url');
-				const encodedUrl = url.replace(/ /g, '%20');
+
+				// Properly encode all special characters in the URL, especially handling # (encodes to %23)
+				const encodedUrl = encodeURI(url).replace(/#/g, '%23');
 
 				try {
 					navigator.clipboard.writeText(encodedUrl).then(() => {
@@ -6716,7 +6726,12 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 							const placeholder = img.previousElementSibling;
 
 							if (!img.classList.contains('loaded')) {
-								img.src = img.dataset.src;
+								// Get the original src and properly encode all special characters including #
+								const originalSrc = img.dataset.src;
+								// Encode the URL, specifically handling the # character correctly
+								const encodedSrc = encodeURI(originalSrc).replace(/#/g, '%23');
+
+								img.src = encodedSrc;
 
 								img.onload = () => {
 									img.classList.add('loaded');
