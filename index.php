@@ -6910,7 +6910,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				const cleanedFilename = this.getAttribute('data-filename')
 					.replace(/\.jpg$/i, '')                 // Remove .jpg extension
 					.replace(/\*\*Plex\*\*|\*\*Orphaned\*\*/g, '')  // Remove **Plex** and **Orphaned** tags
-					.replace(/\[\[[^\]]*\]\]|\[[^\]]*\]/g, '')      // Remove both [[Library]] and [ID] brackets with contents
+					.replace(/\[\[.*?\]\]|\[.*?\]/gs, '')      // Remove both [[Library]] and [ID] brackets with contents
 					.trim();                                // Trim extra spaces
 
 				// Update the modal with file info
