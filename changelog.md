@@ -198,3 +198,13 @@
 ### Fixed
 
 - Various issues with special characters in the Poster name and/or the Library Name
+
+## [1.3.8]
+
+### Fixed
+
+- Get from Plex issues
+
+### Added
+
+- Added year to movie titles
