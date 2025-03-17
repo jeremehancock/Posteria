@@ -400,7 +400,7 @@ function filterImages($images, $searchQuery)
 		// Remove Plex and Orphaned tags
 		$cleanFilename = str_replace(['**Plex**', '**Orphaned**'], '', $cleanFilename);
 		// Remove both single [ID] and double [[Library]] brackets with their contents
-		$cleanFilename = preg_replace('/\[\[[^\]]*\]\]|\[[^\]]*\]/', '', $cleanFilename);
+		$cleanFilename = preg_replace('/\[\[.*?\]\]|\[.*?\]/s', '', $cleanFilename);
 		// Trim any resulting extra spaces
 		$cleanFilename = trim($cleanFilename);
 
@@ -3549,7 +3549,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 
 					// Create a clean version of the filename (without tags and brackets)
 					$cleanFilename = str_replace(['**Plex**', '**Orphaned**'], '', $filename);
-					$cleanFilename = preg_replace('/\[\[[^\]]*\]\]|\[[^\]]*\]/', '', $cleanFilename);
+					$cleanFilename = preg_replace('/\[\[.*?\]\]|\[.*?\]/s', '', $cleanFilename);
 					$cleanFilename = trim($cleanFilename);
 
 					// Display the clean filename, but append "[Orphaned]" if it's orphaned
@@ -6469,7 +6469,10 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 						// First remove Plex and Orphaned tags
 						let displayText = fullText.replace(/\*\*(Plex|Orphaned)\*\*/g, '');
 						// Then remove both single [ID] and double [[Library]] brackets with their contents
+						// Replace this line:
 						displayText = displayText.replace(/\[\[[^\]]*\]\]|\[[^\]]*\]/g, '');
+						// With this:
+						displayText = displayText.replace(/\[\[.*?\]\]|\[.*?\]/gs, '');
 						// Trim any resulting extra spaces
 						displayText = displayText.trim();
 
@@ -9966,7 +9969,8 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				// Remove Plex and Orphaned tags
 				textToDisplay = textToDisplay.replace(/\*\*(Plex|Orphaned)\*\*/g, '');
 				// Remove both single [ID] and double [[Library]] brackets with their contents
-				textToDisplay = textToDisplay.replace(/\[\[[^\]]*\]\]|\[[^\]]*\]/g, '');
+				textToDisplay = textToDisplay.replace(/\[\[.*?\]\]|\[.*?\]/gs, '');
+
 				// Trim any resulting extra spaces
 				textToDisplay = textToDisplay.trim();
 
