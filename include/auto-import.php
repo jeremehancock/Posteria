@@ -554,9 +554,15 @@ function findExistingPosterByRatingKey($directory, $ratingKey)
 /**
  * Generate Plex filename with proper formatting
  */
-function generatePlexFilename($title, $id, $extension, $mediaType = '', $libraryType = '', $libraryName = '')
+function generatePlexFilename($title, $id, $extension, $mediaType = '', $libraryType = '', $libraryName = '', $year = '')
 {
     $basename = sanitizeFilename($title);
+
+    // Add year in parentheses if available and it's a movie
+    if (!empty($year) && $mediaType === 'movies') {
+        $basename .= " ({$year})";
+    }
+
     if (!empty($id)) {
         $basename .= " [{$id}]";
     }
@@ -772,6 +778,7 @@ function processBatch($items, $serverUrl, $token, $targetDir, $mediaType = '', $
         $title = $item['title'];
         $id = $item['id'];
         $thumb = $item['thumb'];
+        $year = isset($item['year']) ? $item['year'] : '';
 
         // Track that we've seen this ID regardless of any other processing
         $results['importedIds'][] = $id;
@@ -779,9 +786,9 @@ function processBatch($items, $serverUrl, $token, $targetDir, $mediaType = '', $
         // Check for existing file
         $existingFile = findExistingPosterByRatingKey($targetDir, $id);
 
-        // Generate target filename with library name
+        // Generate target filename with library name and year for movies
         $extension = 'jpg';
-        $filename = generatePlexFilename($title, $id, $extension, $mediaType, $libraryType, $libraryName);
+        $filename = generatePlexFilename($title, $id, $extension, $mediaType, $libraryType, $libraryName, $year);
         $targetPath = $targetDir . $filename;
 
         // Handle existing file
@@ -794,15 +801,23 @@ function processBatch($items, $serverUrl, $token, $targetDir, $mediaType = '', $
                 logDebug("Found existing file for ID $id: $existingFile");
                 logDebug("New filename would be: $filename");
 
-                // Check if file needs library name update
-                $needsLibraryNameUpdate = false;
+                // Check if file needs library name update or year update
+                $needsUpdate = false;
 
                 // For standard items (not collections)
                 if ($mediaType !== 'collections') {
                     // Check if library name tag doesn't exist in old file but does in new file
                     $libraryNameTag = "[[{$libraryName}]]";
                     if (strpos($filename, $libraryNameTag) !== false && strpos($existingFile, $libraryNameTag) === false) {
-                        $needsLibraryNameUpdate = true;
+                        $needsUpdate = true;
+                    }
+
+                    // Check if year tag doesn't exist in old file but does in new file
+                    if ($mediaType === 'movies' && !empty($year)) {
+                        $yearTag = "({$year})";
+                        if (strpos($filename, $yearTag) !== false && strpos($existingFile, $yearTag) === false) {
+                            $needsUpdate = true;
+                        }
                     }
                 }
 
@@ -812,13 +827,13 @@ function processBatch($items, $serverUrl, $token, $targetDir, $mediaType = '', $
                     // For example, check if library type marker exists
                     $libraryTypeMarker = ($libraryType === 'movie') ? "(Movies)" : "(TV)";
                     if (strpos($filename, $libraryTypeMarker) !== false && strpos($existingFile, $libraryTypeMarker) === false) {
-                        $needsLibraryNameUpdate = true;
+                        $needsUpdate = true;
                     }
                 }
 
                 // Perform rename if needed
-                if ($needsLibraryNameUpdate) {
-                    logDebug("Renaming file to include library information: $existingFile -> $filename");
+                if ($needsUpdate) {
+                    logDebug("Renaming file to include library information or year: $existingFile -> $filename");
 
                     if (rename($oldPath, $targetPath)) {
                         $results['renamed']++;

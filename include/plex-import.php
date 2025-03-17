@@ -257,9 +257,16 @@ try {
         return trim($filename);
     }
 
-    function generatePlexFilename($title, $id, $extension, $mediaType = '', $libraryType = '', $libraryName = '')
+    function generatePlexFilename($title, $id, $extension, $mediaType = '', $libraryType = '', $libraryName = '', $year = '')
     {
         $basename = sanitizeFilename($title);
+
+        // Add year in parentheses if available and it's a movie
+        if (!empty($year) && $mediaType === 'movies') {
+            $basename .= " ({$year})";
+        }
+
+        // Add the ID
         if (!empty($id)) {
             $basename .= " [{$id}]";
         }
@@ -915,26 +922,32 @@ try {
             $id = $item['id'];
             $thumb = $item['thumb'];
 
+            // Get the year if available (for movies)
+            $year = isset($item['year']) ? $item['year'] : '';
+
             // First, check if there's an existing file for this rating key without library name
             $existingFile = findExistingPosterByRatingKey($targetDir, $id);
 
-            // Generate target filename - now with library name
+            // Generate target filename - now with library name and year for movies
             $extension = 'jpg'; // Plex thumbnails are usually JPG
-            $filename = generatePlexFilename($title, $id, $extension, $mediaType, $libraryType, $libraryName);
+            $filename = generatePlexFilename($title, $id, $extension, $mediaType, $libraryType, $libraryName, $year);
             $targetPath = $targetDir . $filename;
 
             // If we found an existing file without library name, handle it
             if ($existingFile && $existingFile !== $filename) {
                 $oldPath = $targetDir . $existingFile;
 
-                // Check if we're just upgrading the filename by adding library name
-                if (strpos($filename, $libraryName) !== false && !strpos($existingFile, $libraryName)) {
-                    // Rename the file to include library name
+                // Check if we're just upgrading the filename by adding library name or year
+                if (
+                    (strpos($filename, $libraryName) !== false && !strpos($existingFile, $libraryName)) ||
+                    ($mediaType === 'movies' && !empty($year) && strpos($filename, "({$year})") !== false && !strpos($existingFile, "({$year})"))
+                ) {
+                    // Rename the file to include library name and/or year
                     if (rename($oldPath, $targetPath)) {
                         $results['renamed']++;
                         $results['successful']++;  // Also count as successful
                         $results['importedIds'][] = $id;
-                        logDebug("Renamed file to include library name: {$existingFile} -> {$filename}");
+                        logDebug("Renamed file to include library name/year: {$existingFile} -> {$filename}");
                         continue;
                     } else {
                         // If rename failed, proceed with normal download
@@ -943,6 +956,7 @@ try {
                 }
             }
 
+            // Rest of the function remains the same...
             // Handle existing file based on overwrite option
             if (file_exists($targetPath)) {
                 if ($overwriteOption === 'skip') {
