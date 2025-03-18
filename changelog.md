@@ -208,3 +208,10 @@
 ### Added
 
 - Added year to movie titles
+
+## [1.3.9]
+
+### Fixed
+
+- Fixed issue with filenames in Windows SMB Shares.
+  - This will be a breaking change and require everyone to use the Reset option to clear out all previously imported files.
