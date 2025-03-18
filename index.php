@@ -6467,7 +6467,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 
 						// Also update the displayed caption text
 						// First remove Plex and Orphaned tags
-						let displayText = fullText.replace(/\*\*(Plex|Orphaned)\*\*/g, '');
+						let displayText = fullText.replace(/\-\-(Plex|Orphaned)\-\-/g, '');
 						// Then remove both single [ID] and double [[Library]] brackets with their contents
 						// Replace this line:
 						displayText = displayText.replace(/\[\[[^\]]*\]\]|\[[^\]]*\]/g, '');
@@ -9967,7 +9967,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				// Clean up the text to display
 				let textToDisplay = fullText;
 				// Remove Plex and Orphaned tags
-				textToDisplay = textToDisplay.replace(/\*\*(Plex|Orphaned)\*\*/g, '');
+				textToDisplay = textToDisplay.replace(/\-\-(Plex|Orphaned)\-\-/g, '');
 				// Remove both single [ID] and double [[Library]] brackets with their contents
 				textToDisplay = textToDisplay.replace(/\[\[.*?\]\]|\[.*?\]/gs, '');
 
@@ -10025,7 +10025,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 					// Clean up the full text for comparison
 					let cleanFullText = fullText;
 					// Remove Plex and Orphaned tags
-					cleanFullText = cleanFullText.replace(/\*\*(Plex|Orphaned)\*\*/g, '');
+					cleanFullText = cleanFullText.replace(/\-\-(Plex|Orphaned)\-\-/g, '');
 					// Remove both single [ID] and double [[Library]] brackets with their contents
 					cleanFullText = cleanFullText.replace(/\[\[[^\]]*\]\]|\[[^\]]*\]/g, '');
 					// Trim any resulting extra spaces

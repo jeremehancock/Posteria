@@ -210,7 +210,7 @@ function handleMissingLibraries($mediaType, $currentLibraries)
 function enhancedMarkOrphanedPosters(
     $targetDir,
     $currentImportIds,
-    $orphanedTag = '**Orphaned**',
+    $orphanedTag = '--Orphaned--',
     $libraryType = '',
     $showTitle = '',
     $mediaType = '',
