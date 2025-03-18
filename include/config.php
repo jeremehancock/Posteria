@@ -48,7 +48,6 @@ if (!function_exists('getEnvWithFallback')) {
         $value = getenv($key);
         return $value !== false ? $value : $default;
     }
-    writeLog("Defined getEnvWithFallback function");
 }
 
 if (!function_exists('getIntEnvWithFallback')) {
@@ -57,7 +56,6 @@ if (!function_exists('getIntEnvWithFallback')) {
         $value = getenv($key);
         return $value !== false ? intval($value) : $default;
     }
-    writeLog("Defined getIntEnvWithFallback function");
 }
 
 $auth_config = [
