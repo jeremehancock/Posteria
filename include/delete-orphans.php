@@ -134,7 +134,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
     // Filter orphaned images
     foreach ($allImages as $image) {
-        if (strpos(strtolower($image['filename']), '**plex**') === false) {
+        if (strpos(strtolower($image['filename']), '--plex--') === false) {
             $orphanedImages[] = [
                 'filename' => $image['filename'],
                 'directory' => $image['directory']
@@ -168,7 +168,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $filepath = $config['directories'][$directory] . $filename;
 
     // Security check: Ensure the file is within allowed directory and is orphaned
-    if (!isValidFilename($filename) || !file_exists($filepath) || strpos(strtolower($filename), '**plex**') !== false) {
+    if (!isValidFilename($filename) || !file_exists($filepath) || strpos(strtolower($filename), '--plex--') !== false) {
         echo json_encode([
             'success' => false,
             'error' => 'Invalid file'

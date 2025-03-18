@@ -540,7 +540,7 @@ function findExistingPosterByRatingKey($directory, $ratingKey)
 
     $files = glob($directory . '/*');
     foreach ($files as $file) {
-        if (is_file($file) && strpos($file, "**Plex**") !== false) {
+        if (is_file($file) && strpos($file, "--Plex--") !== false) {
             $pattern = '/\[' . preg_quote($ratingKey, '/') . '\]/';
             if (preg_match($pattern, basename($file))) {
                 return basename($file);
@@ -574,17 +574,17 @@ function generatePlexFilename($title, $id, $extension, $mediaType = '', $library
 
         // Add type marker based on library type
         if ($libraryType === 'movie') {
-            $basename .= "{$collectionLabel} (Movies) **Plex**";
+            $basename .= "{$collectionLabel} (Movies) --Plex--";
         } else if ($libraryType === 'show') {
-            $basename .= "{$collectionLabel} (TV) **Plex**";
+            $basename .= "{$collectionLabel} (TV) --Plex--";
         } else {
             // If library type unknown, just use a generic marker
-            $basename .= "{$collectionLabel} **Plex**";
+            $basename .= "{$collectionLabel} --Plex--";
         }
     } else {
         // For regular items (movies, shows, seasons), add library name
         $libraryNameStr = !empty($libraryName) ? " [[{$libraryName}]]" : "";
-        $basename .= "{$libraryNameStr} **Plex**";
+        $basename .= "{$libraryNameStr} --Plex--";
     }
 
     return $basename . '.' . $extension;
@@ -891,7 +891,7 @@ function processBatch($items, $serverUrl, $token, $targetDir, $mediaType = '', $
 function handleOrphanedPosters(
     $targetDir,
     $currentImportIds,
-    $orphanedTag = '**Orphaned**',
+    $orphanedTag = '--Orphaned--',
     $libraryType = '',
     $showTitle = '',
     $mediaType = '',
@@ -940,7 +940,7 @@ function handleOrphanedPosters(
     logDebug("Found " . count($files) . " files in $targetDir");
 
     // Process files and check for orphans
-    $plexTag = '**Plex**';
+    $plexTag = '--Plex--';
 
     foreach ($files as $file) {
         if (!is_file($file)) {
@@ -970,7 +970,7 @@ function handleOrphanedPosters(
                 if (!in_array($fileId, $currentImportIds)) {
                     logDebug("Marking as orphaned: $filename (ID: $fileId not found in valid IDs)");
 
-                    // Replace **Plex** with **Orphaned** in the filename
+                    // Replace --Plex-- with --Orphaned-- in the filename
                     $newFilename = str_replace($plexTag, $orphanedTag, $filename);
                     $newPath = $targetDir . '/' . $newFilename;
 
@@ -1025,7 +1025,7 @@ function importMovies($serverUrl, $token, $libraryId, $libraryName)
     $orphanedResults = handleOrphanedPosters(
         $targetDir,
         $batchResults['importedIds'],
-        '**Orphaned**',
+        '--Orphaned--',
         '',
         '',
         'movies',
@@ -1076,7 +1076,7 @@ function importShows($serverUrl, $token, $libraryId, $libraryName)
     $orphanedResults = handleOrphanedPosters(
         $targetDir,
         $batchResults['importedIds'],
-        '**Orphaned**',
+        '--Orphaned--',
         '',
         '',
         'shows',
@@ -1157,7 +1157,7 @@ function importAllSeasons($serverUrl, $token, $libraryId, $libraryName)
     $orphanedResults = handleOrphanedPosters(
         $targetDir,
         $allSeasonIds,
-        '**Orphaned**',
+        '--Orphaned--',
         '',
         '',
         'seasons',
@@ -1206,7 +1206,7 @@ function importCollections($serverUrl, $token, $libraryId, $libraryName, $librar
     $orphanedResults = handleOrphanedPosters(
         $targetDir,
         $batchResults['importedIds'],
-        '**Orphaned**',
+        '--Orphaned--',
         $libraryType,
         '',
         'collections',

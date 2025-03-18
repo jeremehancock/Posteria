@@ -159,16 +159,16 @@ try {
             return $filename;
         }
 
-        // Find the position of "**Plex**" in the filename
-        $plexPos = strpos($filename, '**Plex**');
+        // Find the position of "--Plex--" in the filename
+        $plexPos = strpos($filename, '--Plex--');
         if ($plexPos === false) {
-            // If there's no "**Plex**" marker, just append the library name before the extension
+            // If there's no "--Plex--" marker, just append the library name before the extension
             $ext = pathinfo($filename, PATHINFO_EXTENSION);
             $baseFilename = pathinfo($filename, PATHINFO_FILENAME);
             return $baseFilename . ' ' . $bracketedLibraryName . '.' . $ext;
         }
 
-        // Insert the library name before "**Plex**"
+        // Insert the library name before "--Plex--"
         $beforePlex = substr($filename, 0, $plexPos);
         $afterPlex = substr($filename, $plexPos);
         return $beforePlex . $bracketedLibraryName . ' ' . $afterPlex;

@@ -200,8 +200,8 @@ function getImageFiles($config, $currentDirectory = '')
 		$filenameB = pathinfo($b['filename'], PATHINFO_FILENAME);
 
 		// Remove Plex and Orphaned tags for cleaner comparison
-		$filenameA = str_replace(['**Plex**', '**Orphaned**'], '', $filenameA);
-		$filenameB = str_replace(['**Plex**', '**Orphaned**'], '', $filenameB);
+		$filenameA = str_replace(['--Plex--', '--Orphaned--'], '', $filenameA);
+		$filenameB = str_replace(['--Plex--', '--Orphaned--'], '', $filenameB);
 
 		// Remove library brackets and their contents
 		$filenameA = preg_replace('/\[\[[^\]]*\]\]|\[[^\]]*\]/', '', $filenameA);
@@ -388,7 +388,7 @@ function filterImages($images, $searchQuery)
 		// Check for special search terms first
 		if ($searchingForOrphaned) {
 			// If searching for orphaned, just check if file doesn't have Plex tag
-			if (strpos($fullFilename, '**plex**') === false) {
+			if (strpos($fullFilename, '--plex--') === false) {
 				$filteredImages[] = $image;
 			}
 			continue;
@@ -398,7 +398,7 @@ function filterImages($images, $searchQuery)
 		// Clean filename for searching - removes tags and metadata formatting
 		$cleanFilename = $filename;
 		// Remove Plex and Orphaned tags
-		$cleanFilename = str_replace(['**Plex**', '**Orphaned**'], '', $cleanFilename);
+		$cleanFilename = str_replace(['--Plex--', '--Orphaned--'], '', $cleanFilename);
 		// Remove both single [ID] and double [[Library]] brackets with their contents
 		$cleanFilename = preg_replace('/\[\[.*?\]\]|\[.*?\]/s', '', $cleanFilename);
 		// Trim any resulting extra spaces
@@ -633,7 +633,7 @@ if (isLoggedIn() && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['actio
 
 	// Filter orphaned images
 	foreach ($allImages as $image) {
-		if (strpos(strtolower($image['filename']), '**plex**') === false) {
+		if (strpos(strtolower($image['filename']), '--plex--') === false) {
 			$orphanedImages[] = $image;
 		}
 	}
@@ -3027,7 +3027,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 					$hasOrphans = false;
 					$allImages = getImageFiles($config, '');
 					foreach ($allImages as $image) {
-						if (strpos(strtolower($image['filename']), '**plex**') === false) {
+						if (strpos(strtolower($image['filename']), '--plex--') === false) {
 							$hasOrphans = true;
 							break;
 						}
@@ -3086,7 +3086,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 					$orphanCount = 0;
 					$allImages = getImageFiles($config, '');
 					foreach ($allImages as $image) {
-						if (strpos(strtolower($image['filename']), '**plex**') === false) {
+						if (strpos(strtolower($image['filename']), '--plex--') === false) {
 							$orphanCount++;
 						}
 					}
@@ -3459,7 +3459,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 
 
 					<div class="orphaned-badge"
-						data-orphaned="<?php echo (strpos(strtolower($image['filename']), '**plex**') === false) ? 'true' : 'false'; ?>"
+						data-orphaned="<?php echo (strpos(strtolower($image['filename']), '--plex--') === false) ? 'true' : 'false'; ?>"
 						style="display: none;">
 						Orphaned
 					</div>
@@ -3493,7 +3493,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 						<?php if (isLoggedIn()): ?>
 						<?php
 						// Check if filename contains "Plex" to determine if we should show the Plex-related buttons
-						$isPlexFile = strpos(strtolower($image['filename']), '**plex**') !== false;
+						$isPlexFile = strpos(strtolower($image['filename']), '--plex--') !== false;
 
 						// Only show Send to Plex button for Plex files
 						if ($isPlexFile):
@@ -3527,7 +3527,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 						<button class="orphan-button delete-btn"
 							data-filename="<?php echo htmlspecialchars($image['filename']); ?>"
 							data-dirname="<?php echo htmlspecialchars($image['directory']); ?>"
-							data-orphaned="<?php echo (strpos(strtolower($image['filename']), '**plex**') === false) ? 'true' : 'false'; ?>">
+							data-orphaned="<?php echo (strpos(strtolower($image['filename']), '--plex--') === false) ? 'true' : 'false'; ?>">
 							<svg height="16px" width="16px" xmlns="http://www.w3.org/2000/svg"
 								shape-rendering="geometricPrecision" text-rendering="geometricPrecision"
 								image-rendering="optimizeQuality" fill-rule="evenodd" clip-rule="evenodd"
@@ -3545,10 +3545,10 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 					<?php
 					$filename = pathinfo($image['filename'], PATHINFO_FILENAME);
 					// Check if this is an orphaned file (doesn't contain Plex tag)
-					$isOrphaned = (strpos(strtolower($image['filename']), '**plex**') === false);
+					$isOrphaned = (strpos(strtolower($image['filename']), '--plex--') === false);
 
 					// Create a clean version of the filename (without tags and brackets)
-					$cleanFilename = str_replace(['**Plex**', '**Orphaned**'], '', $filename);
+					$cleanFilename = str_replace(['--Plex--', '--Orphaned--'], '', $filename);
 					$cleanFilename = preg_replace('/\[\[.*?\]\]|\[.*?\]/s', '', $cleanFilename);
 					$cleanFilename = trim($cleanFilename);
 
@@ -5382,7 +5382,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 
 			// Function to check if a filename has "Plex" in it
 			function isPlexFile(filename) {
-				return filename.toLowerCase().includes('**plex**');
+				return filename.toLowerCase().includes('--plex--');
 			}
 
 			// =========== SEND TO PLEX FUNCTIONALITY ===========
@@ -6909,7 +6909,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 
 				const cleanedFilename = this.getAttribute('data-filename')
 					.replace(/\.jpg$/i, '')                 // Remove .jpg extension
-					.replace(/\*\*Plex\*\*|\*\*Orphaned\*\*/g, '')  // Remove **Plex** and **Orphaned** tags
+					.replace(/\-\-Plex\-\-|\-\-Orphaned\-\-/g, '')  // Remove --Plex-- and --Orphaned-- tags
 					.replace(/\[\[.*?\]\]|\[.*?\]/gs, '')      // Remove both [[Library]] and [ID] brackets with contents
 					.trim();                                // Trim extra spaces
 

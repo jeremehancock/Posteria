@@ -140,7 +140,7 @@ function registerExistingPlexIds()
             // Get all Plex files
             $files = glob($directory . '/*');
             foreach ($files as $file) {
-                if (!is_file($file) || strpos(basename($file), '**Plex**') === false) {
+                if (!is_file($file) || strpos(basename($file), '--Plex--') === false) {
                     continue;
                 }
 
@@ -278,17 +278,17 @@ try {
 
             // Add type marker based on library type
             if ($libraryType === 'movie') {
-                $basename .= "{$collectionLabel} (Movies) **Plex**";
+                $basename .= "{$collectionLabel} (Movies) --Plex--";
             } else if ($libraryType === 'show') {
-                $basename .= "{$collectionLabel} (TV) **Plex**";
+                $basename .= "{$collectionLabel} (TV) --Plex--";
             } else {
                 // If library type unknown, just use a generic marker
-                $basename .= "{$collectionLabel} **Plex**";
+                $basename .= "{$collectionLabel} --Plex--";
             }
         } else {
             // For regular items (movies, shows, seasons), add library name
             $libraryNameStr = !empty($libraryName) ? " [[{$libraryName}]]" : "";
-            $basename .= "{$libraryNameStr} **Plex**";
+            $basename .= "{$libraryNameStr} --Plex--";
         }
 
         return $basename . '.' . $extension;
@@ -305,7 +305,7 @@ try {
 
         $files = glob($directory . '/*');
         foreach ($files as $file) {
-            if (is_file($file) && strpos($file, "**Plex**") !== false) {
+            if (is_file($file) && strpos($file, "--Plex--") !== false) {
                 // Look for the rating key pattern [ratingKey]
                 $pattern = '/\[' . preg_quote($ratingKey, '/') . '\]/';
                 if (preg_match($pattern, basename($file))) {
@@ -330,16 +330,16 @@ try {
             return $filename;
         }
 
-        // Find the position of "**Plex**" in the filename
-        $plexPos = strpos($filename, '**Plex**');
+        // Find the position of "--Plex--" in the filename
+        $plexPos = strpos($filename, '--Plex--');
         if ($plexPos === false) {
-            // If there's no "**Plex**" marker, just append the library name before the extension
+            // If there's no "--Plex--" marker, just append the library name before the extension
             $ext = pathinfo($filename, PATHINFO_EXTENSION);
             $baseFilename = pathinfo($filename, PATHINFO_FILENAME);
             return $baseFilename . ' ' . $bracketedLibraryName . '.' . $ext;
         }
 
-        // Insert the library name before "**Plex**"
+        // Insert the library name before "--Plex--"
         $beforePlex = substr($filename, 0, $plexPos);
         $afterPlex = substr($filename, $plexPos);
         return $beforePlex . $bracketedLibraryName . ' ' . $afterPlex;
@@ -1047,7 +1047,7 @@ try {
         return $results;
     }
 
-    function getExistingPosters($directory, $type = '**Plex**')
+    function getExistingPosters($directory, $type = '--Plex--')
     {
         $posters = [];
 
@@ -1116,7 +1116,7 @@ try {
         $orphanedResults = improvedMarkOrphanedPosters(
             $targetDir,
             $importedIds,
-            '**Orphaned**',
+            '--Orphaned--',
             $libraryType,
             $showTitle,
             $mediaType,
@@ -1198,7 +1198,7 @@ try {
     function improvedMarkOrphanedPosters(
         $targetDir,
         $currentImportIds,
-        $orphanedTag = '**Orphaned**',
+        $orphanedTag = '--Orphaned--',
         $libraryType = '',
         $showTitle = '',
         $mediaType = '',
@@ -1265,7 +1265,7 @@ try {
             $filename = basename($file);
             if (strpos($filename, $orphanedTag) !== false)
                 continue;
-            if (strpos($filename, '**Plex**') === false)
+            if (strpos($filename, '--Plex--') === false)
                 continue;
 
             // For single library import, only process files from this library
@@ -1290,7 +1290,7 @@ try {
             if (preg_match('/\[([a-f0-9]+)\]/', $filename, $idMatch)) {
                 $fileId = $idMatch[1];
                 if (!in_array($fileId, $allValidIds)) {
-                    $newFilename = str_replace('**Plex**', $orphanedTag, $filename);
+                    $newFilename = str_replace('--Plex--', $orphanedTag, $filename);
                     $newPath = $targetDir . '/' . $newFilename;
 
                     if (rename($file, $newPath)) {
@@ -1316,7 +1316,7 @@ try {
     function markOrphanedPosters(
         $targetDir,
         $validIds,
-        $orphanedTag = '**Orphaned**',
+        $orphanedTag = '--Orphaned--',
         $libraryType = '',
         $showTitle = '',
         $mediaType = ''
@@ -1545,7 +1545,7 @@ try {
                             $orphanedResults = enhancedMarkOrphanedPosters(
                                 $targetDir,
                                 $allImportedIds,
-                                '**Orphaned**',
+                                '--Orphaned--',
                                 '',
                                 '',
                                 'movies',
@@ -1679,7 +1679,7 @@ try {
                             $orphanedResults = enhancedMarkOrphanedPosters(
                                 $targetDir,
                                 $allImportedIds,
-                                '**Orphaned**',
+                                '--Orphaned--',
                                 '',
                                 '',
                                 'shows',
@@ -1858,7 +1858,7 @@ try {
                                     $orphanedResults = enhancedMarkOrphanedPosters(
                                         $targetDir,
                                         $allImportedIds,
-                                        '**Orphaned**',
+                                        '--Orphaned--',
                                         '',
                                         '',
                                         'seasons',
@@ -2031,7 +2031,7 @@ try {
                                 $orphanedResults = enhancedMarkOrphanedPosters(
                                     $targetDir,
                                     $allImportedIds,
-                                    '**Orphaned**',
+                                    '--Orphaned--',
                                     '',
                                     $showTitle,
                                     'seasons',
@@ -2205,7 +2205,7 @@ try {
                                 $orphanedResults = enhancedMarkOrphanedPosters(
                                     $targetDir,
                                     $allImportedIds,
-                                    '**Orphaned**',
+                                    '--Orphaned--',
                                     $libraryType,
                                     '',
                                     'collections',
@@ -2353,7 +2353,7 @@ try {
             $orphanedResults = enhancedMarkOrphanedPosters(
                 $targetDir,
                 isset($results['importedIds']) ? $results['importedIds'] : [],
-                '**Orphaned**',
+                '--Orphaned--',
                 $libraryType ?? '',
                 $showTitle ?? '',
                 $type,

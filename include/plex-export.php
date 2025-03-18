@@ -213,7 +213,7 @@ try {
     // Check if filename contains "Plex"
     function isPlexFile($filename)
     {
-        return stripos($filename, '**plex**') !== false;
+        return stripos($filename, '--plex--') !== false;
     }
 
     // Extract Plex ID from filename
