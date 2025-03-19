@@ -754,7 +754,7 @@ function isValidMediaId($mediaType, $id)
 }
 
 /**
- * Updated processBatch function to pass addedAt timestamps
+ * Modified processBatch function to better handle collections timestamp renaming
  */
 function processBatch($items, $serverUrl, $token, $targetDir, $mediaType = '', $libraryType = '', $libraryName = '')
 {
@@ -813,7 +813,14 @@ function processBatch($items, $serverUrl, $token, $targetDir, $mediaType = '', $
 
                 // Check if the timestamp is missing in the old filename
                 $hasTimestamp = preg_match('/\(A\d{8,12}\)/', $existingFile);
-                if (!$hasTimestamp && !empty($addedAt)) {
+
+                // Special aggressive check for collections - if it's a collection without timestamp, always update
+                if ($mediaType === 'collections' && !$hasTimestamp && !empty($addedAt)) {
+                    $needsUpdate = true;
+                    logDebug("Collection needs timestamp update: $existingFile");
+                }
+                // For other media types, or if it's not a timestamp issue for collections
+                else if (!$hasTimestamp && !empty($addedAt)) {
                     $needsUpdate = true;
                     logDebug("File needs timestamp update: $existingFile");
                 }
@@ -1364,7 +1371,114 @@ function importAllSeasons($serverUrl, $token, $libraryId, $libraryName)
 }
 
 /**
- * Import collections for a library
+ * Add a special pre-processing function specifically for collections
+ * This function runs before any orphan detection to fix collections that need timestamps
+ */
+function updateCollectionsWithTimestamps($serverUrl, $token, $libraryId, $libraryName, $libraryType)
+{
+    $targetDir = BASE_PATH . '/posters/collections/';
+    $results = [
+        'updated' => 0,
+        'failed' => 0
+    ];
+
+    // Skip if the directory doesn't exist
+    if (!is_dir($targetDir)) {
+        return $results;
+    }
+
+    logMessage("Running special collections timestamp update for library: {$libraryName}");
+
+    // Get all collections for this library
+    $collectionsResult = getAllPlexCollections($serverUrl, $token, $libraryId);
+    if (!$collectionsResult['success'] || empty($collectionsResult['data'])) {
+        logMessage("No collections found or error retrieving collections");
+        return $results;
+    }
+
+    // Create a lookup table for collection IDs -> addedAt timestamps
+    $collectionTimestamps = [];
+    foreach ($collectionsResult['data'] as $collection) {
+        if (isset($collection['id']) && isset($collection['addedAt'])) {
+            $collectionTimestamps[$collection['id']] = $collection['addedAt'];
+        }
+    }
+
+    // Get all collection files in the directory
+    $files = glob($targetDir . '/*');
+
+    foreach ($files as $file) {
+        if (!is_file($file))
+            continue;
+
+        $filename = basename($file);
+
+        // Skip non-Plex files
+        if (strpos($filename, '--Plex--') === false)
+            continue;
+
+        // Skip already-orphaned files
+        if (strpos($filename, '--Orphaned--') !== false)
+            continue;
+
+        // Check if this is a collection of the right type for this library
+        $isMovieCollection = strpos($filename, '(Movies)') !== false;
+        $isShowCollection = strpos($filename, '(TV)') !== false;
+
+        // Skip if this collection doesn't match the library type
+        if (
+            ($libraryType === 'movie' && !$isMovieCollection) ||
+            ($libraryType === 'show' && !$isShowCollection)
+        ) {
+            continue;
+        }
+
+        // Check if the file already has a timestamp
+        $hasTimestamp = preg_match('/\(A\d{8,12}\)/', $filename);
+        if ($hasTimestamp)
+            continue;
+
+        // Extract the ID from the filename
+        $idMatch = [];
+        if (preg_match('/\[([a-f0-9]+)\]/', $filename, $idMatch)) {
+            $fileId = $idMatch[1];
+
+            // Check if we have a timestamp for this ID
+            if (isset($collectionTimestamps[$fileId])) {
+                $addedAt = $collectionTimestamps[$fileId];
+
+                // Build the new filename by inserting the timestamp before the --Plex-- marker
+                $beforePlex = substr($filename, 0, strpos($filename, '--Plex--'));
+                $afterPlex = substr($filename, strpos($filename, '--Plex--'));
+
+                // If there's a space before --Plex--, we don't need to add one
+                if (substr($beforePlex, -1) === ' ') {
+                    $newFilename = $beforePlex . "(A{$addedAt}) " . $afterPlex;
+                } else {
+                    $newFilename = $beforePlex . " (A{$addedAt}) " . $afterPlex;
+                }
+
+                $newPath = $targetDir . $newFilename;
+
+                logDebug("Attempting to update collection with timestamp: $filename -> $newFilename");
+
+                if (rename($file, $newPath)) {
+                    $results['updated']++;
+                    logMessage("Successfully updated collection with timestamp: $filename");
+                } else {
+                    $results['failed']++;
+                    logMessage("Failed to update collection with timestamp: $filename");
+                }
+            }
+        }
+    }
+
+    logMessage("Collections timestamp update complete: {$results['updated']} updated, {$results['failed']} failed");
+    return $results;
+}
+
+/**
+ * Update the importCollections function to use the new pre-processing function
  */
 function importCollections($serverUrl, $token, $libraryId, $libraryName, $libraryType)
 {
@@ -1379,6 +1493,10 @@ function importCollections($serverUrl, $token, $libraryId, $libraryName, $librar
             return false;
         }
     }
+
+    // CRITICAL NEW STEP: First, update existing collections with timestamps
+    // This helps prevent them from being marked as orphans
+    $updateResults = updateCollectionsWithTimestamps($serverUrl, $token, $libraryId, $libraryName, $libraryType);
 
     // Get all collections
     $result = getAllPlexCollections($serverUrl, $token, $libraryId);
@@ -1408,6 +1526,7 @@ function importCollections($serverUrl, $token, $libraryId, $libraryName, $librar
         "Processed: " . count($result['data']) . ", " .
         "Successful: " . $batchResults['successful'] . ", " .
         "Renamed: " . $batchResults['renamed'] . ", " .
+        "Timestamp updates: " . $updateResults['updated'] . ", " .
         "Failed: " . $batchResults['failed'] . ", " .
         "Orphaned: " . $orphanedResults['orphaned']);
 
@@ -1421,6 +1540,317 @@ if (!isset($_SESSION)) {
 
 // Load stored IDs
 initializeSessionFromStorage();
+
+/**
+ * Improved function to fix collections and clean up duplicates
+ */
+function fixCollectionsTimestamps($serverUrl, $token)
+{
+    $collectionsDir = BASE_PATH . '/posters/collections/';
+
+    // Skip if collections directory doesn't exist
+    if (!is_dir($collectionsDir)) {
+        logMessage("Collections directory not found: " . $collectionsDir);
+        return false;
+    }
+
+    logMessage("Pre-processing collections to add timestamps and remove duplicates");
+
+    // Get all libraries first
+    $libraries = getPlexLibraries($serverUrl, $token);
+    if (!$libraries['success'] || empty($libraries['data'])) {
+        logMessage("Failed to get libraries or no libraries found");
+        return false;
+    }
+
+    // Track results
+    $results = [
+        'updated' => 0,
+        'deleted_duplicates' => 0,
+        'failed' => 0,
+        'skipped' => 0
+    ];
+
+    // Create a mapping of all collection IDs to their details (with timestamps)
+    $collectionDetails = [];
+
+    // For each library, get collections and build our lookup table
+    foreach ($libraries['data'] as $library) {
+        $libraryId = $library['id'];
+        $libraryType = $library['type'];
+
+        // Get collections for this library
+        $collectionsResult = getAllPlexCollections($serverUrl, $token, $libraryId);
+
+        if ($collectionsResult['success'] && !empty($collectionsResult['data'])) {
+            foreach ($collectionsResult['data'] as $collection) {
+                // Store collection details with library type for reference
+                if (isset($collection['id']) && isset($collection['addedAt'])) {
+                    $collectionDetails[$collection['id']] = [
+                        'addedAt' => $collection['addedAt'],
+                        'libraryType' => $libraryType,
+                        'title' => $collection['title']
+                    ];
+                }
+            }
+
+            logMessage("Found " . count($collectionsResult['data']) .
+                " collections in " . $library['title'] . " (" . $libraryType . ")");
+        }
+    }
+
+    if (empty($collectionDetails)) {
+        logMessage("No collections found with timestamps");
+        return false;
+    }
+
+    logMessage("Built lookup table with " . count($collectionDetails) . " collections");
+
+    // First: Group all files by their collection ID to identify duplicates
+    $filesByCollectionId = [];
+    $allFiles = glob($collectionsDir . '*');
+
+    foreach ($allFiles as $file) {
+        if (!is_file($file))
+            continue;
+
+        $filename = basename($file);
+
+        // Extract ID from filename
+        $idMatch = [];
+        if (preg_match('/\[([a-f0-9]+)\]/', $filename, $idMatch)) {
+            $fileId = $idMatch[1];
+
+            if (!isset($filesByCollectionId[$fileId])) {
+                $filesByCollectionId[$fileId] = [];
+            }
+
+            $filesByCollectionId[$fileId][] = [
+                'path' => $file,
+                'filename' => $filename,
+                'has_timestamp' => preg_match('/\(A\d{8,12}\)/', $filename) ? true : false,
+                'is_orphaned' => strpos($filename, '--Orphaned--') !== false ? true : false
+            ];
+        }
+    }
+
+    // Process each collection ID and handle its files
+    foreach ($filesByCollectionId as $collectionId => $files) {
+        // Skip if no files for this ID
+        if (empty($files))
+            continue;
+
+        // Check if we have Plex details for this collection
+        $hasPlexDetails = isset($collectionDetails[$collectionId]);
+        $addedAt = $hasPlexDetails ? $collectionDetails[$collectionId]['addedAt'] : '';
+        $libraryType = $hasPlexDetails ? $collectionDetails[$collectionId]['libraryType'] : '';
+        $title = $hasPlexDetails ? $collectionDetails[$collectionId]['title'] : '';
+
+        // If we have multiple files for the same collection ID
+        if (count($files) > 1) {
+            logMessage("Found " . count($files) . " files for collection ID: " . $collectionId);
+
+            // Determine which file to keep based on specific criteria
+            $fileToKeep = null;
+            $filesToDelete = [];
+
+            // First priority: Keep file that's not orphaned and has timestamp
+            foreach ($files as $file) {
+                if (!$file['is_orphaned'] && $file['has_timestamp']) {
+                    $fileToKeep = $file;
+                    break;
+                }
+            }
+
+            // Second priority: Keep file that's not orphaned
+            if ($fileToKeep === null) {
+                foreach ($files as $file) {
+                    if (!$file['is_orphaned']) {
+                        $fileToKeep = $file;
+                        break;
+                    }
+                }
+            }
+
+            // Third priority: Keep file that has timestamp
+            if ($fileToKeep === null) {
+                foreach ($files as $file) {
+                    if ($file['has_timestamp']) {
+                        $fileToKeep = $file;
+                        break;
+                    }
+                }
+            }
+
+            // Last resort: Keep first file
+            if ($fileToKeep === null && !empty($files)) {
+                $fileToKeep = $files[0];
+            }
+
+            // Mark all other files for deletion
+            foreach ($files as $file) {
+                if ($file !== $fileToKeep) {
+                    $filesToDelete[] = $file;
+                }
+            }
+
+            // Delete duplicate files
+            foreach ($filesToDelete as $file) {
+                logMessage("Deleting duplicate: " . $file['filename']);
+                if (unlink($file['path'])) {
+                    $results['deleted_duplicates']++;
+                } else {
+                    logMessage("Failed to delete duplicate: " . $file['filename']);
+                    $results['failed']++;
+                }
+            }
+
+            // If the file to keep is orphaned but we have Plex details, fix it
+            if ($fileToKeep['is_orphaned'] && $hasPlexDetails) {
+                $oldPath = $fileToKeep['path'];
+                $oldFilename = $fileToKeep['filename'];
+
+                // Generate a standardized filename with consistent timestamp placement
+                $typeMarker = ($libraryType === 'movie') ? "(Movies)" : "(TV)";
+
+                // Build filename components
+                $titlePart = sanitizeFilename($title);
+                $idPart = "[" . $collectionId . "]";
+                $timestampPart = "(A" . $addedAt . ")";
+
+                // Only add "Collection" text if it's not already in the title
+                $collectionPart = (stripos($titlePart, 'Collection') === false) ? " Collection" : "";
+
+                // Assemble the new filename with timestamp right after ID
+                $newFilename = $titlePart . " " . $idPart . " " . $timestampPart .
+                    $collectionPart . " " . $typeMarker . " --Plex--.jpg";
+
+                $newPath = $collectionsDir . $newFilename;
+
+                logMessage("Rescuing orphaned collection and standardizing filename: " . $oldFilename);
+
+                if (rename($oldPath, $newPath)) {
+                    $results['updated']++;
+                    logMessage("Successfully standardized: " . $newFilename);
+                } else {
+                    $results['failed']++;
+                    logMessage("Failed to standardize: " . $oldFilename);
+                }
+            }
+            // If file to keep doesn't have timestamp but we have Plex details, add it
+            else if (!$fileToKeep['has_timestamp'] && $hasPlexDetails) {
+                $oldPath = $fileToKeep['path'];
+                $oldFilename = $fileToKeep['filename'];
+
+                // Generate a standardized filename with consistent timestamp placement
+                $typeMarker = ($libraryType === 'movie') ? "(Movies)" : "(TV)";
+
+                // Build filename components
+                $titlePart = sanitizeFilename($title);
+                $idPart = "[" . $collectionId . "]";
+                $timestampPart = "(A" . $addedAt . ")";
+
+                // Only add "Collection" text if it's not already in the title
+                $collectionPart = (stripos($titlePart, 'Collection') === false) ? " Collection" : "";
+
+                // Assemble the new filename with timestamp right after ID
+                $newFilename = $titlePart . " " . $idPart . " " . $timestampPart .
+                    $collectionPart . " " . $typeMarker . " --Plex--.jpg";
+
+                $newPath = $collectionsDir . $newFilename;
+
+                logMessage("Standardizing collection filename: " . $oldFilename);
+
+                if (rename($oldPath, $newPath)) {
+                    $results['updated']++;
+                    logMessage("Successfully standardized: " . $newFilename);
+                } else {
+                    $results['failed']++;
+                    logMessage("Failed to standardize: " . $oldFilename);
+                }
+            }
+        }
+        // Single file for this collection ID
+        else if (count($files) == 1) {
+            $file = $files[0];
+
+            // If file is orphaned but we have Plex details, fix it
+            if ($file['is_orphaned'] && $hasPlexDetails) {
+                $oldPath = $file['path'];
+                $oldFilename = $file['filename'];
+
+                // Generate a standardized filename with consistent timestamp placement
+                $typeMarker = ($libraryType === 'movie') ? "(Movies)" : "(TV)";
+
+                // Build filename components
+                $titlePart = sanitizeFilename($title);
+                $idPart = "[" . $collectionId . "]";
+                $timestampPart = "(A" . $addedAt . ")";
+
+                // Only add "Collection" text if it's not already in the title
+                $collectionPart = (stripos($titlePart, 'Collection') === false) ? " Collection" : "";
+
+                // Assemble the new filename with timestamp right after ID
+                $newFilename = $titlePart . " " . $idPart . " " . $timestampPart .
+                    $collectionPart . " " . $typeMarker . " --Plex--.jpg";
+
+                $newPath = $collectionsDir . $newFilename;
+
+                logMessage("Rescuing orphaned collection: " . $oldFilename);
+
+                if (rename($oldPath, $newPath)) {
+                    $results['updated']++;
+                    logMessage("Successfully rescued: " . $newFilename);
+                } else {
+                    $results['failed']++;
+                    logMessage("Failed to rescue: " . $oldFilename);
+                }
+            }
+            // If file doesn't have timestamp but we have Plex details, add it
+            else if (!$file['has_timestamp'] && $hasPlexDetails) {
+                $oldPath = $file['path'];
+                $oldFilename = $file['filename'];
+
+                // Generate a standardized filename with consistent timestamp placement
+                $typeMarker = ($libraryType === 'movie') ? "(Movies)" : "(TV)";
+
+                // Build filename components
+                $titlePart = sanitizeFilename($title);
+                $idPart = "[" . $collectionId . "]";
+                $timestampPart = "(A" . $addedAt . ")";
+
+                // Only add "Collection" text if it's not already in the title
+                $collectionPart = (stripos($titlePart, 'Collection') === false) ? " Collection" : "";
+
+                // Assemble the new filename with timestamp right after ID
+                $newFilename = $titlePart . " " . $idPart . " " . $timestampPart .
+                    $collectionPart . " " . $typeMarker . " --Plex--.jpg";
+
+                $newPath = $collectionsDir . $newFilename;
+
+                logMessage("Standardizing collection filename: " . $oldFilename);
+
+                if (rename($oldPath, $newPath)) {
+                    $results['updated']++;
+                    logMessage("Successfully standardized: " . $newFilename);
+                } else {
+                    $results['failed']++;
+                    logMessage("Failed to standardize: " . $oldFilename);
+                }
+            } else {
+                $results['skipped']++;
+            }
+        }
+    }
+
+    logMessage("Collections pre-processing complete: " .
+        $results['updated'] . " updated, " .
+        $results['deleted_duplicates'] . " duplicates removed, " .
+        $results['failed'] . " failed, " .
+        $results['skipped'] . " skipped");
+
+    return true;
+}
 
 // Main execution logic
 try {
@@ -1456,6 +1886,9 @@ try {
 
     $libraryCount = count($libraries['data']);
     logMessage("Found {$libraryCount} libraries to process");
+
+    // Pre-process collections to fix timestamp issues before starting imports
+    fixCollectionsTimestamps($plex_config['server_url'], $plex_config['token']);
 
     // First, gather all valid IDs from all libraries to prevent incorrect orphaning
     // This helps with the multi-library issue
