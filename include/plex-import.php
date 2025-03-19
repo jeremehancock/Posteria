@@ -1205,169 +1205,129 @@ try {
         return strpos($filename, "[[" . $libraryName . "]]") !== false;
     }
 
-    /**
-     * Improved function to detect and mark orphaned posters
-     * This version also marks posters without timestamps as orphans
-     */
-    function improvedMarkOrphanedPosters(
-        $targetDir,
-        $currentImportIds,
-        $orphanedTag = '--Orphaned--',
-        $libraryType = '',
-        $showTitle = '',
-        $mediaType = '',
-        $libraryId = '',
-        $refreshMode = true
-    ) {
-        $results = [
-            'orphaned' => 0,
-            'unmarked' => 0,
-            'oldFormat' => 0, // Counter for files with missing timestamp
-            'details' => []
-        ];
-    
-        if (!is_dir($targetDir)) {
-            return $results;
-        }
-    
-        // Check if this is a single-library import
-        $libraryIds = isset($_POST['libraryIds']) ? explode(',', $_POST['libraryIds']) : [];
-        $isSingleLibrary = count($libraryIds) === 1;
-    
-        // Get the library name for the current library
-        $currentLibraryName = '';
-        if ($isSingleLibrary) {
-            $currentLibraryName = getLibraryNameById(
-                $GLOBALS['plex_config']['server_url'],
-                $GLOBALS['plex_config']['token'],
-                $libraryId
-            );
-        }
-    
-        // Get valid IDs based on import type
-        $allValidIds = [];
-        if ($isSingleLibrary) {
-            // For single library, only use current import IDs
-            $allValidIds = $currentImportIds;
-        } else {
-            // For multi-library, use all valid IDs
-            $allValidIds = getAllValidIds($mediaType);
-            $allValidIds = array_merge($allValidIds, $currentImportIds);
-    
-            // Handle special case for collections
-            if ($mediaType === 'collections' && !empty($libraryType)) {
-                logDebug("Multi-library collection import: Skipping orphan detection for non-matching library types");
+/**
+ * Improved function to detect and mark orphaned posters
+ * Complete fix for all media types including special handling for collections
+ */
+function improvedMarkOrphanedPosters(
+    $targetDir,
+    $currentImportIds,
+    $orphanedTag = '--Orphaned--',
+    $libraryType = '',
+    $showTitle = '',
+    $mediaType = '',
+    $libraryId = '',
+    $refreshMode = true
+) {
+    $results = [
+        'orphaned' => 0,
+        'unmarked' => 0,
+        'oldFormat' => 0, // Counter for files with missing timestamp
+        'details' => []
+    ];
+
+    if (!is_dir($targetDir)) {
+        return $results;
+    }
+
+    // Check if this is a single-library import
+    $libraryIds = isset($_POST['libraryIds']) ? explode(',', $_POST['libraryIds']) : [];
+    $isSingleLibrary = count($libraryIds) === 1;
+
+    // Get the library name and type for the current library
+    $currentLibraryName = '';
+    $currentLibraryType = '';
+    if ($isSingleLibrary) {
+        // For single library imports, determine both library name and type
+        $librariesResult = getPlexLibraries(
+            $GLOBALS['plex_config']['server_url'],
+            $GLOBALS['plex_config']['token']
+        );
+        
+        if ($librariesResult['success'] && !empty($librariesResult['data'])) {
+            foreach ($librariesResult['data'] as $lib) {
+                if ($lib['id'] == $libraryId) {
+                    $currentLibraryName = $lib['title'];
+                    $currentLibraryType = $lib['type']; // 'movie' or 'show'
+                    break;
+                }
             }
         }
-        $allValidIds = array_unique($allValidIds);
+        
+        // If libraryType wasn't passed but we found it, use it
+        if (empty($libraryType) && !empty($currentLibraryType)) {
+            $libraryType = $currentLibraryType;
+        }
+    }
+
+    // Log diagnostic information
+    logDebug("Orphan detection diagnostic", [
+        'mediaType' => $mediaType,
+        'isSingleLibrary' => $isSingleLibrary,
+        'libraryId' => $libraryId,
+        'libraryName' => $currentLibraryName,
+        'libraryType' => $libraryType,
+        'validIdCount' => count($currentImportIds)
+    ]);
+
+    // Get valid IDs based on import type
+    $allValidIds = [];
+    if ($isSingleLibrary) {
+        // For single library, only use current import IDs
+        $allValidIds = $currentImportIds;
+    } else {
+        // For multi-library, use all valid IDs
+        $allValidIds = getAllValidIds($mediaType);
+        $allValidIds = array_merge($allValidIds, $currentImportIds);
+    }
+    $allValidIds = array_unique($allValidIds);
+
+    // Process all files in two separate passes
+    $files = glob($targetDir . '/*');
+    $processedFiles = []; // Track which files were processed in first pass
     
-        logDebug("Processing orphan detection with timestamp check", [
-            'mediaType' => $mediaType,
-            'isSingleLibrary' => $isSingleLibrary,
-            'currentLibrary' => $currentLibraryName,
-            'validIdCount' => count($allValidIds),
-            'directory' => $targetDir
+    // SPECIAL HANDLING FOR COLLECTIONS:
+    // For collections, we need to handle them differently in single vs multi-library imports
+    $isCollections = ($mediaType === 'collections');
+    
+    // For collections and single library, we'll do a special direct timestamp check
+    // bypassing the standard orphan detection
+    if ($isCollections && $isSingleLibrary) {
+        logDebug("Collections special handling for single library import", [
+            'libraryType' => $libraryType, 
+            'fileCount' => count($files)
         ]);
-    
-        // NEW: Separate passes for different types of orphan detection
-        // First: Standard orphan detection for files with IDs not in valid list
-        // Second: Detect files without timestamps, regardless of ID validity
-        
-        // Process files - First pass (standard orphan detection)
-        $files = glob($targetDir . '/*');
-        $processedInFirstPass = []; // Track files processed in first pass
         
         foreach ($files as $file) {
-            if (!is_file($file))
-                continue;
-    
+            if (!is_file($file)) continue;
+            
             $filename = basename($file);
-            if (strpos($filename, $orphanedTag) !== false)
+            if (strpos($filename, $orphanedTag) !== false) continue;
+            if (strpos($filename, '--Plex--') === false) continue;
+            
+            // Filter by collection type (Movies/TV) for this library
+            $isMovieCollection = strpos($filename, '(Movies)') !== false;
+            $isShowCollection = strpos($filename, '(TV)') !== false;
+            
+            // Skip collections that don't match the current library type
+            if (($libraryType === 'movie' && !$isMovieCollection) || 
+                ($libraryType === 'show' && !$isShowCollection)) {
                 continue;
-            if (strpos($filename, '--Plex--') === false)
-                continue;
-    
-            // For single library import, only process files from this library
-            if ($isSingleLibrary && !empty($currentLibraryName)) {
-                if (!fileMatchesLibrary($filename, $currentLibraryName)) {
-                    continue; // Skip files from other libraries
-                }
-            }
-    
-            // Library type filtering for collections
-            if (!$isSingleLibrary && $mediaType === 'collections' && !empty($libraryType)) {
-                $typeMarker = ($libraryType === 'movie') ? '(Movies)' : '(TV)';
-                $oppositeMarker = ($libraryType === 'movie') ? '(TV)' : '(Movies)';
-    
-                if (strpos($filename, $oppositeMarker) !== false) {
-                    continue; // Skip collections from other library type
-                }
-            }
-    
-            // Extract ID and check if it's valid
-            if (preg_match('/\[([a-f0-9]+)\]/', $filename, $idMatch)) {
-                $fileId = $idMatch[1];
-                
-                if (!in_array($fileId, $allValidIds)) {
-                    // Standard orphan case - ID not in the valid list
-                    $newFilename = str_replace('--Plex--', $orphanedTag, $filename);
-                    $newPath = $targetDir . '/' . $newFilename;
-    
-                    if (rename($file, $newPath)) {
-                        $results['orphaned']++;
-                        $results['details'][] = [
-                            'oldName' => $filename,
-                            'newName' => $newFilename,
-                            'reason' => 'id_not_valid'
-                        ];
-                    } else {
-                        $results['unmarked']++;
-                    }
-                }
-                
-                // Remember this file was processed
-                $processedInFirstPass[] = $file;
-            }
-        }
-        
-        // SECOND PASS: Specifically look for files without timestamps
-        // Including those with valid IDs
-        $files = glob($targetDir . '/*');
-        foreach ($files as $file) {
-            if (!is_file($file))
-                continue;
-                
-            // Skip files that have already been orphaned or processed
-            $filename = basename($file);
-            if (strpos($filename, $orphanedTag) !== false)
-                continue;
-            if (strpos($filename, '--Plex--') === false)
-                continue;
-                
-            // Skip files that don't belong to this library (for single library import)
-            if ($isSingleLibrary && !empty($currentLibraryName)) {
-                if (!fileMatchesLibrary($filename, $currentLibraryName)) {
-                    continue;
-                }
             }
             
-            // Library type filtering for collections
-            if (!$isSingleLibrary && $mediaType === 'collections' && !empty($libraryType)) {
-                $typeMarker = ($libraryType === 'movie') ? '(Movies)' : '(TV)';
-                $oppositeMarker = ($libraryType === 'movie') ? '(TV)' : '(Movies)';
-    
-                if (strpos($filename, $oppositeMarker) !== false) {
-                    continue;
-                }
-            }
-            
-            // Check if file has a timestamp - use a strict pattern to match (A1234567890)
+            // Check if file has a timestamp
             $hasTimestamp = preg_match('/\(A\d{8,12}\)/', $filename);
             
+            // If no timestamp, mark as orphan regardless of ID validity
             if (!$hasTimestamp) {
-                // If no timestamp, mark as orphan regardless of ID validity
                 $newFilename = str_replace('--Plex--', $orphanedTag, $filename);
                 $newPath = $targetDir . '/' . $newFilename;
+                
+                logDebug("Found collection without timestamp", [
+                    'oldName' => $filename,
+                    'isMovieCollection' => $isMovieCollection,
+                    'isShowCollection' => $isShowCollection
+                ]);
                 
                 if (rename($file, $newPath)) {
                     $results['orphaned']++;
@@ -1375,13 +1335,119 @@ try {
                     $results['details'][] = [
                         'oldName' => $filename,
                         'newName' => $newFilename,
-                        'reason' => 'missing_timestamp'
+                        'reason' => 'collection_missing_timestamp'
+                    ];
+                    
+                    logDebug("Marked collection as orphan due to missing timestamp", [
+                        'oldName' => $filename,
+                        'newName' => $newFilename
+                    ]);
+                } else {
+                    $results['unmarked']++;
+                }
+                
+                // Track that this file has been processed
+                $processedFiles[$file] = true;
+            }
+        }
+    }
+    
+    // FIRST PASS: Standard orphan detection (check if IDs are valid)
+    // This applies to all media types and multi-library collections
+    foreach ($files as $file) {
+        if (!is_file($file)) continue;
+        
+        // Skip files already processed in collections special handling
+        if (isset($processedFiles[$file])) continue;
+            
+        $filename = basename($file);
+        if (strpos($filename, $orphanedTag) !== false) continue;
+        if (strpos($filename, '--Plex--') === false) continue;
+        
+        // Skip files that don't match library/show filtering
+        if (!shouldProcessFile($filename, $mediaType, $isSingleLibrary, $currentLibraryName, $libraryType, $showTitle)) {
+            continue;
+        }
+        
+        // Extract ID for validation
+        $fileId = null;
+        if (preg_match('/\[([a-f0-9]+)\]/', $filename, $idMatch)) {
+            $fileId = $idMatch[1];
+        } else {
+            continue; // Skip files without valid IDs
+        }
+        
+        // Standard orphan check (ID not in valid list)
+        if (!in_array($fileId, $allValidIds)) {
+            $newFilename = str_replace('--Plex--', $orphanedTag, $filename);
+            $newPath = $targetDir . '/' . $newFilename;
+            
+            if (rename($file, $newPath)) {
+                $results['orphaned']++;
+                $results['details'][] = [
+                    'oldName' => $filename,
+                    'newName' => $newFilename,
+                    'reason' => 'id_not_valid',
+                    'mediaType' => $mediaType
+                ];
+                
+                logDebug("Marked as orphan due to invalid ID", [
+                    'oldName' => $filename,
+                    'id' => $fileId
+                ]);
+            } else {
+                $results['unmarked']++;
+            }
+            
+            // Add to processed files
+            $processedFiles[$file] = true;
+        }
+    }
+    
+    // SECOND PASS: Timestamp check for all non-collections media types 
+    // and multi-library collections
+    if (!($isCollections && $isSingleLibrary)) {
+        foreach ($files as $file) {
+            if (!is_file($file)) continue;
+                
+            // Skip files already processed
+            if (isset($processedFiles[$file])) continue;
+                
+            $filename = basename($file);
+            if (strpos($filename, $orphanedTag) !== false) continue;
+            if (strpos($filename, '--Plex--') === false) continue;
+            
+            // Skip files that don't match library/show filtering
+            if (!shouldProcessFile($filename, $mediaType, $isSingleLibrary, $currentLibraryName, $libraryType, $showTitle)) {
+                continue;
+            }
+            
+            // Check if file has a timestamp
+            $hasTimestamp = preg_match('/\(A\d{8,12}\)/', $filename);
+            
+            // If no timestamp, mark as orphan regardless of ID validity
+            if (!$hasTimestamp) {
+                $newFilename = str_replace('--Plex--', $orphanedTag, $filename);
+                $newPath = $targetDir . '/' . $newFilename;
+                
+                logDebug("Found file without timestamp", [
+                    'oldName' => $filename,
+                    'mediaType' => $mediaType
+                ]);
+                
+                if (rename($file, $newPath)) {
+                    $results['orphaned']++;
+                    $results['oldFormat']++;
+                    $results['details'][] = [
+                        'oldName' => $filename,
+                        'newName' => $newFilename,
+                        'reason' => 'missing_timestamp',
+                        'mediaType' => $mediaType
                     ];
                     
                     logDebug("Marked as orphan due to missing timestamp", [
                         'oldName' => $filename,
-                        'newName' => $newFilename,
-                        'path' => $file
+                        'newName' => $newFilename
                     ]);
                 } else {
                     $results['unmarked']++;
@@ -1392,16 +1458,62 @@ try {
                 }
             }
         }
-    
-        logDebug("Completed orphan detection with timestamp check", [
-            'totalOrphaned' => $results['orphaned'],
-            'oldFormatDetected' => $results['oldFormat'],
-            'unmarked' => $results['unmarked']
-        ]);
-    
-        return $results;
+    }
+
+    logDebug("Completed orphan detection with timestamp check", [
+        'totalOrphaned' => $results['orphaned'],
+        'oldFormatDetected' => $results['oldFormat'],
+        'unmarked' => $results['unmarked'],
+        'mediaType' => $mediaType
+    ]);
+
+    return $results;
+}
+
+/**
+ * Helper function to determine if a file should be processed
+ * Centralizes the logic for library, collection type, and show filtering
+ */
+function shouldProcessFile($filename, $mediaType, $isSingleLibrary, $libraryName, $libraryType, $showTitle) {
+    // For single library import, check library name matching
+    if ($isSingleLibrary && !empty($libraryName)) {
+        // Special case for collections - check by media type marker instead
+        if ($mediaType === 'collections') {
+            $isMovieCollection = strpos($filename, '(Movies)') !== false;
+            $isShowCollection = strpos($filename, '(TV)') !== false;
+            
+            if (($libraryType === 'movie' && !$isMovieCollection) || 
+                ($libraryType === 'show' && !$isShowCollection)) {
+                return false;
+            }
+        }
+        // For non-collections, check library name
+        else if (!fileMatchesLibrary($filename, $libraryName)) {
+            return false;
+        }
     }
     
+    // For multi-library collection import, check collection type
+    if (!$isSingleLibrary && $mediaType === 'collections' && !empty($libraryType)) {
+        $isMovieCollection = strpos($filename, '(Movies)') !== false;
+        $isShowCollection = strpos($filename, '(TV)') !== false;
+        
+        if (($libraryType === 'movie' && !$isMovieCollection) || 
+            ($libraryType === 'show' && !$isShowCollection)) {
+            return false;
+        }
+    }
+    
+    // For seasons, check show title if provided
+    if ($mediaType === 'seasons' && !empty($showTitle)) {
+        if (strpos($filename, $showTitle) === false) {
+            return false;
+        }
+    }
+    
+    return true;
+}
+
     /**
      * Integration function - Replace existing markOrphanedPosters calls with this one
      * This wrapper ensures backward compatibility while using the improved logic
