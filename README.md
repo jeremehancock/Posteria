@@ -15,7 +15,7 @@ Here's the updated version with the PWA line added:
 - ⚡ Easy poster upload from local files or URLs
 - 🎬 Grab posters directly from [TMDB](https://www.themoviedb.org/) & Fanart.tv
 - 📥 Import posters from Plex
-- 📤 Export posters to Plex
+- 🔄 Sync posters to Plex
 - 🤖 Schedule Auto Imports
 - 🧹 Orphan Poster detection
 - 🎨 Support for JPG, JPEG, PNG, and WebP formats
@@ -66,6 +66,7 @@ services:
       - PLEX_REMOVE_OVERLAY_LABEL=false # Set to true for Kometa compatibility
 
       - IGNORE_ARTICLES_IN_SORT=true # Set to false to sort with articles (A, An, The) included
+      - SORT_BY_DATE_ADDED=false # Set to true to sort by Recently Added date in Plex instead of Alphabetically
 
       - AUTO_IMPORT_ENABLED=false # Enable/disable auto-import
       - AUTO_IMPORT_SCHEDULE=1h # Schedule 24h, 12h, 6h, 3h, 1h
@@ -104,6 +105,7 @@ docker-compose up -d
 | PLEX_TOKEN                | Plex Server Token                    | [More info](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/) |
 | PLEX_REMOVE_OVERLAY_LABEL | Remove Overlay Label                 | false [More info](#note)                                                                              |
 | IGNORE_ARTICLES_IN_SORT   | Ignore articles in sort              | true                                                                                                  |
+| SORT_BY_DATE_ADDED        | Sort by Recently Added               | false                                                                                                 |
 | AUTO_IMPORT_ENABLED       | Enable/disable auto-import           | true                                                                                                  |
 | AUTO_IMPORT_SCHEDULE      | Schedule 24h, 12h, 6h, 3h, 1h        | 1h                                                                                                    |
 | AUTO_IMPORT_MOVIES        | Import Movie posters                 | true                                                                                                  |
@@ -138,9 +140,8 @@ The Docker container uses the following volume mounts:
    - Support for direct URL upload
    - Grab posters from TMDB & Fanart.tv
 5. Posters are automatically updated on Plex
-6. Bulk export options also available
-7. As you add more media to Plex just re-import to add new posters
-8. Orphaned poster detection
+6. As you add more media to Plex just re-import to add new posters
+7. Orphaned poster detection
 
 ## Security Considerations
 

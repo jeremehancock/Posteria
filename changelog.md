@@ -214,4 +214,15 @@
 ### Fixed
 
 - Fixed issue with filenames in Windows SMB Shares.
+
   - This will be a breaking change and require everyone to use the Reset option to clear out all previously imported files.
+
+  ## [1.4.0]
+
+### Added
+
+- Option to sort by recently added in Plex
+
+### Removed
+
+- Removed the Export all option since it is not really needed and is not very stable
