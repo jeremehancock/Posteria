@@ -151,7 +151,7 @@ The Docker container uses the following volume mounts:
 
 ## Breaking Change Notice
 
-The filename structure had to change in `v1.3.9`. Anyone who was using Posteria prior to that version will need to use the Reset option in Posteria to clear out all Orphaned posters and re-import.
+[More info](https://github.com/jeremehancock/Posteria/discussions/28)
 
 ## License
 
