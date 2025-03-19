@@ -91,7 +91,7 @@ $auto_import_config = [
 
 $display_config = [
     'ignore_articles_in_sort' => getBoolEnvWithFallback('IGNORE_ARTICLES_IN_SORT', true), // Default to true for better user experience
-    'sort_by_date_added' => getBoolEnvWithFallback('SORT_BY_DATE_ADDED', false) // Default to false to maintain backward compatibility
+    'sort_by_date_added' => getBoolEnvWithFallback('SORT_BY_DATE_ADDED', true) // Default to true for better user experience
 ];
 
 ?>
