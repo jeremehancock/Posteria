@@ -25,7 +25,6 @@ RUN mkdir -p /var/www/html/posters/movies /var/www/html/posters/tv-shows /var/ww
 COPY index.php /var/www/html/
 COPY include/version.php /var/www/html/include
 COPY include/plex-import.php /var/www/html/include/
-COPY include/plex-export.php /var/www/html/include/
 COPY include/send-to-plex.php /var/www/html/include/
 COPY include/get-from-plex.php /var/www/html/include/
 COPY include/change-poster.php /var/www/html/include/
