@@ -9242,7 +9242,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				// Remove both single [ID] and double [[Library]] brackets with their contents
 				textToDisplay = textToDisplay.replace(/\[\[.*?\]\]|\[.*?\]/gs, '');
 
-				textToDisplay = textToDisplay.replace(/\s*\(A\d{8,12}\)\s*/g, ' ')
+				textToDisplay = textToDisplay.replace(/\s*\(A\d{8,12}\)\s*/g, '')
 
 				// Trim any resulting extra spaces
 				textToDisplay = textToDisplay.trim();
