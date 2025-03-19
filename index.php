@@ -193,8 +193,43 @@ function getImageFiles($config, $currentDirectory = '')
 		}
 	}
 
-	// Sort files alphabetically
+	// Updated sorting function for getImageFiles
+// Sort files based on configuration
 	usort($files, function ($a, $b) use ($display_config) {
+		// Check if we should sort by date added
+		if (isset($display_config['sort_by_date_added']) && $display_config['sort_by_date_added'] === true) {
+			// Extract the addedAt timestamp from both filenames using regex
+			$addedAtA = 0;
+			$addedAtB = 0;
+
+			// Match the (A12345678) pattern
+			if (preg_match('/\(A(\d+)\)/', $a['filename'], $matchesA)) {
+				$addedAtA = (int) $matchesA[1];
+			}
+
+			if (preg_match('/\(A(\d+)\)/', $b['filename'], $matchesB)) {
+				$addedAtB = (int) $matchesB[1];
+			}
+
+			// If both have addedAt timestamps, sort by them (most recent first)
+			if ($addedAtA > 0 && $addedAtB > 0) {
+				// Return negative value for descending order (newest first)
+				return $addedAtB - $addedAtA;
+			}
+
+			// If only one has timestamp, put it first
+			if ($addedAtA > 0) {
+				return -1;
+			}
+
+			if ($addedAtB > 0) {
+				return 1;
+			}
+
+			// If neither has timestamp, fall back to alphabetical sort
+		}
+
+		// Default alphabetical sorting (original logic)
 		// Get filenames without extension
 		$filenameA = pathinfo($a['filename'], PATHINFO_FILENAME);
 		$filenameB = pathinfo($b['filename'], PATHINFO_FILENAME);
@@ -206,6 +241,10 @@ function getImageFiles($config, $currentDirectory = '')
 		// Remove library brackets and their contents
 		$filenameA = preg_replace('/\[\[[^\]]*\]\]|\[[^\]]*\]/', '', $filenameA);
 		$filenameB = preg_replace('/\[\[[^\]]*\]\]|\[[^\]]*\]/', '', $filenameB);
+
+		// Remove added timestamp pattern for sorting
+		$filenameA = preg_replace('/\(A\d+\)/', '', $filenameA);
+		$filenameB = preg_replace('/\(A\d+\)/', '', $filenameB);
 
 		// Trim extra spaces
 		$filenameA = trim($filenameA);
