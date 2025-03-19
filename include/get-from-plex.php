@@ -86,6 +86,51 @@ function logDebug($message, $data = null)
     file_put_contents('import-from-plex-debug.log', $logMessage . "\n\n", FILE_APPEND);
 }
 
+/**
+ * Add timestamp to a filename in a consistent position (after the ID, before the library name)
+ * 
+ * @param string $filename The filename to modify
+ * @param string $timestamp The timestamp to add in format 1234567890
+ * @return string Modified filename with timestamp
+ */
+function addTimestampToFilename($filename, $timestamp)
+{
+    // Format timestamp with A prefix
+    $formattedTimestamp = "(A{$timestamp})";
+
+    // Check if timestamp already exists in the filename
+    if (preg_match('/\(A\d{8,12}\)/', $filename)) {
+        // Replace existing timestamp
+        return preg_replace('/\(A\d{8,12}\)/', $formattedTimestamp, $filename);
+    }
+
+    // Find the ID position
+    if (preg_match('/\[([a-zA-Z0-9]+)\]/', $filename, $matches, PREG_OFFSET_CAPTURE)) {
+        // Get the position after the ID bracket
+        $idEndPos = $matches[0][1] + strlen($matches[0][0]);
+
+        // Insert the timestamp immediately after the ID
+        $beforeTimestamp = substr($filename, 0, $idEndPos);
+        $afterTimestamp = substr($filename, $idEndPos);
+
+        return $beforeTimestamp . ' ' . $formattedTimestamp . $afterTimestamp;
+    }
+
+    // If no ID found, insert before --Plex-- as fallback
+    $plexPos = strpos($filename, '--Plex--');
+    if ($plexPos !== false) {
+        // Insert the timestamp before "--Plex--"
+        $beforePlex = substr($filename, 0, $plexPos);
+        $afterPlex = substr($filename, $plexPos);
+        return $beforePlex . ' ' . $formattedTimestamp . ' ' . $afterPlex;
+    }
+
+    // Last resort - just append before the extension
+    $ext = pathinfo($filename, PATHINFO_EXTENSION);
+    $baseFilename = pathinfo($filename, PATHINFO_FILENAME);
+    return $baseFilename . ' ' . $formattedTimestamp . '.' . $ext;
+}
+
 try {
     // Start session
     if (!session_id()) {
@@ -495,11 +540,32 @@ try {
                 }
             }
 
+            // NEW CODE: Extract the timestamp (addedAt) from Plex metadata
+            $addedAt = '';
+            if (isset($metadata['MediaContainer']['Metadata'][0]['addedAt'])) {
+                $addedAt = $metadata['MediaContainer']['Metadata'][0]['addedAt'];
+                logDebug("Found addedAt timestamp", ['addedAt' => $addedAt]);
+
+                // Update the filename to include the timestamp
+                if (!empty($addedAt)) {
+                    $updatedFilename = addTimestampToFilename($filename, $addedAt);
+
+                    // If the filename was updated, log it
+                    if ($updatedFilename !== $filename) {
+                        logDebug("Updated filename to include timestamp", [
+                            'oldFilename' => $filename,
+                            'newFilename' => $updatedFilename
+                        ]);
+                        $filename = $updatedFilename;
+                    }
+                }
+            }
+
             // Handle the existing file
             $originalFilename = $_POST['filename']; // Original filename from the request
             $originalPath = $directories[$mediaType] . $originalFilename;
 
-            // Check if we need to rename the file due to adding library name
+            // Check if we need to rename the file due to adding library name or timestamp
             $needsRename = ($filename !== $originalFilename);
 
             if ($needsRename) {
@@ -507,7 +573,7 @@ try {
 
                 // First, try to rename the existing file if it exists
                 if (file_exists($originalPath)) {
-                    logDebug("Renaming file to include library name", [
+                    logDebug("Renaming file to include library name and/or timestamp", [
                         'originalPath' => $originalPath,
                         'newPath' => $targetPath
                     ]);
@@ -530,7 +596,7 @@ try {
                         'originalPath' => $originalPath
                     ]);
 
-                    // Original file doesn't exist, use the new path with library name
+                    // Original file doesn't exist, use the new path with library name and timestamp
                     $targetPath = $directories[$mediaType] . $filename;
                 }
             } else {
@@ -548,12 +614,13 @@ try {
 
                 echo json_encode([
                     'success' => true,
-                    'message' => 'Poster successfully imported from Plex' . ($needsRename ? ' and renamed to include library name' : ''),
+                    'message' => 'Poster successfully imported from Plex' . ($needsRename ? ' and renamed to include library name and timestamp' : ''),
                     'filename' => $filename,
                     'originalFilename' => $originalFilename,
                     'newPath' => $filePathWithTimestamp, // Include the full path with timestamp
                     'renamed' => $needsRename,
-                    'libraryName' => $libraryName
+                    'libraryName' => $libraryName,
+                    'addedAt' => $addedAt
                 ]);
             } else {
                 echo json_encode(['success' => false, 'error' => 'Failed to save poster file']);
