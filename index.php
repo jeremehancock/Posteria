@@ -3586,9 +3586,17 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 					// Check if this is an orphaned file (doesn't contain Plex tag)
 					$isOrphaned = (strpos(strtolower($image['filename']), '--plex--') === false);
 
-					// Create a clean version of the filename (without tags and brackets)
+					// Create a clean version of the filename (without tags, brackets, timestamps)
 					$cleanFilename = str_replace(['--Plex--', '--Orphaned--'], '', $filename);
+
+					// Remove IDs, library names in brackets
 					$cleanFilename = preg_replace('/\[\[.*?\]\]|\[.*?\]/s', '', $cleanFilename);
+
+					// Remove ONLY timestamps e.g. (A1742232441) - but keep years like (2025)
+					$cleanFilename = preg_replace('/\s*\(A\d{8,12}\)\s*/', ' ', $cleanFilename);
+
+					// Clean up extra spaces and trim
+					$cleanFilename = preg_replace('/\s+/', ' ', $cleanFilename);
 					$cleanFilename = trim($cleanFilename);
 
 					// Display the clean filename, but append "[Orphaned]" if it's orphaned
@@ -6947,10 +6955,12 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				const dirname = this.getAttribute('data-dirname');
 
 				const cleanedFilename = this.getAttribute('data-filename')
-					.replace(/\.jpg$/i, '')                 // Remove .jpg extension
+					.replace(/\.jpg$/i, '')                         // Remove .jpg extension
 					.replace(/\-\-Plex\-\-|\-\-Orphaned\-\-/g, '')  // Remove --Plex-- and --Orphaned-- tags
-					.replace(/\[\[.*?\]\]|\[.*?\]/gs, '')      // Remove both [[Library]] and [ID] brackets with contents
-					.trim();                                // Trim extra spaces
+					.replace(/\[\[.*?\]\]|\[.*?\]/gs, '')           // Remove both [[Library]] and [ID] brackets with contents
+					.replace(/\s*\(A\d{8,12}\)\s*/g, ' ')           // Remove timestamps (A1742232441)
+					.replace(/\s+/g, ' ')                           // Normalize spaces (replace multiple spaces with single space)
+					.trim();
 
 				// Update the modal with file info
 				document.getElementById('changePosterFilename').textContent = `Changing poster: ${cleanedFilename}`;
