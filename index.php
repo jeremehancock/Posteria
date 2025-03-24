@@ -1588,12 +1588,6 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			border: 1px solid var(--border-color);
 		}
 
-		.gallery-item:hover {
-			transform: translateY(-5px);
-			box-shadow: var(--shadow-md);
-			border-color: var(--accent-primary);
-		}
-
 		/* Gallery Image Styles */
 		.gallery-image-container {
 			position: relative;
@@ -2574,6 +2568,11 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				box-shadow: none;
 				border: none;
 				border-color: unset;
+			}
+
+			.gallery-item.touch-active {
+				border-color: var(--accent-primary);
+				box-shadow: var(--shadow-md);
 			}
 
 			.gallery-image-container:hover .gallery-image {
