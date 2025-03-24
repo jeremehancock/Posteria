@@ -7073,21 +7073,6 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			opacity: 0;
 		}
 		
-		.poster-item .poster-title {
-			position: absolute;
-			bottom: 0;
-			left: 0;
-			right: 0;
-			padding: 8px;
-			background: rgba(0,0,0,0.75);
-			color: white;
-			font-size: 12px;
-			text-align: center;
-			overflow: hidden;
-			text-overflow: ellipsis;
-			white-space: nowrap;
-		}
-		
 		.poster-loading {
 			position: absolute;
 			top: 0;
@@ -7688,12 +7673,6 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 						const imgElement = document.createElement('img');
 						imgElement.alt = poster.name || 'Poster';
 						posterElement.appendChild(imgElement);
-
-						// Create title element
-						const titleElement = document.createElement('div');
-						titleElement.className = 'poster-title';
-						titleElement.textContent = poster.name || '';
-						posterElement.appendChild(titleElement);
 
 						// Add click event to select poster
 						posterElement.addEventListener('click', function () {
@@ -9175,30 +9154,57 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			const mobileCaptionStyle = document.createElement('style');
 			mobileCaptionStyle.textContent = `
 		.mobile-caption-tooltip {
-			position: fixed;
+			position: absolute;
 			background: var(--bg-tertiary);
 			color: var(--text-primary);
-			padding: 12px 16px;
-			border-radius: 8px;
-			font-size: 16px;
-			max-width: 90%;
-			box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+			padding: 10px 14px;
+			border-radius: 6px;
+			font-size: 14px;
+			box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
 			z-index: 1050;
 			text-align: center;
 			border: 1px solid var(--border-color);
 			opacity: 0;
-			transform: translateY(20px);
-			transition: opacity 0.3s, transform 0.3s;
+			transition: opacity 0.2s;
 			word-break: break-word;
-			line-height: 1.5;
+			line-height: 1.4;
+			transform: translateX(-50%);
 			left: 50%;
-			transform: translateX(-50%) translateY(20px);
-			bottom: 20px;
+			top: 100%;
+			margin-top: 5px; /* Reduced space between caption and tooltip */
+			width: calc(100% - 4px); /* Make it width of poster minus a small margin */
+		}
+		
+		/* Arrow for the tooltip */
+		.mobile-caption-tooltip:after {
+			content: '';
+			position: absolute;
+			bottom: 100%;
+			left: 50%;
+			margin-left: -5px;
+			width: 0;
+			height: 0;
+			border-left: 5px solid transparent;
+			border-right: 5px solid transparent;
+			border-bottom: 5px solid var(--bg-tertiary);
+		}
+		
+		/* Border arrow for the tooltip */
+		.mobile-caption-tooltip:before {
+			content: '';
+			position: absolute;
+			bottom: 100%;
+			left: 50%;
+			margin-left: -6px;
+			width: 0;
+			height: 0;
+			border-left: 6px solid transparent;
+			border-right: 6px solid transparent;
+			border-bottom: 6px solid var(--border-color);
 		}
 		
 		.mobile-caption-tooltip.visible {
 			opacity: 1;
-			transform: translateX(-50%) translateY(0);
 		}
 		
 		/* Add a class to indicate truncated captions */
@@ -9221,6 +9227,12 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			let tooltipTimer = null;
 			let currentlyTruncatedElement = null;
 
+			// Track touch interactions for better gesture detection
+			let touchStartX = 0;
+			let touchStartY = 0;
+			let touchMoved = false;
+			const touchThreshold = 10; // Pixels of movement to consider a scroll vs. tap
+
 			// Function to show the mobile caption tooltip
 			function showMobileCaptionTooltip(captionElement) {
 				if (!captionElement || !captionElement.classList.contains('is-truncated')) {
@@ -9241,17 +9253,54 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				textToDisplay = textToDisplay.replace(/\-\-(Plex|Orphaned)\-\-/g, '');
 				// Remove both single [ID] and double [[Library]] brackets with their contents
 				textToDisplay = textToDisplay.replace(/\[\[.*?\]\]|\[.*?\]/gs, '');
-
+				// Remove timestamp patterns
 				textToDisplay = textToDisplay.replace(/\s*\(A\d{8,12}\)\s*/g, '')
-
 				// Trim any resulting extra spaces
 				textToDisplay = textToDisplay.trim();
 
 				// Set tooltip content
 				mobileCaptionTooltip.textContent = textToDisplay;
 
-				// Show tooltip
+				// Find the poster image container (parent of the caption)
+				const galleryItem = captionElement.closest('.gallery-item');
+
+				if (!galleryItem) {
+					hideMobileCaptionTooltip();
+					return;
+				}
+
+				const imageContainer = galleryItem.querySelector('.gallery-image-container');
+
+				if (!imageContainer) {
+					hideMobileCaptionTooltip();
+					return;
+				}
+
+				// Position the tooltip directly under the caption
+				const captionRect = captionElement.getBoundingClientRect();
+
+				// Adjust the tooltip to match the poster width 
+				// (technically the caption width, which is the same as the poster)
+				mobileCaptionTooltip.style.width = captionRect.width + 'px';
+
+				// Position it relative to the caption
 				mobileCaptionTooltip.style.display = 'block';
+
+				// Append to the document body
+				document.body.appendChild(mobileCaptionTooltip);
+
+				// Get the position of the caption relative to the page
+				const captionPosition = {
+					top: captionRect.top + window.scrollY,
+					left: captionRect.left + window.scrollX,
+					width: captionRect.width,
+					height: captionRect.height
+				};
+
+				// Position the tooltip
+				mobileCaptionTooltip.style.position = 'absolute';
+				mobileCaptionTooltip.style.top = (captionPosition.top + captionPosition.height + 5) + 'px';
+				mobileCaptionTooltip.style.left = (captionPosition.left + captionPosition.width / 2) + 'px';
 
 				// Force reflow
 				mobileCaptionTooltip.offsetHeight;
@@ -9284,28 +9333,47 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				}, 300);
 			}
 
+			// Function to determine if text is tru			ncated
+			function isTextTruncated(element) {
+				// Check if the element has overflow or has ellipsis
+				if (!element) return false;
+
+				// First check for the most common case - an ellipsis at the end
+				if (element.textContent.trim().endsWith('...')) {
+					return true;
+				}
+
+				// Check if the displayed text is shorter than the full text
+				const fullText = element.getAttribute('data-full-text');
+				if (!fullText) return false;
+
+				// Clean up the full text for comparison (same as in the showTooltip function)
+				let cleanFullText = fullText;
+				// Remove Plex and Orphaned tags
+				cleanFullText = cleanFullText.replace(/\-\-(Plex|Orphaned)\-\-/g, '');
+				// Remove both single [ID] and double [[Library]] brackets with their contents
+				cleanFullText = cleanFullText.replace(/\[\[[^\]]*\]\]|\[[^\]]*\]/g, '');
+				// Remove timestamp patterns
+				cleanFullText = cleanFullText.replace(/\s*\(A\d{8,12}\)\s*/g, '')
+				// Remove [Orphaned] text that might be added at the end
+				cleanFullText = cleanFullText.replace(/\s*\[Orphaned\]$/, '');
+				// Trim any resulting extra spaces
+				cleanFullText = cleanFullText.trim();
+
+				// Check if the displayed text is shorter than the cleaned full text
+				// (accounting for added [Orphaned] text that might be in displayed text)
+				const displayText = element.textContent.trim().replace(/\s*\[Orphaned\]$/, '');
+
+				// If the display text is significantly shorter than the full text, it's truncated
+				return displayText.length < cleanFullText.length - 3; // Allow for small differences
+			}
+
 			// Function to mark truncated captions
 			function markTruncatedCaptions() {
 				const captions = document.querySelectorAll('.gallery-caption');
 
 				captions.forEach(caption => {
-					const fullText = caption.getAttribute('data-full-text');
-					if (!fullText) return;
-
-					// Get the current displayed text
-					const displayedText = caption.textContent.trim();
-
-					// Clean up the full text for comparison
-					let cleanFullText = fullText;
-					// Remove Plex and Orphaned tags
-					cleanFullText = cleanFullText.replace(/\-\-(Plex|Orphaned)\-\-/g, '');
-					// Remove both single [ID] and double [[Library]] brackets with their contents
-					cleanFullText = cleanFullText.replace(/\[\[[^\]]*\]\]|\[[^\]]*\]/g, '');
-					// Trim any resulting extra spaces
-					cleanFullText = cleanFullText.trim();
-
-					// Check if text is truncated
-					if (displayedText.endsWith('...') || displayedText.length < cleanFullText.length) {
+					if (isTextTruncated(caption)) {
 						caption.classList.add('is-truncated');
 					} else {
 						caption.classList.remove('is-truncated');
@@ -9313,27 +9381,62 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				});
 			}
 
-			// Use touchstart event (to make it respond on first tap)
+			// Handle tooltips immediately on touchstart but track for scrolling
 			document.addEventListener('touchstart', function (e) {
+				// Store the touch start position for later movement calculation
+				touchStartX = e.touches[0].clientX;
+				touchStartY = e.touches[0].clientY;
+				touchMoved = false;
+
+				// Check if we're touching a truncated caption
 				const caption = e.target.closest('.gallery-caption.is-truncated');
 
-				// If we touched a truncated caption
-				if (caption) {
-					// Prevent default behavior only for truncated captions
-					e.preventDefault();
-
-					// If this element is already showing a tooltip, do nothing
-					if (caption === currentlyTruncatedElement) {
-						return;
+				// If we touched a truncated caption, show tooltip immediately
+				if (caption && caption !== currentlyTruncatedElement) {
+					// Only show the tooltip if the caption is actually truncated
+					if (isTextTruncated(caption)) {
+						// Show the tooltip right away on first touch
+						showMobileCaptionTooltip(caption);
 					}
+				}
 
-					// Otherwise, show the tooltip
-					showMobileCaptionTooltip(caption);
-				} else if (!e.target.closest('.mobile-caption-tooltip')) {
-					// If touched anywhere else, hide tooltip
+				// DO NOT call preventDefault() here - that would block scrolling
+			}, { passive: true }); // Keep passive: true to improve scrolling performance
+
+			// Track touchmove to detect scrolling intention
+			document.addEventListener('touchmove', function (e) {
+				if (!e.touches[0]) return;
+
+				const touchX = e.touches[0].clientX;
+				const touchY = e.touches[0].clientY;
+
+				// Calculate distance moved
+				const distX = Math.abs(touchX - touchStartX);
+				const distY = Math.abs(touchY - touchStartY);
+
+				// If moved more than threshold, mark as a scroll gesture
+				if (distX > touchThreshold || distY > touchThreshold) {
+					touchMoved = true;
+
+					// If tooltip is showing, hide it during scroll
+					if (tooltipActive) {
+						hideMobileCaptionTooltip();
+					}
+				}
+			}, { passive: true });
+
+			// Use touchend to handle caption taps for anywhere else
+			document.addEventListener('touchend', function (e) {
+				// Skip if this was a scroll gesture
+				if (touchMoved) return;
+
+				// Check if we tapped somewhere other than a caption or tooltip
+				if (!e.target.closest('.gallery-caption.is-truncated') &&
+					!e.target.closest('.mobile-caption-tooltip')) {
+					// If tapped anywhere else, hide tooltip
 					hideMobileCaptionTooltip();
 				}
-			}, { passive: false });
+			}, { passive: true });
 
 			// Hide tooltip when scrolling
 			let scrollTimer = null;
