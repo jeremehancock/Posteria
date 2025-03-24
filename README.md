@@ -177,7 +177,7 @@ There are several excellent resources where you can find high-quality posters fo
 - **[Fanart.tv](https://www.fanart.tv/)** - High-quality artwork for movies, TV shows, and collections, now fully integrated with Posteria for automatic poster fetching
 - **[Mediux](https://mediux.pro/)** - Collection of professionally designed media artwork
 
-Posteria supports using Mediux YAML files in the URL uploader when changing posters, making it a convenient choice for managing your collection.
+Posteria supports using URLS from Mediux YAML files in the URL uploader when changing posters, making it a convenient choice for managing your collection.
 
 #### Is Posteria available on Unraid?
 Yes!
