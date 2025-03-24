@@ -1454,7 +1454,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		   ========================================================================== */
 		header {
 			text-align: center;
-			margin-bottom: 40px;
+			margin-bottom: 20px;
 		}
 
 		.header-content {
@@ -2525,6 +2525,11 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				display: none;
 			}
 
+			header {
+				margin-bottom: 0px;
+			}
+
+
 			/* Optionally adjust padding for mobile to make it more of an icon button */
 			.upload-trigger-button {
 				padding: 8px;
@@ -2535,6 +2540,10 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		@media screen and (max-width: 480px) {
 			.export-text {
 				display: none;
+			}
+
+			header {
+				margin-bottom: 0px;
 			}
 
 			/* Optionally adjust padding for mobile to make it more of an icon button */
