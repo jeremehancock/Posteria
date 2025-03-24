@@ -55,6 +55,7 @@ services:
       - "1818:80"
     environment:
       - SITE_TITLE=Posteria
+
       - AUTH_USERNAME=admin # Change this!
       - AUTH_PASSWORD=changeme # Change this!
       - SESSION_DURATION=3600 # In seconds
