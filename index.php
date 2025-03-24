@@ -6341,130 +6341,40 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 
 			// Handle form submission (search button click or Enter key)
 			if (searchForm) {
-				searchForm.addEventListener('submit', function (e) {
-					e.preventDefault();
+				// Remove existing event listeners (this is an approximation, as we can't directly
+				// remove anonymous listeners, but this will prevent default which is what we need)
+				const oldSearchForm = searchForm.cloneNode(true);
+				searchForm.parentNode.replaceChild(oldSearchForm, searchForm);
 
-					const searchValue = searchForm.querySelector('.search-input').value;
-					const currentUrl = new URL(window.location.href);
+				// Get the new reference
+				const newSearchForm = document.querySelector('.search-form');
 
+				// Add basic event handler just to update filter links before submission
+				// but allow the form to submit normally
+				newSearchForm.addEventListener('submit', function (e) {
+					// Don't prevent default - we want normal form submission
+
+					// But we should update filter hrefs to maintain search parameter when clicked
+					const searchValue = this.querySelector('.search-input').value;
 					if (searchValue) {
-						currentUrl.searchParams.set('search', searchValue);
-					} else {
-						currentUrl.searchParams.delete('search');
-					}
+						// Update All button
+						const allFilterButton = document.querySelector('.filter-buttons a:first-child');
+						if (allFilterButton) {
+							allFilterButton.href = `?search=${encodeURIComponent(searchValue)}`;
+						}
 
-					// Maintain directory filter if exists
-					const currentDirectory = currentUrl.searchParams.get('directory');
-					if (currentDirectory) {
-						currentUrl.searchParams.set('directory', currentDirectory);
-					}
-
-					// Update URL
-					window.history.pushState({}, '', currentUrl.toString());
-
-					// Perform search
-					fetch(currentUrl.toString())
-						.then(response => response.text())
-						.then(html => {
-							const parser = new DOMParser();
-							const newDoc = parser.parseFromString(html, 'text/html');
-
-							// Update stats
-							document.querySelector('.gallery-stats').innerHTML =
-								newDoc.querySelector('.gallery-stats').innerHTML;
-
-							// Update filter buttons to include the current search parameter
-							const searchValue = searchForm.querySelector('.search-input').value;
-							if (searchValue) {
-								// Update All button
-								const allFilterButton = document.querySelector('.filter-buttons a:first-child');
-								if (allFilterButton) {
-									allFilterButton.href = `?search=${encodeURIComponent(searchValue)}`;
-								}
-
-								// Update directory filter buttons
-								const directoryButtons = document.querySelectorAll('.filter-buttons a:not(:first-child)');
-								directoryButtons.forEach(button => {
-									const href = button.getAttribute('href');
-									const directoryMatch = href.match(/\?directory=([^&]*)/);
-									if (directoryMatch && directoryMatch[1]) {
-										button.href = `?directory=${directoryMatch[1]}&search=${encodeURIComponent(searchValue)}`;
-									}
-								});
-							} else {
-								// Reset buttons to default if search is cleared
-								const allFilterButton = document.querySelector('.filter-buttons a:first-child');
-								if (allFilterButton) {
-									allFilterButton.href = '?';
-								}
-
-								const directoryButtons = document.querySelectorAll('.filter-buttons a:not(:first-child)');
-								directoryButtons.forEach(button => {
-									const href = button.getAttribute('href');
-									const directoryMatch = href.match(/\?directory=([^&]*)/);
-									if (directoryMatch && directoryMatch[1]) {
-										button.href = `?directory=${directoryMatch[1]}`;
-									}
-								});
+						// Update directory filter buttons
+						const directoryButtons = document.querySelectorAll('.filter-buttons a:not(:first-child)');
+						directoryButtons.forEach(button => {
+							const href = button.getAttribute('href');
+							const directoryMatch = href.match(/\?directory=([^&]*)/);
+							if (directoryMatch && directoryMatch[1]) {
+								button.href = `?directory=${directoryMatch[1]}&search=${encodeURIComponent(searchValue)}`;
 							}
-
-							// Update pagination
-							const paginationContainer = document.querySelector('.pagination');
-							const newPagination = newDoc.querySelector('.pagination');
-
-							if (paginationContainer) {
-								if (newPagination) {
-									paginationContainer.style.display = 'flex';
-									paginationContainer.innerHTML = newPagination.innerHTML;
-								} else {
-									paginationContainer.style.display = 'none';
-								}
-							}
-
-							// Get the gallery container
-							const galleryContainer = document.querySelector('.gallery');
-
-							// Check if there are results
-							const newGallery = newDoc.querySelector('.gallery');
-							const noResults = newDoc.querySelector('.no-results');
-
-							if (newGallery) {
-								// Show gallery with results
-								if (galleryContainer) {
-									galleryContainer.style.display = 'grid';
-									galleryContainer.innerHTML = newGallery.innerHTML;
-								}
-								// Remove any existing no-results message
-								const existingNoResults = document.querySelector('.no-results');
-								if (existingNoResults) {
-									existingNoResults.remove();
-								}
-							} else if (noResults) {
-								// Hide gallery
-								if (galleryContainer) {
-									galleryContainer.style.display = 'none';
-								}
-								// Remove any existing no-results message
-								const existingNoResults = document.querySelector('.no-results');
-								if (existingNoResults) {
-									existingNoResults.remove();
-								}
-								// Insert new no-results message after gallery stats
-								const galleryStats = document.querySelector('.gallery-stats');
-								galleryStats.insertAdjacentHTML('afterend', noResults.outerHTML);
-							}
-
-							// Blur the search input to hide keyboard on mobile
-							if (searchInput) {
-								searchInput.blur();
-							}
-
-							// Reinitialize observers and buttons
-							initializeGalleryFeatures();
-							initializeButtons();
-							hideNonOrphanedDeleteButtons();
-
 						});
+					}
+
+					// Allow normal form submission - this will cause a full page reload
 				});
 			}
 
