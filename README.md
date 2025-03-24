@@ -30,18 +30,6 @@ Here's the updated version with the PWA line added:
 
 ![Posteria](https://raw.githubusercontent.com/jeremehancock/Posteria/main/images/screenshot.png "Posteria")
 
-## Where to Find Posters
-
-Looking for high-quality posters for your media library? Posteria now fully integrates with TMDB for automatic poster fetching! Here are some excellent resources:
-
-- **[The Movie Database (TMDB)](https://www.themoviedb.org/)** - Extensive library of official and fan-made artwork, now fully integrated with Posteria for automatic poster fetching
-- **[The Poster Database](https://theposterdb.com/)** - A community-driven collection of custom posters with various styles and themes
-- **[The TV Database (TVDB)](https://www.thetvdb.com/)** - Comprehensive database for TV show posters and fanart
-- **[Fanart.tv](https://fanart.tv/)** - High-quality artwork for movies, TV shows, and collections.
-- **[Mediux](https://mediux.pro/)** - Collection of professionally designed media artwork
-
-**Tip:** Posteria supports using Mediux YAML files in the URL uploader when changing posters, making it a convenient choice for managing your collection.
-
 ## Installation
 
 1. Create a `docker-compose.yml` file with the following content:
@@ -143,6 +131,63 @@ The Docker container uses the following volume mounts:
 5. Posters are automatically updated on Plex
 6. As you add more media to Plex just re-import to add new posters
 7. Orphaned poster detection
+
+## Frequently Asked Questions
+
+#### How does Posteria interact with Plex?
+Posteria can import posters directly from your Plex Media Server and sync customized posters back to it. To enable this functionality, you need to provide your Plex server URL and authentication token in the configuration. This allows Posteria to securely communicate with your server while maintaining all your customizations.
+
+#### How do I find my Plex auth token?
+You can find your Plex authentication token (X-Plex-Token) by following these steps:
+
+1. Log in to your Plex Web App
+2. Browse to any media item
+3. Click the 3 dots menu and select "Get Info"
+4. In the info dialog, click "View XML"
+5. In the URL of the new tab, find the "X-Plex-Token=" parameter
+
+For more detailed instructions, visit the [Plex Support article](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/).
+
+#### Can I use Posteria as a backup for my Plex posters?
+No, Posteria should not be considered a backup of your Plex posters. Posteria treats Plex as the "source of truth," which means any changes made in Plex will automatically sync to Posteria during the next import (whether scheduled or manual). This synchronization will override any poster selections in Posteria that differ from what's currently in Plex. We strongly recommend keeping separate backups of both your Plex metadata and your Posteria poster directories to ensure you can restore your preferred poster selections if needed.
+
+#### What is "Orphan Detection"?
+Orphan Detection is a feature that helps you identify posters in Posteria that aren't linked to any media in your Plex library. This can happen when you remove content from your library but the posters remain in Posteria. Posteria can detect these orphaned posters so you can decide whether to keep them for future use or remove them to save space.
+
+#### How secure is Posteria?
+Posteria includes basic authentication to protect your poster collection. You can set your username and password in the docker-compose.yml file. We recommend changing the default credentials and using a strong password. All communication with your Plex server is done securely using your Plex authentication token.
+
+If you want to make Posteria accesible outside your network it is recommended you use a service such as **[Tailscale](https://www.tailscale.com)™** or another VPN solution.
+
+#### How do I update Posteria?
+To update Posteria to the latest version, follow these steps:
+
+1. Navigate to your Posteria directory
+2. Run `docker-compose pull` to download the latest image
+3. Run `docker-compose up -d` to restart with the new version
+
+Your poster collection and settings will be preserved during updates as they're stored in the mounted volumes.
+
+#### Where can I find posters for my media?
+There are several excellent resources where you can find high-quality posters for your media library:
+
+- **[The Poster Database](https://theposterdb.com/)** - A community-driven collection of custom posters with various styles and themes
+- **[The Movie Database (TMDB)](https://www.themoviedb.org/)** - Extensive library of official and fan-made artwork, now fully integrated with Posteria for automatic poster fetching
+- **[The TV Database (TVDB)](https://www.thetvdb.com/)** - Comprehensive database for TV show posters and fanart
+- **[Fanart.tv](https://www.fanart.tv/)** - High-quality artwork for movies, TV shows, and collections, now fully integrated with Posteria for automatic poster fetching
+- **[Mediux](https://mediux.pro/)** - Collection of professionally designed media artwork
+
+Posteria supports using Mediux YAML files in the URL uploader when changing posters, making it a convenient choice for managing your collection.
+
+#### Is Posteria available on Unraid?
+Yes!
+
+Posteria is available in the **[Unraid](https://www.unraid.net)™** Community Apps store.
+
+[More info](https://unraid.net/community/apps?q=posteria#r)
+
+#### Is Posteria mobile-friendly?
+Yes! Posteria is designed as a responsive Progressive Web App (PWA), which means it works beautifully on all devices from desktops to smartphones. You can even install it on your mobile device's home screen for quick access, just like a native app.
 
 ## Security Considerations
 
