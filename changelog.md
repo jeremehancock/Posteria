@@ -235,3 +235,13 @@
 - Mobile caption scroll bug and updates styling
 - Removed uneeded poster grid overlay
 - Adjusted header margins
+
+## [1.4.2]
+
+### Added
+
+- TVDB support for posters in the Find Posters option
+
+### Fixed
+
+- Issues with Star Wars in the Find Posters options
