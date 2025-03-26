@@ -7294,7 +7294,8 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				attributionDiv.className = 'tmdb-attribution';
 				attributionDiv.innerHTML = `
 			<span>Powered by: 
-				<a href="https://www.themoviedb.org/" target="_blank" rel="noopener noreferrer">TMDB</a> & 
+				<a href="https://www.themoviedb.org/" target="_blank" rel="noopener noreferrer">TMDB</a>,
+				<a href="https://www.thetvdb.com/" target="_blank" rel="noopener noreferrer">TVDB</a> & 
 				<a href="https://fanart.tv/" target="_blank" rel="noopener noreferrer">Fanart.tv</a>
 			</span>
 		`;

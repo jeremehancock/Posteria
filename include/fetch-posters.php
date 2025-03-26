@@ -154,7 +154,7 @@ if ($type === 'collection') {
 // Store the original search title before sending to API
 $originalSearchTitle = $query;
 
-$apiUrl = 'https://posteria.app/api/fetch/posters/?';
+$apiUrl = 'https://posteria.app/api/fetch/posters/new.php?';
 if ($type === 'movie') {
     $apiUrl .= 'movie=' . urlencode($cleanQuery);
 } elseif ($type === 'tv') {
@@ -396,6 +396,9 @@ if ($type === 'movie') {
     $searchShowTitle = stripYear($searchShowTitle);
     $searchShowTitle = trim($searchShowTitle);
 
+    // The requested season number from parameters
+    $requestedSeasonNumber = $season ?? 1;
+
     // Extract primary season info from first result
     if ($result) {
         $title = $result['name'] ?? $result['title'] ?? 'Unknown TV Show';
@@ -415,7 +418,7 @@ if ($type === 'movie') {
 
         // Filter out results that don't match the search query exactly for TV seasons
         if (!isTitleExactMatch($searchShowTitle, $showCompareTitle)) {
-            continue; // Skip this result if show titles don't match exactly
+            continue; // Skip this result if titles don't match exactly
         }
 
         // Add year if available (for display only)
@@ -424,57 +427,146 @@ if ($type === 'movie') {
             $showTitle .= " ($year)";
         }
 
+        // Check the source of the result for attribution in the response
+        $source = $showResult['source'] ?? '';
+
         // Check if there's a season object with poster
         if (!empty($showResult['season']) && is_array($showResult['season'])) {
-            $showSeasonNumber = $showResult['season']['season_number'] ?? $season;
-            $seasonName = $showResult['season']['name'] ?? ($showSeasonNumber === 0 ? "Specials" : "Season $showSeasonNumber");
+            $showSeasonNumber = $showResult['season']['season_number'] ?? $requestedSeasonNumber;
 
-            // Add season information to the title
-            $seasonTitle = "$showTitle - $seasonName";
+            // Only include if this is the season we're looking for
+            if ($showSeasonNumber === $requestedSeasonNumber) {
+                $seasonName = $showResult['season']['name'] ?? ($showSeasonNumber === 0 ? "Specials" : "Season $showSeasonNumber");
 
-            // Get season poster from the season object
-            if (!empty($showResult['season']['poster']) && is_array($showResult['season']['poster'])) {
-                $seasonPosterUrl = $showResult['season']['poster']['original'] ??
-                    $showResult['season']['poster']['large'] ??
-                    $showResult['season']['poster']['medium'] ??
-                    $showResult['season']['poster']['small'] ?? null;
+                // Add season information to the title
+                $seasonTitle = "$showTitle - $seasonName";
 
-                if ($seasonPosterUrl) {
-                    $allPosters[] = [
-                        'url' => $seasonPosterUrl,
-                        'name' => $seasonTitle,
-                        'season' => $showSeasonNumber
-                    ];
+                // Get season poster from the season object
+                if (!empty($showResult['season']['poster']) && is_array($showResult['season']['poster'])) {
+                    $seasonPosterUrl = $showResult['season']['poster']['original'] ??
+                        $showResult['season']['poster']['large'] ??
+                        $showResult['season']['poster']['medium'] ??
+                        $showResult['season']['poster']['small'] ?? null;
+
+                    $posterSource = $showResult['season']['poster_source'] ?? $source ?? '';
+
+                    if ($seasonPosterUrl) {
+                        $allPosters[] = [
+                            'url' => $seasonPosterUrl,
+                            'name' => $seasonTitle,
+                            'season' => $showSeasonNumber,
+                            'source' => $posterSource,
+                            'isSeasonPoster' => true
+                        ];
+                    }
                 }
             }
-        } else {
-            // Fallback to show poster if season poster not available
-            if (!empty($showResult['poster']) && is_array($showResult['poster'])) {
-                $showPosterUrl = $showResult['poster']['original'] ??
-                    $showResult['poster']['large'] ??
-                    $showResult['poster']['medium'] ??
-                    $showResult['poster']['small'] ?? null;
+        }
 
-                if ($showPosterUrl) {
-                    // Include a fallback in case we couldn't get proper season poster
-                    $fallbackSeasonNumber = $season ?? 1;
-                    $seasonName = $fallbackSeasonNumber === 0 ? "Specials" : "Season $fallbackSeasonNumber";
+        // Process TheTVDB season posters (which might have a different structure)
+        if ($source === 'thetvdb' || strpos(($showResult['poster']['original'] ?? ''), 'thetvdb.com') !== false) {
+            $posterUrl = $showResult['poster']['original'] ??
+                $showResult['poster']['large'] ??
+                $showResult['poster']['medium'] ??
+                $showResult['poster']['small'] ?? null;
 
-                    $allPosters[] = [
-                        'url' => $showPosterUrl,
-                        'name' => "$showTitle - $seasonName (Show Poster)",
-                        'season' => $fallbackSeasonNumber,
-                        'isFallback' => true
-                    ];
-                }
+            // Check if URL contains indicators that it's a season poster
+            // TheTVDB season posters often have URLs with "seasons/<show_id>-<season_number>" format
+            if (
+                $posterUrl && (
+                    strpos($posterUrl, 'seasons/') !== false ||
+                    strpos($posterUrl, '-' . $requestedSeasonNumber . '.') !== false ||
+                    strpos($posterUrl, '/season/') !== false ||
+                    strpos($posterUrl, '/seasons/') !== false
+                )
+            ) {
+                $seasonName = $requestedSeasonNumber === 0 ? "Specials" : "Season $requestedSeasonNumber";
+                $seasonTitle = "$showTitle - $seasonName (TVDB)";
+
+                $allPosters[] = [
+                    'url' => $posterUrl,
+                    'name' => $seasonTitle,
+                    'season' => $requestedSeasonNumber,
+                    'source' => 'thetvdb',
+                    'isSeasonPoster' => true
+                ];
+            }
+        }
+
+        // Process Fanart.tv season posters (if they're structured differently)
+        if ($source === 'fanart.tv' || strpos(($showResult['poster']['original'] ?? ''), 'fanart.tv') !== false) {
+            // Only include Fanart.tv season posters that are explicitly marked as season posters
+            // Look for season identifiers in URL
+            $posterUrl = $showResult['poster']['original'] ??
+                $showResult['poster']['large'] ??
+                $showResult['poster']['medium'] ??
+                $showResult['poster']['small'] ?? null;
+
+            // Check if this is actually a season poster from Fanart.tv (they follow specific naming patterns)
+            if ($posterUrl && strpos($posterUrl, 'seasonposter') !== false) {
+                $seasonName = $requestedSeasonNumber === 0 ? "Specials" : "Season $requestedSeasonNumber";
+                $seasonTitle = "$showTitle - $seasonName (Fanart)";
+
+                $allPosters[] = [
+                    'url' => $posterUrl,
+                    'name' => $seasonTitle,
+                    'season' => $requestedSeasonNumber,
+                    'source' => 'fanart.tv',
+                    'isSeasonPoster' => true
+                ];
+            }
+        }
+
+        // Only add fallback general show poster if we don't have any season-specific posters
+        if (count($allPosters) === 0 && !empty($showResult['poster']) && is_array($showResult['poster'])) {
+            $showPosterUrl = $showResult['poster']['original'] ??
+                $showResult['poster']['large'] ??
+                $showResult['poster']['medium'] ??
+                $showResult['poster']['small'] ?? null;
+
+            if ($showPosterUrl) {
+                $seasonName = $requestedSeasonNumber === 0 ? "Specials" : "Season $requestedSeasonNumber";
+
+                $allPosters[] = [
+                    'url' => $showPosterUrl,
+                    'name' => "$showTitle - $seasonName (Show Poster)",
+                    'season' => $requestedSeasonNumber,
+                    'isFallback' => true,
+                    'source' => $source,
+                    'isSeasonPoster' => false
+                ];
             }
         }
     }
 
+    // If we found no posters at all, include a fallback from the primary result
+    if (empty($allPosters) && $result) {
+        if (!empty($result['poster']) && is_array($result['poster'])) {
+            $posterUrl = $result['poster']['original'] ??
+                $result['poster']['large'] ??
+                $result['poster']['medium'] ??
+                $result['poster']['small'] ?? null;
+
+            $seasonName = $requestedSeasonNumber === 0 ? "Specials" : "Season $requestedSeasonNumber";
+            $fallbackTitle = ($result['name'] ?? $result['title'] ?? 'Unknown TV Show') . " - $seasonName (Fallback)";
+
+            if ($posterUrl) {
+                $allPosters[] = [
+                    'url' => $posterUrl,
+                    'name' => $fallbackTitle,
+                    'season' => $requestedSeasonNumber,
+                    'isFallback' => true,
+                    'isSeasonPoster' => false
+                ];
+            }
+        }
+    }
+
+    // Handle primary result poster for backward compatibility
     if ($result) {
         // Check if there's a season object with poster for the primary result
         if (!empty($result['season']) && is_array($result['season'])) {
-            $seasonNumber = $result['season']['season_number'] ?? $season;
+            $seasonNumber = $result['season']['season_number'] ?? $requestedSeasonNumber;
             $seasonName = $result['season']['name'] ?? ($seasonNumber === 0 ? "Specials" : "Season $seasonNumber");
 
             // Add season information to the title
@@ -497,8 +589,7 @@ if ($type === 'movie') {
             }
 
             // Add fallback season name
-            $fallbackSeasonNumber = $season ?? 1;
-            $seasonName = $fallbackSeasonNumber === 0 ? "Specials" : "Season $fallbackSeasonNumber";
+            $seasonName = $requestedSeasonNumber === 0 ? "Specials" : "Season $requestedSeasonNumber";
             $title .= " - $seasonName";
         }
     }
