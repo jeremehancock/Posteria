@@ -111,9 +111,55 @@ function isTitleExactMatch($title1, $title2)
 }
 
 // NEW: Function to handle Star Wars movie titles
-function handleStarWarsTitle($title)
+// IMPROVED: Function to handle Star Wars movie and TV show titles with better edge case handling
+function handleStarWarsTitle($title, &$originalTitle = null)
 {
-    // Check if this is a Star Wars movie title
+    // Store the original title for alternate matching
+    $originalTitle = $title;
+
+    // Special case for the Holiday Special - keep exact title
+    if (preg_match('/star\s+wars\s+holiday\s+special/i', $title)) {
+        return $title; // Return the exact title for precise matching
+    }
+
+    // Case 1: Original "Star Wars" (1977) - keep as "Star Wars" or "Star Wars: A New Hope"
+    if (
+        preg_match('/^star\s+wars$/i', $title) ||
+        preg_match('/^star\s+wars:?\s*a\s+new\s+hope$/i', $title) ||
+        preg_match('/^star\s+wars:?\s*episode\s+iv$/i', $title) ||
+        preg_match('/^star\s+wars:?\s*episode\s+4$/i', $title)
+    ) {
+        // For the original Star Wars, keep the title as is
+        return $title;
+    }
+
+    // Case 2: Star Wars spinoffs like "Solo: A Star Wars Story"
+    // We'll keep the full title but also remember the short title for flexible matching
+    if (preg_match('/^(.*?):?\s*a\s+star\s+wars\s+story$/i', $title, $matches)) {
+        if (!empty($matches[1])) {
+            // Remember just the character/main title part (e.g., "Solo") for alternate matching
+            $originalTitle = trim($matches[1]);
+            // But return the full title for primary searching
+            return $title;
+        }
+    }
+
+    // Case 3: Star Wars TV series with specific names
+    // For simple one-word shows like "Andor", keep the prefix to avoid confusion
+    if (preg_match('/^star\s+wars:?\s*(andor|ahsoka|rebels|resistance|visions)$/i', $title, $matches)) {
+        // For these shorter-titled shows, keep "Star Wars" in the name to avoid confusion
+        return $title;
+    }
+
+    // For longer-named shows, we can use just the specific part
+    if (preg_match('/^star\s+wars:?\s*(the\s+clone\s+wars|the\s+mandalorian|the\s+book\s+of\s+boba\s+fett|obi-wan\s+kenobi|the\s+bad\s+batch|the\s+acolyte)/i', $title, $matches)) {
+        if (!empty($matches[1])) {
+            // Return the specific TV show name without "Star Wars:" prefix
+            return trim($matches[1]);
+        }
+    }
+
+    // Case 4: Star Wars episodes with subtitles (e.g., "Star Wars Episode V - The Empire Strikes Back")
     if (preg_match('/star\s+wars(?:\s+episode\s+(?:[ivx]+|\d+))?(?:\s*[-:]\s*)?(.+)/i', $title, $matches)) {
         // If we have a subtitle after "Star Wars" or "Star Wars Episode X", use that instead
         if (!empty($matches[1])) {
@@ -121,7 +167,7 @@ function handleStarWarsTitle($title)
         }
     }
 
-    // If no subtitle found or not a Star Wars movie, return the original title
+    // If no special case matched or no subtitle found, return the original title
     return $title;
 }
 
@@ -160,6 +206,10 @@ function stripCollectionWord($title)
 
 // Clean the search query - strip years before sending to API
 $cleanQuery = stripYear($query);
+
+// MODIFIED: For Star Wars movies, extract the subtitle but also remember original
+$originalStarWarsTitle = null;
+$cleanQuery = handleStarWarsTitle($cleanQuery, $originalStarWarsTitle);
 
 // MODIFIED: For Star Wars movies, extract the subtitle for better searching
 $cleanQuery = handleStarWarsTitle($cleanQuery);
@@ -311,18 +361,79 @@ if ($type === 'movie') {
     $baseTitle = $searchQuery;
     $matchedResults = [];
 
-    // NEW: First try to find exact matches for the full Star Wars title if applicable
+    // For movie processing:
     if ($isStarWarsTitle) {
-        foreach ($allResults as $movieResult) {
-            $movieTitle = $movieResult['title'] ?? 'Unknown Movie';
-            $movieCompareTitle = $movieTitle; // Store the plain title for comparison
+        // Special case for the Holiday Special - exact match only
+        if (preg_match('/star\s+wars\s+holiday\s+special/i', $searchQuery)) {
+            foreach ($allResults as $movieResult) {
+                $movieTitle = $movieResult['title'] ?? 'Unknown Movie';
+                $movieCompareTitle = $movieTitle; // Store the plain title for comparison
 
-            // Strip year from the movie title for comparison
-            $movieCompareTitle = stripYear($movieCompareTitle);
+                // Strip year from the movie title for comparison
+                $movieCompareTitle = stripYear($movieCompareTitle);
 
-            // Check if this result matches the full Star Wars title (case-insensitive)
-            if (stripos($movieCompareTitle, $searchQuery) !== false) {
-                $matchedResults[] = $movieResult;
+                // Only match if it's explicitly the Holiday Special
+                if (preg_match('/star\s+wars\s+holiday\s+special/i', $movieCompareTitle)) {
+                    $matchedResults[] = $movieResult;
+                }
+            }
+        }
+        // For the original Star Wars (1977), look for exact matches only
+        else if (preg_match('/^star\s+wars$/i', $searchQuery)) {
+            foreach ($allResults as $movieResult) {
+                $movieTitle = $movieResult['title'] ?? 'Unknown Movie';
+                $movieCompareTitle = $movieTitle; // Store the plain title for comparison
+
+                // Strip year from the movie title for comparison
+                $movieCompareTitle = stripYear($movieCompareTitle);
+
+                // Look for EXACT matches to "Star Wars" only, not containing matches
+                if (
+                    preg_match('/^star\s+wars$/i', $movieCompareTitle) ||
+                    preg_match('/^star\s+wars:?\s*a\s+new\s+hope$/i', $movieCompareTitle) ||
+                    preg_match('/^star\s+wars:?\s*episode\s+iv$/i', $movieCompareTitle) ||
+                    preg_match('/^star\s+wars:?\s*episode\s+4$/i', $movieCompareTitle)
+                ) {
+                    $matchedResults[] = $movieResult;
+                }
+            }
+        }
+        // For spin-offs like "Solo: A Star Wars Story", need more flexible matching
+        else if (preg_match('/a\s+star\s+wars\s+story$/i', $searchQuery) && $originalStarWarsTitle) {
+            foreach ($allResults as $movieResult) {
+                $movieTitle = $movieResult['title'] ?? 'Unknown Movie';
+                $movieCompareTitle = $movieTitle; // Store the plain title for comparison
+
+                // Strip year from the movie title for comparison
+                $movieCompareTitle = stripYear($movieCompareTitle);
+
+                // Try to match the FULL title first (e.g., "Solo: A Star Wars Story")
+                if (stripos($movieCompareTitle, $searchQuery) !== false) {
+                    $matchedResults[] = $movieResult;
+                }
+                // Also try matching movies with just the main part (e.g., "Solo")
+                else if (stripos($movieCompareTitle, $originalStarWarsTitle) !== false) {
+                    $matchedResults[] = $movieResult;
+                }
+            }
+        }
+        // For other Star Wars movies (episodes with subtitles), match on the subtitle
+        else {
+            foreach ($allResults as $movieResult) {
+                $movieTitle = $movieResult['title'] ?? 'Unknown Movie';
+                $movieCompareTitle = $movieTitle; // Store the plain title for comparison
+
+                // Strip year from the movie title for comparison
+                $movieCompareTitle = stripYear($movieCompareTitle);
+
+                // Try matching the cleaned query (subtitle or full title)
+                if (stripos($movieCompareTitle, $cleanQuery) !== false) {
+                    $matchedResults[] = $movieResult;
+                }
+                // Also try the original search query if it's different
+                else if ($searchQuery !== $cleanQuery && stripos($movieCompareTitle, $searchQuery) !== false) {
+                    $matchedResults[] = $movieResult;
+                }
             }
         }
     }
@@ -415,19 +526,74 @@ if ($type === 'movie') {
 } elseif ($type === 'tv') {
     // Get base TV show title without year for matching
     $baseTitle = $searchQuery;
+    $matchedResults = [];
 
-    // Process each TV show result
-    foreach ($allResults as $tvResult) {
-        $tvTitle = $tvResult['name'] ?? $tvResult['title'] ?? 'Unknown TV Show';
-        $tvCompareTitle = $tvTitle; // Store the plain title for comparison
+    // For TV show processing:
+    if ($isStarWarsTitle) {
+        // Special case for the Holiday Special - exact match only
+        if (preg_match('/star\s+wars\s+holiday\s+special/i', $searchQuery)) {
+            foreach ($allResults as $tvResult) {
+                $tvTitle = $tvResult['name'] ?? $tvResult['title'] ?? 'Unknown TV Show';
+                $tvCompareTitle = $tvTitle; // Store the plain title for comparison
 
-        // Strip year from the TV title for comparison
-        $tvCompareTitle = stripYear($tvCompareTitle);
+                // Strip year from the TV title for comparison
+                $tvCompareTitle = stripYear($tvCompareTitle);
 
-        // Filter out results that don't match the search query exactly for TV shows
-        if (!isTitleExactMatch($baseTitle, $tvCompareTitle)) {
-            continue; // Skip this result if titles don't match
+                // Only match if it's explicitly the Holiday Special
+                if (preg_match('/star\s+wars\s+holiday\s+special/i', $tvCompareTitle)) {
+                    $matchedResults[] = $tvResult;
+                }
+            }
+        } else {
+            foreach ($allResults as $tvResult) {
+                $tvTitle = $tvResult['name'] ?? $tvResult['title'] ?? 'Unknown TV Show';
+                $tvCompareTitle = $tvTitle; // Store the plain title for comparison
+
+                // Strip year from the TV title for comparison
+                $tvCompareTitle = stripYear($tvCompareTitle);
+
+                // Try to match the cleaned query first (may be full title or shortened version)
+                if (stripos($tvCompareTitle, $cleanQuery) !== false) {
+                    $matchedResults[] = $tvResult;
+                }
+                // For cases like Andor, also try matching with the "Star Wars" prefix
+                else if (
+                    stripos($tvCompareTitle, "Star Wars " . $cleanQuery) !== false ||
+                    stripos($tvCompareTitle, "Star Wars: " . $cleanQuery) !== false
+                ) {
+                    $matchedResults[] = $tvResult;
+                }
+                // Also try the original search query if different
+                else if ($searchQuery !== $cleanQuery && stripos($tvCompareTitle, $searchQuery) !== false) {
+                    $matchedResults[] = $tvResult;
+                }
+            }
         }
+    }
+
+    // If no Star Wars matches or not a Star Wars title, use standard exact matching
+    if (empty($matchedResults)) {
+        foreach ($allResults as $tvResult) {
+            $tvTitle = $tvResult['name'] ?? $tvResult['title'] ?? 'Unknown TV Show';
+            $tvCompareTitle = $tvTitle; // Store the plain title for comparison
+
+            // Strip year from the TV title for comparison
+            $tvCompareTitle = stripYear($tvCompareTitle);
+
+            // Filter out results that don't match the search query exactly for TV shows
+            if (!isTitleExactMatch($baseTitle, $tvCompareTitle)) {
+                continue; // Skip this result if titles don't match
+            }
+
+            $matchedResults[] = $tvResult;
+        }
+    }
+
+    // Process each TV show result to build posters array
+    $resultsToProcess = !empty($matchedResults) ? $matchedResults : $allResults;
+
+    foreach ($resultsToProcess as $tvResult) {
+        $tvTitle = $tvResult['name'] ?? $tvResult['title'] ?? 'Unknown TV Show';
 
         // Add year if available (for display only)
         if (!empty($tvResult['first_air_date'])) {
@@ -453,6 +619,10 @@ if ($type === 'movie') {
 
     // Set the primary result info (first result, if no filtered results)
     // This is for backward compatibility
+    if (!empty($matchedResults)) {
+        $result = $matchedResults[0];
+    }
+
     if ($result) {
         $title = $result['name'] ?? $result['title'] ?? 'Unknown TV Show';
         if (!empty($result['first_air_date'])) {
