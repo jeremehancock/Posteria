@@ -110,6 +110,21 @@ function isTitleExactMatch($title1, $title2)
     return ($normalizedTitle1 === $normalizedTitle2);
 }
 
+// NEW: Function to handle Star Wars movie titles
+function handleStarWarsTitle($title)
+{
+    // Check if this is a Star Wars movie title
+    if (preg_match('/star\s+wars(?:\s+episode\s+(?:[ivx]+|\d+))?(?:\s*[-:]\s*)?(.+)/i', $title, $matches)) {
+        // If we have a subtitle after "Star Wars" or "Star Wars Episode X", use that instead
+        if (!empty($matches[1])) {
+            return trim($matches[1]);
+        }
+    }
+
+    // If no subtitle found or not a Star Wars movie, return the original title
+    return $title;
+}
+
 // Strip year from query for better searching
 function stripYear($title)
 {
@@ -145,6 +160,9 @@ function stripCollectionWord($title)
 
 // Clean the search query - strip years before sending to API
 $cleanQuery = stripYear($query);
+
+// MODIFIED: For Star Wars movies, extract the subtitle for better searching
+$cleanQuery = handleStarWarsTitle($cleanQuery);
 
 // For collection searches, also strip the word "Collection"
 if ($type === 'collection') {
@@ -191,6 +209,9 @@ if ($type === 'movie') {
     ]);
     exit;
 }
+
+// MODIFIED: Add the original query as a parameter to help with result filtering later
+$apiUrl .= '&original_query=' . urlencode($originalSearchTitle);
 
 $ch = curl_init();
 curl_setopt_array($ch, [
@@ -261,6 +282,13 @@ $searchQuery = preg_replace('/\s*-\s*Season\s*\d+\s*/', '', $searchQuery); // Re
 $searchQuery = stripYear($searchQuery); // Strip years from search query
 $searchQuery = trim($searchQuery);
 
+// NEW: For Star Wars titles, we need both the original and the subtitle for filtering
+$isStarWarsTitle = preg_match('/star\s+wars/i', $searchQuery);
+$starWarsSubtitle = null;
+if ($isStarWarsTitle) {
+    $starWarsSubtitle = handleStarWarsTitle($searchQuery);
+}
+
 // For collection searches, also strip the word "Collection" from the comparison query
 if ($type === 'collection') {
     $searchQuery = stripCollectionWord($searchQuery);
@@ -281,19 +309,65 @@ $allResults = $data['results'];
 if ($type === 'movie') {
     // Get base movie title without year for matching
     $baseTitle = $searchQuery;
+    $matchedResults = [];
 
-    // Process each movie result
-    foreach ($allResults as $movieResult) {
-        $movieTitle = $movieResult['title'] ?? 'Unknown Movie';
-        $movieCompareTitle = $movieTitle; // Store the plain title for comparison
+    // NEW: First try to find exact matches for the full Star Wars title if applicable
+    if ($isStarWarsTitle) {
+        foreach ($allResults as $movieResult) {
+            $movieTitle = $movieResult['title'] ?? 'Unknown Movie';
+            $movieCompareTitle = $movieTitle; // Store the plain title for comparison
 
-        // Strip year from the movie title for comparison
-        $movieCompareTitle = stripYear($movieCompareTitle);
+            // Strip year from the movie title for comparison
+            $movieCompareTitle = stripYear($movieCompareTitle);
 
-        // Filter out results that don't match the search query exactly for movies
-        if (!isTitleExactMatch($baseTitle, $movieCompareTitle)) {
-            continue; // Skip this result if titles don't match
+            // Check if this result matches the full Star Wars title (case-insensitive)
+            if (stripos($movieCompareTitle, $searchQuery) !== false) {
+                $matchedResults[] = $movieResult;
+            }
         }
+    }
+
+    // If we didn't find any matches with the full title and this is a Star Wars movie,
+    // try matching with just the subtitle (e.g., "The Empire Strikes Back")
+    if ($isStarWarsTitle && empty($matchedResults) && $starWarsSubtitle) {
+        foreach ($allResults as $movieResult) {
+            $movieTitle = $movieResult['title'] ?? 'Unknown Movie';
+            $movieCompareTitle = $movieTitle; // Store the plain title for comparison
+
+            // Strip year from the movie title for comparison
+            $movieCompareTitle = stripYear($movieCompareTitle);
+
+            // Check for subtitle match (exact or contained within)
+            if (stripos($movieCompareTitle, $starWarsSubtitle) !== false) {
+                $matchedResults[] = $movieResult;
+            }
+        }
+    }
+
+    // If still no matches or not a Star Wars movie, use the original exact matching logic
+    if (empty($matchedResults)) {
+        foreach ($allResults as $movieResult) {
+            $movieTitle = $movieResult['title'] ?? 'Unknown Movie';
+            $movieCompareTitle = $movieTitle; // Store the plain title for comparison
+
+            // Strip year from the movie title for comparison
+            $movieCompareTitle = stripYear($movieCompareTitle);
+
+            // Filter out results that don't match the search query exactly for movies
+            if (!isTitleExactMatch($baseTitle, $movieCompareTitle)) {
+                continue; // Skip this result if titles don't match
+            }
+
+            $matchedResults[] = $movieResult;
+        }
+    }
+
+    // If we found matches, use them; otherwise fall back to all results
+    $resultsToProcess = !empty($matchedResults) ? $matchedResults : $allResults;
+
+    // Process the selected results
+    foreach ($resultsToProcess as $movieResult) {
+        $movieTitle = $movieResult['title'] ?? 'Unknown Movie';
 
         // Add year if available (for display only)
         if (!empty($movieResult['release_date'])) {
@@ -319,6 +393,10 @@ if ($type === 'movie') {
 
     // Set the primary result info (first result, if no filtered results)
     // This is for backward compatibility
+    if (!empty($matchedResults)) {
+        $result = $matchedResults[0];
+    }
+
     if ($result) {
         $title = $result['title'] ?? 'Unknown Movie';
         if (!empty($result['release_date'])) {
@@ -668,6 +746,19 @@ if (empty($posterUrl) && empty($allPosters)) {
     exit;
 }
 
+// NEW: Add debug information about the Star Wars title handling
+$debugInfo = [];
+if (preg_match('/star\s+wars/i', $originalSearchTitle)) {
+    $debugInfo = [
+        'originalTitle' => $originalSearchTitle,
+        'cleanedQuery' => $cleanQuery,
+        'isStarWarsTitle' => $isStarWarsTitle,
+        'starWarsSubtitle' => $starWarsSubtitle,
+        'resultsCount' => count($allResults),
+        'matchedCount' => isset($matchedResults) ? count($matchedResults) : 0
+    ];
+}
+
 // Return both single poster and all posters for multi-selection
 echo json_encode([
     'success' => true,
@@ -679,6 +770,7 @@ echo json_encode([
     'allPosters' => $allPosters,
     'hasMultiplePosters' => count($allPosters) > 1,
     'originalQuery' => $query,
-    'cleanedQuery' => $cleanQuery
+    'cleanedQuery' => $cleanQuery,
+    'debug' => $debugInfo
 ]);
 ?>
