@@ -245,3 +245,9 @@
 ### Fixed
 
 - Issues with Star Wars in the Find Posters options
+
+## [1.4.3]
+
+### Removed
+
+- Find Posters modal filter since it really didn't have much use

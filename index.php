@@ -7477,7 +7477,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 					<button type="button" class="multi-poster-close-btn">×</button>
 				</div>
 				<div class="multi-poster-search-bar">
-					<input type="text" id="posterSearchInput" placeholder="Filter posters...">
+					<input type="text" id="posterSearchInput" placeholder="Filter posters..." style="visibility: hidden;">
 					<div class="poster-count"><span id="posterCount">0</span> posters found</div>
 				</div>
 				<div class="multi-poster-grid" id="posterGrid"></div>
