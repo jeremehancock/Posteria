@@ -418,10 +418,10 @@ $proxy_url = "./proxy.php";
 
     <script>
         // Initial items from PHP
-        const items = <?php echo !empty($items_json) ? $items_json : '[]'; ?>;
-        const isStreaming = <?php echo !empty($active_streams) ? 'true' : 'false'; ?>;
-        const singleStream = <?php echo count($active_streams) === 1 ? 'true' : 'false'; ?>;
+        const initialItems = <?php echo !empty($items_json) ? $items_json : '[]'; ?>;
+        const isInitialStreaming = <?php echo !empty($active_streams) ? 'true' : 'false'; ?>;
         const proxyUrl = '<?php echo $proxy_url; ?>';
+        const checkStreamsUrl = './check-streams.php';
 
         // DOM elements
         const background = document.getElementById('background');
@@ -432,11 +432,17 @@ $proxy_url = "./proxy.php";
         const tileCols = 8;
         const displayDuration = 30000; // 30 seconds
         const transitionDuration = 3000; // 3 seconds
+        const streamCheckInterval = 15000; // Check for streams every 15 seconds
 
         // Current state
         let currentIndex = 0;
         let transitioning = false;
         let timerInterval;
+        let streamCheckTimer;
+        let items = initialItems;
+        let isStreaming = isInitialStreaming;
+        let streamIds = []; // Keep track of current stream IDs
+        let randomItems = []; // Store random items for fallback
 
         // Debug helper
         function debug(message) {
@@ -447,6 +453,139 @@ $proxy_url = "./proxy.php";
         function getImageUrl(plexUrl) {
             if (!plexUrl) return '';
             return `${proxyUrl}?path=${btoa(plexUrl)}`;
+        }
+
+        // Function to periodically check for active streams
+        function startStreamChecking() {
+            debug('Starting periodic stream checking');
+            // Check immediately on start
+            checkForStreams();
+
+            // Then check periodically
+            streamCheckTimer = setInterval(checkForStreams, streamCheckInterval);
+        }
+
+        // Function to check for active streams via AJAX
+        function checkForStreams() {
+            debug('Checking for active streams...');
+
+            fetch(checkStreamsUrl)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! Status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    handleStreamUpdate(data);
+                })
+                .catch(error => {
+                    debug(`Error checking streams: ${error.message}`);
+                });
+        }
+
+        // Function to handle stream updates
+        function handleStreamUpdate(data) {
+            const activeStreams = data.active_streams || [];
+
+            debug(`Received ${activeStreams.length} active streams`);
+
+            // Check if we got some random items to store
+            if (data.random_items && data.random_items.length > 0) {
+                randomItems = data.random_items;
+                debug(`Stored ${randomItems.length} random items for fallback`);
+            }
+
+            // Get IDs for current streams (using viewOffset as unique identifier)
+            const newStreamIds = activeStreams.map(stream =>
+                `${stream.title}-${stream.user}-${stream.viewOffset}`);
+
+            // Check if the stream state has changed
+            const streamsChanged = (
+                activeStreams.length !== streamIds.length ||
+                !newStreamIds.every(id => streamIds.includes(id))
+            );
+
+            if (streamsChanged) {
+                debug('Stream state has changed, updating display');
+
+                // Save new stream IDs
+                streamIds = newStreamIds;
+
+                // Update streaming state
+                const wasStreaming = isStreaming;
+                isStreaming = activeStreams.length > 0;
+
+                // Handle transition between states
+                if (!wasStreaming && isStreaming) {
+                    // Transition from random posters to streaming
+                    debug('Transitioning from random posters to streaming');
+                    items = activeStreams;
+                    currentIndex = 0;
+                    stopTransitionTimer();
+                    updateDisplay();
+
+                    // If multiple streams, start transitions between them
+                    if (activeStreams.length > 1) {
+                        startTransitionTimer();
+                    }
+                } else if (wasStreaming && !isStreaming) {
+                    // Transition from streaming to random posters
+                    debug('Transitioning from streaming to random posters');
+                    items = randomItems.length > 0 ? randomItems : [];
+                    currentIndex = 0;
+                    updateDisplay();
+                    startTransitionTimer();
+                } else if (isStreaming) {
+                    // Update the current streams
+                    debug('Updating active streams');
+                    const currentStream = items[currentIndex];
+                    items = activeStreams;
+
+                    // Try to keep the same stream selected if it's still active
+                    if (currentStream) {
+                        const sameStreamIndex = activeStreams.findIndex(stream =>
+                            stream.title === currentStream.title &&
+                            stream.user === currentStream.user);
+
+                        if (sameStreamIndex !== -1) {
+                            currentIndex = sameStreamIndex;
+                        } else {
+                            currentIndex = 0;
+                        }
+                    }
+
+                    updateDisplay();
+
+                    // Manage transition timer based on number of streams
+                    stopTransitionTimer();
+                    if (activeStreams.length > 1) {
+                        startTransitionTimer();
+                    }
+                }
+            } else {
+                // Same streams, but update view offsets/progress
+                if (isStreaming && activeStreams.length > 0) {
+                    debug('Same streams, updating progress');
+                    // Update items with new progress data but maintain current index
+                    const currentStream = items[currentIndex];
+                    items = activeStreams;
+
+                    // Find the same stream in the new data
+                    if (currentStream) {
+                        const sameStreamIndex = activeStreams.findIndex(stream =>
+                            stream.title === currentStream.title &&
+                            stream.user === currentStream.user);
+
+                        if (sameStreamIndex !== -1) {
+                            currentIndex = sameStreamIndex;
+                        }
+                    }
+
+                    // Just update the stream info without full transition
+                    updateStreamInfo(items[currentIndex]);
+                }
+            }
         }
 
         // Initialize the display
@@ -476,14 +615,23 @@ $proxy_url = "./proxy.php";
             // Set initial poster
             updateDisplay();
 
-            // Start timer for transitions if we have more than one item
-            if (items.length > 1 && !singleStream) {
+            // Start timer for transitions if we have more than one item and are streaming
+            // or if we're not streaming (random posters)
+            if ((isStreaming && items.length > 1) || !isStreaming) {
                 startTransitionTimer();
             }
+
+            // Start periodic stream checking
+            startStreamChecking();
 
             // Handle window resize
             window.addEventListener('resize', adjustPosterSize);
             adjustPosterSize();
+        }
+
+        // Stop transition timer
+        function stopTransitionTimer() {
+            clearInterval(timerInterval);
         }
 
         // Adjust poster size to maintain aspect ratio
@@ -534,70 +682,16 @@ $proxy_url = "./proxy.php";
             }
         }
 
-        // Create the tile grid for the poster
-        function createTiles() {
-            // Clear existing tiles
-            posterContainer.innerHTML = '';
-
-            const containerWidth = posterContainer.offsetWidth;
-            const containerHeight = posterContainer.offsetHeight;
-
-            const tileWidth = containerWidth / tileCols;
-            const tileHeight = containerHeight / tileRows;
-
-            // Create streaming badge if applicable
-            if (isStreaming) {
-                const badge = document.createElement('div');
-                badge.className = 'streaming-badge';
-                badge.textContent = 'Currently Streaming';
-                posterContainer.appendChild(badge);
-            }
-
-            // Ensure we have a valid current item
-            if (!items[currentIndex]) {
-                debug(`Invalid current index: ${currentIndex}`);
-                return;
-            }
-
-            const currentItem = items[currentIndex];
-            // Check if the thumb property exists
-            const posterUrl = currentItem && currentItem.thumb ?
-                getImageUrl(currentItem.thumb) : '';
-
-            if (!posterUrl) {
-                debug('No poster URL available');
-                return;
-            }
-
-            debug(`Creating tiles with poster URL: ${posterUrl}`);
-
-            // Create tiles
-            for (let row = 0; row < tileRows; row++) {
-                for (let col = 0; col < tileCols; col++) {
-                    const tile = document.createElement('div');
-                    tile.className = 'tile';
-                    tile.style.width = tileWidth + 'px';
-                    tile.style.height = tileHeight + 'px';
-                    tile.style.top = (row * tileHeight) + 'px';
-                    tile.style.left = (col * tileWidth) + 'px';
-
-                    // Position background image to show correct portion in this tile
-                    tile.style.backgroundImage = `url(${posterUrl})`;
-                    tile.style.backgroundPosition = `-${col * tileWidth}px -${row * tileHeight}px`;
-                    tile.style.backgroundSize = `${containerWidth}px ${containerHeight}px`;
-
-                    posterContainer.appendChild(tile);
-                }
-            }
-
-            // Add stream info if applicable
-            if (isStreaming) {
-                addStreamInfo(items[currentIndex]);
-            }
-        }
-
         // Add streaming information display
-        function addStreamInfo(stream) {
+        function updateStreamInfo(stream) {
+            // Find existing stream info and remove it
+            const existingInfo = posterContainer.querySelector('.stream-info');
+            if (existingInfo) {
+                existingInfo.remove();
+            }
+
+            if (!stream) return;
+
             const infoDiv = document.createElement('div');
             infoDiv.className = 'stream-info';
 
@@ -625,7 +719,7 @@ $proxy_url = "./proxy.php";
             posterContainer.appendChild(infoDiv);
         }
 
-        // Update the display with the current item - simplified to show seamless poster
+        // Update the display with the current item
         function updateDisplay() {
             if (!items || items.length === 0 || currentIndex >= items.length) {
                 debug('Invalid items or index');
@@ -675,6 +769,35 @@ $proxy_url = "./proxy.php";
                 badge.textContent = 'Currently Streaming';
                 posterContainer.appendChild(badge);
             }
+        }
+
+        // Add streaming information display
+        function addStreamInfo(stream) {
+            const infoDiv = document.createElement('div');
+            infoDiv.className = 'stream-info';
+
+            let title = stream.title;
+            let details = '';
+
+            if (stream.type === 'episode') {
+                title = `${stream.show_title}`;
+                details = `S${stream.season}E${stream.episode} - ${stream.title} • ${stream.user}`;
+            } else {
+                details = `${stream.year} • ${stream.user}`;
+            }
+
+            // Create progress bar
+            const progress = Math.floor((stream.viewOffset / stream.duration) * 100);
+
+            infoDiv.innerHTML = `
+                <div class="stream-title">${title}</div>
+                <div class="stream-details">${details}</div>
+                <div class="stream-progress">
+                    <div class="stream-progress-bar" style="width: ${progress}%;"></div>
+                </div>
+            `;
+
+            posterContainer.appendChild(infoDiv);
         }
 
         // Start transition timer
@@ -807,6 +930,12 @@ $proxy_url = "./proxy.php";
             }
             return array;
         }
+
+        // Clean up when page unloads
+        window.addEventListener('beforeunload', () => {
+            clearInterval(timerInterval);
+            clearInterval(streamCheckTimer);
+        });
 
         // Initialize when page loads
         window.onload = init;
