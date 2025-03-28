@@ -206,76 +206,6 @@ function getRandomLibraryItems($server_url, $token, $count = 10)
     return array_slice($items, 0, $count);
 }
 
-// Function to fetch an image from Plex
-function fetchPlexImage($url, $token)
-{
-    if (empty($url)) {
-        return false;
-    }
-
-    // Get the full Plex URL (could be a relative path)
-    $full_url = $url;
-
-    // Check if it's a relative URL and add base URL if needed
-    if (strpos($url, 'http') !== 0) {
-        global $plex_url;
-        $full_url = $plex_url . $url;
-    }
-
-    // Ensure the URL has a token
-    if (strpos($full_url, 'X-Plex-Token=') === false) {
-        $full_url .= (strpos($full_url, '?') === false ? '?' : '&') . 'X-Plex-Token=' . $token;
-    }
-
-    error_log("Fetching image from: {$full_url}");
-
-    $ch = curl_init();
-    curl_setopt_array($ch, [
-        CURLOPT_URL => $full_url,
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_FOLLOWLOCATION => true,
-        CURLOPT_TIMEOUT => 30,
-        CURLOPT_SSL_VERIFYPEER => false,
-        CURLOPT_SSL_VERIFYHOST => false,
-    ]);
-
-    $response = curl_exec($ch);
-    $content_type = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
-
-    if (curl_errno($ch)) {
-        error_log("cURL error when fetching image: " . curl_error($ch));
-        curl_close($ch);
-        return false;
-    }
-
-    curl_close($ch);
-
-    if (!$response) {
-        error_log("Empty response when fetching image");
-        return false;
-    }
-
-    return [
-        'data' => $response,
-        'content_type' => $content_type
-    ];
-}
-
-// Handle image requests
-if (isset($_GET['image'])) {
-    $image_path = base64_decode($_GET['image']);
-    $image = fetchPlexImage($image_path, $plex_token);
-
-    if ($image) {
-        header('Content-Type: ' . $image['content_type']);
-        echo $image['data'];
-        exit;
-    } else {
-        header('HTTP/1.1 404 Not Found');
-        exit;
-    }
-}
-
 // Get active streams
 $active_streams = getActiveStreams($plex_url, $plex_token);
 error_log("Active streams count: " . count($active_streams));
@@ -307,7 +237,9 @@ if (empty($items)) {
 $items_json = json_encode($items);
 
 // Determine the current script URL for image reference
-$base_url = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://$_SERVER[HTTP_HOST]$_SERVER[SCRIPT_NAME]";
+$base_url = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://$_SERVER[HTTP_HOST]";
+$script_dir = dirname($_SERVER['SCRIPT_NAME']);
+$proxy_url = $base_url . $script_dir . "/proxy.php";
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -492,7 +424,7 @@ $base_url = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : 
         const items = <?php echo !empty($items_json) ? $items_json : '[]'; ?>;
         const isStreaming = <?php echo !empty($active_streams) ? 'true' : 'false'; ?>;
         const singleStream = <?php echo count($active_streams) === 1 ? 'true' : 'false'; ?>;
-        const baseUrl = '<?php echo $base_url; ?>';
+        const proxyUrl = '<?php echo $proxy_url; ?>';
 
         // DOM elements
         const background = document.getElementById('background');
@@ -514,10 +446,10 @@ $base_url = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : 
             console.log(`[Debug] ${message}`);
         }
 
-        // Helper function to convert Plex URLs to our image handler
+        // Helper function to convert Plex URLs to our proxy handler
         function getImageUrl(plexUrl) {
             if (!plexUrl) return '';
-            return `${baseUrl}?image=${btoa(plexUrl)}`;
+            return `${proxyUrl}?path=${btoa(plexUrl)}`;
         }
 
         // Initialize the display
@@ -556,6 +488,7 @@ $base_url = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : 
             window.addEventListener('resize', adjustPosterSize);
             adjustPosterSize();
         }
+
         // Adjust poster size to maintain aspect ratio
         function adjustPosterSize() {
             const viewportWidth = window.innerWidth;

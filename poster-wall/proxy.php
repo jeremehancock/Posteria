@@ -1,73 +1,84 @@
 <?php
-/**
- * Plex API Proxy
- * 
- * This script acts as a proxy between the client and the Plex server
- * to handle cross-origin requests and SSL certificate issues.
- */
+// Include configuration
+require_once '../include/config.php';
 
-// Get the URL from the query parameter
-$url = isset($_GET['url']) ? $_GET['url'] : null;
+// Get Plex token from config
+$plex_token = $plex_config['token'];
 
-// Validate URL
-if (!$url || !filter_var($url, FILTER_VALIDATE_URL)) {
-    header('HTTP/1.1 400 Bad Request');
-    echo json_encode(['error' => 'Invalid URL parameter']);
-    exit;
-}
-
-// Initialize cURL session
-$ch = curl_init();
-
-// Set cURL options
-curl_setopt_array($ch, [
-    CURLOPT_URL => $url,
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_FOLLOWLOCATION => true,
-    CURLOPT_SSL_VERIFYPEER => false,  // Ignore SSL certificate issues
-    CURLOPT_SSL_VERIFYHOST => false,  // Ignore SSL certificate issues
-    CURLOPT_TIMEOUT => 30,
-    CURLOPT_HEADER => false,
-]);
-
-// Get content type from Plex URL for images
-if (strpos($url, 'thumb') !== false || strpos($url, 'art') !== false) {
-    curl_setopt($ch, CURLOPT_HEADER, true);
-}
-
-// Execute cURL request
-$response = curl_exec($ch);
-
-// Check for errors
-if (curl_errno($ch)) {
-    header('HTTP/1.1 500 Internal Server Error');
-    echo json_encode(['error' => 'Curl error: ' . curl_error($ch)]);
-    curl_close($ch);
-    exit;
-}
-
-// For image responses, parse headers and set appropriate content type
-if (strpos($url, 'thumb') !== false || strpos($url, 'art') !== false) {
-    $header_size = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
-    $header = substr($response, 0, $header_size);
-    $body = substr($response, $header_size);
-
-    // Extract content type
-    if (preg_match('/Content-Type: (.*?)(\r\n|\r|\n)/i', $header, $matches)) {
-        $content_type = trim($matches[1]);
-        header('Content-Type: ' . $content_type);
-    } else {
-        // Default to image/jpeg if no content type is found
-        header('Content-Type: image/jpeg');
+// Function to fetch an image from Plex
+function fetchPlexImage($url, $token)
+{
+    if (empty($url)) {
+        return false;
     }
 
-    echo $body;
-} else {
-    // For API responses, pass through the content type
+    // Check if it's a relative URL and add base URL if needed
+    if (strpos($url, 'http') !== 0) {
+        // Get Plex server URL from config
+        global $plex_config;
+        $plex_url = $plex_config['server_url'];
+        $full_url = $plex_url . $url;
+    } else {
+        $full_url = $url;
+    }
+
+    // Ensure the URL has a token
+    if (strpos($full_url, 'X-Plex-Token=') === false) {
+        $full_url .= (strpos($full_url, '?') === false ? '?' : '&') . 'X-Plex-Token=' . $token;
+    }
+
+    error_log("Proxy: Fetching image from: {$full_url}");
+
+    $ch = curl_init();
+    curl_setopt_array($ch, [
+        CURLOPT_URL => $full_url,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_TIMEOUT => 30,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => false,
+    ]);
+
+    $response = curl_exec($ch);
     $content_type = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
-    header('Content-Type: ' . $content_type);
-    echo $response;
+    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+
+    if (curl_errno($ch)) {
+        error_log("Proxy: cURL error when fetching image: " . curl_error($ch));
+        curl_close($ch);
+        return false;
+    }
+
+    curl_close($ch);
+
+    if (!$response || $http_code >= 400) {
+        error_log("Proxy: Error response when fetching image, HTTP code: " . $http_code);
+        return false;
+    }
+
+    return [
+        'data' => $response,
+        'content_type' => $content_type
+    ];
 }
 
-// Close cURL session
-curl_close($ch);
+// Main proxy logic
+if (isset($_GET['path'])) {
+    $image_path = base64_decode($_GET['path']);
+    $image = fetchPlexImage($image_path, $plex_token);
+
+    if ($image) {
+        // Set caching headers
+        header('Cache-Control: public, max-age=3600'); // Cache for 1 hour
+        header('Content-Type: ' . $image['content_type']);
+        echo $image['data'];
+        exit;
+    } else {
+        header('HTTP/1.1 404 Not Found');
+        exit;
+    }
+} else {
+    header('HTTP/1.1 400 Bad Request');
+    exit;
+}
+?>
