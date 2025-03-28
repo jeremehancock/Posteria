@@ -438,27 +438,46 @@ $base_url = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : 
             max-width: 80%;
         }
 
-        /* Add these to your style section */
         @media (max-width: 768px) {
             .stream-title {
                 font-size: 1.2em;
             }
 
             .stream-details {
-                font-size: 0.9em;
+                font-size: 0.8em;
             }
 
             .streaming-badge {
-                font-size: 1em;
+                font-size: 0.9em;
                 padding: 5px;
+            }
+
+            .stream-info {
+                padding: 10px;
             }
         }
 
         @media (max-width: 480px) {
-            #poster-container {
-                width: 90vw !important;
-                height: auto !important;
-                max-height: 80vh;
+            .stream-title {
+                font-size: 1em;
+            }
+
+            .stream-details {
+                font-size: 0.7em;
+            }
+
+            .streaming-badge {
+                font-size: 0.8em;
+                padding: 3px;
+            }
+
+            .stream-info {
+                padding: 5px;
+            }
+
+            .stream-progress {
+                height: 2px;
+                margin-top: 5px;
             }
         }
     </style>
@@ -537,32 +556,49 @@ $base_url = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : 
             window.addEventListener('resize', adjustPosterSize);
             adjustPosterSize();
         }
-
         // Adjust poster size to maintain aspect ratio
         function adjustPosterSize() {
-            const maxHeight = window.innerHeight * 0.9;
-            const maxWidth = window.innerWidth * 0.9;
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight;
 
             // Standard movie poster ratio is 2:3 (width:height)
             const posterRatio = 2 / 3; // width/height
 
             let posterWidth, posterHeight;
 
-            // Calculate dimensions based on screen constraints
-            if (maxWidth / maxHeight < posterRatio) {
-                // Width constrained
-                posterWidth = maxWidth;
+            // For very small screens (mobile)
+            if (viewportWidth <= 480) {
+                // Use a larger percentage of the viewport, but maintain ratio
+                posterWidth = viewportWidth * 0.85;
                 posterHeight = posterWidth / posterRatio;
+
+                // If poster height is too tall, scale it down
+                if (posterHeight > viewportHeight * 0.85) {
+                    posterHeight = viewportHeight * 0.85;
+                    posterWidth = posterHeight * posterRatio;
+                }
             } else {
-                // Height constrained
-                posterHeight = maxHeight;
-                posterWidth = posterHeight * posterRatio;
+                // For larger screens
+                const maxHeight = viewportHeight * 0.9;
+                const maxWidth = viewportWidth * 0.9;
+
+                // Calculate dimensions based on screen constraints
+                if (maxWidth / maxHeight < posterRatio) {
+                    // Width constrained
+                    posterWidth = maxWidth;
+                    posterHeight = posterWidth / posterRatio;
+                } else {
+                    // Height constrained
+                    posterHeight = maxHeight;
+                    posterWidth = posterHeight * posterRatio;
+                }
             }
 
+            // Apply the calculated dimensions
             posterContainer.style.width = posterWidth + 'px';
             posterContainer.style.height = posterHeight + 'px';
 
-            // If we're not in transition, update the display
+            // Update display if not in transition
             if (!transitioning) {
                 updateDisplay();
             }
@@ -659,68 +695,55 @@ $base_url = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : 
             posterContainer.appendChild(infoDiv);
         }
 
-        // Update the display with the current item
+        // Update the display with the current item - simplified to show seamless poster
         function updateDisplay() {
-            // Ensure we have valid items and index
             if (!items || items.length === 0 || currentIndex >= items.length) {
                 debug('Invalid items or index');
                 return;
             }
 
             const currentItem = items[currentIndex];
-
-            // Ensure the current item is valid
             if (!currentItem) {
                 debug('Current item is undefined');
                 return;
             }
 
-            // Update background - ensure we have valid values
+            // Update background
             const artUrl = currentItem.art || currentItem.thumb ?
                 getImageUrl(currentItem.art || currentItem.thumb) : '';
-
             if (artUrl) {
                 background.style.backgroundImage = `url(${artUrl})`;
-                debug(`Set background image: ${artUrl}`);
             }
 
-            // If not transitioning, create tiles immediately
-            if (!transitioning) {
-                // Clear existing content
-                posterContainer.innerHTML = '';
+            // Clear existing content
+            posterContainer.innerHTML = '';
 
-                // Create a single seamless poster instead of tiles
-                const posterUrl = currentItem && currentItem.thumb ?
-                    getImageUrl(currentItem.thumb) : '';
+            // Create single seamless poster
+            const posterUrl = currentItem && currentItem.thumb ?
+                getImageUrl(currentItem.thumb) : '';
 
-                if (posterUrl) {
-                    const poster = document.createElement('div');
-                    poster.style.width = '100%';
-                    poster.style.height = '100%';
-                    poster.style.backgroundImage = `url(${posterUrl})`;
-                    poster.style.backgroundSize = 'cover';
-                    poster.style.backgroundPosition = 'center';
-                    poster.style.position = 'absolute';
-                    posterContainer.appendChild(poster);
+            if (posterUrl) {
+                const poster = document.createElement('div');
+                poster.style.width = '100%';
+                poster.style.height = '100%';
+                poster.style.backgroundImage = `url(${posterUrl})`;
+                poster.style.backgroundSize = 'cover';
+                poster.style.backgroundPosition = 'center';
+                poster.style.position = 'absolute';
+                posterContainer.appendChild(poster);
+            }
 
-                    // Only create tiles when we're about to transition
-                    setTimeout(() => {
-                        createTiles();
-                    }, displayDuration - 100);
-                }
+            // Add stream info if applicable
+            if (isStreaming) {
+                addStreamInfo(items[currentIndex]);
+            }
 
-                // Add stream info if applicable
-                if (isStreaming) {
-                    addStreamInfo(items[currentIndex]);
-                }
-
-                // Create streaming badge if applicable
-                if (isStreaming) {
-                    const badge = document.createElement('div');
-                    badge.className = 'streaming-badge';
-                    badge.textContent = 'Currently Streaming';
-                    posterContainer.appendChild(badge);
-                }
+            // Create streaming badge if applicable
+            if (isStreaming) {
+                const badge = document.createElement('div');
+                badge.className = 'streaming-badge';
+                badge.textContent = 'Currently Streaming';
+                posterContainer.appendChild(badge);
             }
         }
 
@@ -746,59 +769,102 @@ $base_url = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : 
                 return;
             }
 
-            // Get all tiles
-            const tiles = document.querySelectorAll('.tile');
-            const tileArray = Array.from(tiles);
+            // Clear existing content and create tiles for transition effect
+            posterContainer.innerHTML = '';
 
-            // Shuffle tiles for random flip effect
-            shuffleArray(tileArray);
+            const containerWidth = posterContainer.offsetWidth;
+            const containerHeight = posterContainer.offsetHeight;
 
-            // Create back face for each tile
-            tileArray.forEach(tile => {
-                const tileRect = tile.getBoundingClientRect();
-                const containerRect = posterContainer.getBoundingClientRect();
+            const tileWidth = containerWidth / tileCols;
+            const tileHeight = containerHeight / tileRows;
 
-                const relX = tileRect.left - containerRect.left;
-                const relY = tileRect.top - containerRect.top;
+            // Create tile grid just for the transition effect
+            const tiles = [];
+            for (let row = 0; row < tileRows; row++) {
+                for (let col = 0; col < tileCols; col++) {
+                    const tile = document.createElement('div');
+                    tile.className = 'tile';
+                    tile.style.width = tileWidth + 'px';
+                    tile.style.height = tileHeight + 'px';
+                    tile.style.top = (row * tileHeight) + 'px';
+                    tile.style.left = (col * tileWidth) + 'px';
 
-                // Remove any existing tile-back elements
-                const existingBack = tile.querySelector('.tile-back');
-                if (existingBack) {
-                    tile.removeChild(existingBack);
+                    // Current poster image
+                    const currentPosterUrl = items[currentIndex] && items[currentIndex].thumb ?
+                        getImageUrl(items[currentIndex].thumb) : '';
+
+                    tile.style.backgroundImage = `url(${currentPosterUrl})`;
+                    tile.style.backgroundPosition = `-${col * tileWidth}px -${row * tileHeight}px`;
+                    tile.style.backgroundSize = `${containerWidth}px ${containerHeight}px`;
+
+                    // Add back face (next poster)
+                    const tileBack = document.createElement('div');
+                    tileBack.className = 'tile-back';
+                    tileBack.style.backgroundImage = `url(${nextPosterUrl})`;
+                    tileBack.style.backgroundPosition = `-${col * tileWidth}px -${row * tileHeight}px`;
+                    tileBack.style.backgroundSize = `${containerWidth}px ${containerHeight}px`;
+
+                    tile.appendChild(tileBack);
+                    posterContainer.appendChild(tile);
+                    tiles.push(tile);
                 }
+            }
 
-                const tileBack = document.createElement('div');
-                tileBack.className = 'tile-back';
-                tileBack.style.backgroundImage = `url(${nextPosterUrl})`;
-                tileBack.style.backgroundPosition = `-${relX}px -${relY}px`;
-                tileBack.style.backgroundSize = `${containerRect.width}px ${containerRect.height}px`;
+            // Add streaming info if applicable
+            if (isStreaming) {
+                addStreamInfo(items[currentIndex]);
+            }
 
-                tile.appendChild(tileBack);
-            });
+            // Create streaming badge if applicable
+            if (isStreaming) {
+                const badge = document.createElement('div');
+                badge.className = 'streaming-badge';
+                badge.textContent = 'Currently Streaming';
+                posterContainer.appendChild(badge);
+            }
 
-            // Reset any previous transformations
-            tileArray.forEach(tile => {
-                tile.style.transform = 'rotateY(0deg)';
-            });
-
-            // Force reflow to ensure the reset took effect
-            void posterContainer.offsetWidth;
-
-            // Animate tiles with staggered delay
+            // Shuffle tiles for random flip effect and animate
+            shuffleArray(tiles);
             let delay = 0;
-            const delayIncrement = transitionDuration / tileArray.length;
+            const delayIncrement = transitionDuration / tiles.length;
 
-            tileArray.forEach(tile => {
+            tiles.forEach(tile => {
                 setTimeout(() => {
                     tile.style.transform = 'rotateY(180deg)';
                 }, delay);
                 delay += delayIncrement;
             });
 
-            // Update state after transition
+            // After transition completes, display single seamless poster
             setTimeout(() => {
                 currentIndex = nextIndex;
-                updateDisplay();
+
+                // Clear all tiles
+                posterContainer.innerHTML = '';
+
+                // Create single seamless poster
+                const poster = document.createElement('div');
+                poster.style.width = '100%';
+                poster.style.height = '100%';
+                poster.style.backgroundImage = `url(${nextPosterUrl})`;
+                poster.style.backgroundSize = 'cover';
+                poster.style.backgroundPosition = 'center';
+                poster.style.position = 'absolute';
+                posterContainer.appendChild(poster);
+
+                // Add stream info if applicable
+                if (isStreaming) {
+                    addStreamInfo(items[currentIndex]);
+                }
+
+                // Create streaming badge if applicable
+                if (isStreaming) {
+                    const badge = document.createElement('div');
+                    badge.className = 'streaming-badge';
+                    badge.textContent = 'Currently Streaming';
+                    posterContainer.appendChild(badge);
+                }
+
                 transitioning = false;
             }, transitionDuration + 100);
         }
