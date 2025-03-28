@@ -4,20 +4,19 @@ require_once '../include/config.php';
 
 // Get Plex token from config
 $plex_token = $plex_config['token'];
+$plex_url = $plex_config['server_url'];
 
 // Function to fetch an image from Plex
-function fetchPlexImage($url, $token)
+function fetchPlexImage($url, $token, $base_url)
 {
     if (empty($url)) {
+        error_log("Proxy: Empty URL provided");
         return false;
     }
 
     // Check if it's a relative URL and add base URL if needed
     if (strpos($url, 'http') !== 0) {
-        // Get Plex server URL from config
-        global $plex_config;
-        $plex_url = $plex_config['server_url'];
-        $full_url = $plex_url . $url;
+        $full_url = $base_url . $url;
     } else {
         $full_url = $url;
     }
@@ -62,10 +61,24 @@ function fetchPlexImage($url, $token)
     ];
 }
 
+// Display a fallback image if no path is provided
+if (!isset($_GET['path']) || empty($_GET['path'])) {
+    // Serve a placeholder image instead of an error
+    header('Content-Type: image/png');
+    // Simple 1x1 transparent PNG
+    echo base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=');
+    exit;
+}
+
 // Main proxy logic
-if (isset($_GET['path'])) {
+try {
     $image_path = base64_decode($_GET['path']);
-    $image = fetchPlexImage($image_path, $plex_token);
+    if ($image_path === false) {
+        error_log("Proxy: Failed to decode base64 path: " . $_GET['path']);
+        throw new Exception("Invalid path encoding");
+    }
+
+    $image = fetchPlexImage($image_path, $plex_token, $plex_url);
 
     if ($image) {
         // Set caching headers
@@ -74,11 +87,14 @@ if (isset($_GET['path'])) {
         echo $image['data'];
         exit;
     } else {
-        header('HTTP/1.1 404 Not Found');
-        exit;
+        throw new Exception("Failed to fetch image");
     }
-} else {
-    header('HTTP/1.1 400 Bad Request');
+} catch (Exception $e) {
+    error_log("Proxy error: " . $e->getMessage());
+    header('HTTP/1.1 404 Not Found');
+    header('Content-Type: image/png');
+    // Simple 1x1 transparent PNG
+    echo base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=');
     exit;
 }
 ?>

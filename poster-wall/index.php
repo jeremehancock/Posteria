@@ -236,10 +236,7 @@ if (empty($items)) {
 // Convert items to JSON for JavaScript
 $items_json = json_encode($items);
 
-// Determine the current script URL for image reference
-$base_url = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://$_SERVER[HTTP_HOST]";
-$script_dir = dirname($_SERVER['SCRIPT_NAME']);
-$proxy_url = $base_url . $script_dir . "/proxy.php";
+$proxy_url = "./proxy.php";
 ?>
 <!DOCTYPE html>
 <html lang="en">
