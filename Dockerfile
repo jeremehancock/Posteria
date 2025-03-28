@@ -19,10 +19,12 @@ RUN a2enmod rewrite
 RUN sed -i 's/AllowOverride None/AllowOverride All/' /etc/apache2/apache2.conf && echo "ServerName localhost" >>/etc/apache2/apache2.conf
 
 # Create directory structure
-RUN mkdir -p /var/www/html/posters/movies /var/www/html/posters/tv-shows /var/www/html/posters/tv-seasons /var/www/html/posters/collections /var/www/html/assets /var/www/html/data /var/www/html/include
+RUN mkdir -p /var/www/html/posters/movies /var/www/html/posters/tv-shows /var/www/html/posters/tv-seasons /var/www/html/posters/collections /var/www/html/assets /var/www/html/data /var/www/html/include /var/www/html/poster-wall
 
 # Copy the application files
 COPY index.php /var/www/html/
+COPY poster-wall/index.php /var/www/html/poster-wall/
+COPY poster-wall/proxy.php /var/www/html/poster-wall/
 COPY include/version.php /var/www/html/include/
 COPY include/plex-import.php /var/www/html/include/
 COPY include/send-to-plex.php /var/www/html/include/

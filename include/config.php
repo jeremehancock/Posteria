@@ -67,10 +67,6 @@ $auth_config = [
 $plex_config = [
     'server_url' => getEnvWithFallback('PLEX_SERVER_URL', ''),
     'token' => getEnvWithFallback('PLEX_TOKEN', ''),
-    'connect_timeout' => getIntEnvWithFallback('PLEX_CONNECT_TIMEOUT', 10),
-    'request_timeout' => getIntEnvWithFallback('PLEX_REQUEST_TIMEOUT', 60),
-    'import_batch_size' => getIntEnvWithFallback('PLEX_IMPORT_BATCH_SIZE', 25),
-    'remove_overlay_label' => getBoolEnvWithFallback('PLEX_REMOVE_OVERLAY_LABEL', false)
 ];
 
 $auto_import_config = [
