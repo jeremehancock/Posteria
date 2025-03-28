@@ -430,19 +430,22 @@ $proxy_url = "./proxy.php";
         // Configuration
         const tileRows = 12;
         const tileCols = 8;
-        const displayDuration = 30000; // 30 seconds
-        const transitionDuration = 3000; // 3 seconds
-        const streamCheckInterval = 15000; // Check for streams every 15 seconds
+        const displayDuration = 10000; // 10 seconds between stream transitions (reduced for testing)
+        const transitionDuration = 3000; // 3 seconds for the transition animation
+        const streamCheckInterval = 10000; // Check for streams every 10 seconds
 
         // Current state
         let currentIndex = 0;
         let transitioning = false;
-        let timerInterval;
-        let streamCheckTimer;
+        let timerInterval = null;
+        let streamCheckTimer = null;
+        let lastTransitionTime = 0;
         let items = initialItems;
         let isStreaming = isInitialStreaming;
         let streamIds = []; // Keep track of current stream IDs
         let randomItems = []; // Store random items for fallback
+        let forceTransition = false; // Flag to force transition even when updating display
+        let multipleStreams = isInitialStreaming && initialItems.length > 1; // Flag to track multiple streams
 
         // Debug helper
         function debug(message) {
@@ -461,6 +464,12 @@ $proxy_url = "./proxy.php";
             // Check immediately on start
             checkForStreams();
 
+            // Clear any existing timer first
+            if (streamCheckTimer) {
+                clearInterval(streamCheckTimer);
+                streamCheckTimer = null;
+            }
+
             // Then check periodically
             streamCheckTimer = setInterval(checkForStreams, streamCheckInterval);
         }
@@ -477,7 +486,23 @@ $proxy_url = "./proxy.php";
                     return response.json();
                 })
                 .then(data => {
+                    debug(`Got stream data at timestamp ${data.timestamp || 'unknown'}`);
+                    debug(`Found ${data.active_streams ? data.active_streams.length : 0} active streams`);
+
+                    if (data.active_streams && data.active_streams.length > 1) {
+                        multipleStreams = true;
+                        debug("MULTIPLE STREAMS DETECTED");
+                    } else {
+                        multipleStreams = false;
+                    }
+
                     handleStreamUpdate(data);
+
+                    // CRITICAL: Double-check timer status after handling the update
+                    if (multipleStreams && !timerInterval) {
+                        debug("CRITICAL: Multiple streams but no timer running! Restarting timer.");
+                        startTransitionTimer();
+                    }
                 })
                 .catch(error => {
                     debug(`Error checking streams: ${error.message}`);
@@ -584,6 +609,17 @@ $proxy_url = "./proxy.php";
 
                     // Just update the stream info without full transition
                     updateStreamInfo(items[currentIndex]);
+
+                    // CRITICAL: Make sure transition timer is running if we have multiple streams
+                    if (activeStreams.length > 1) {
+                        // Check if timer is already running
+                        if (!timerInterval) {
+                            debug('Multiple streams detected but timer not running - starting transition timer');
+                            startTransitionTimer();
+                        } else {
+                            debug('Multiple streams, timer already running');
+                        }
+                    }
                 }
             }
         }
@@ -612,12 +648,18 @@ $proxy_url = "./proxy.php";
                 debug(`First item: ${items[0].title} (${items[0].type})`);
             }
 
+            // Check for multiple streams on init
+            if (isStreaming && items.length > 1) {
+                debug("MULTIPLE STREAMS DETECTED ON INITIALIZATION");
+                multipleStreams = true;
+            }
+
             // Set initial poster
             updateDisplay();
 
-            // Start timer for transitions if we have more than one item and are streaming
-            // or if we're not streaming (random posters)
+            // Start timer for transitions if we have more than one item
             if ((isStreaming && items.length > 1) || !isStreaming) {
+                debug("Starting transition timer on init");
                 startTransitionTimer();
             }
 
@@ -627,6 +669,14 @@ $proxy_url = "./proxy.php";
             // Handle window resize
             window.addEventListener('resize', adjustPosterSize);
             adjustPosterSize();
+
+            // Extra check after initialization to make sure timer is running if needed
+            setTimeout(() => {
+                if (multipleStreams && !timerInterval) {
+                    debug("CRITICAL: Post-init check found multiple streams but no timer running!");
+                    startTransitionTimer();
+                }
+            }, 5000);
         }
 
         // Stop transition timer
@@ -732,6 +782,16 @@ $proxy_url = "./proxy.php";
                 return;
             }
 
+            // If we're already transitioning or we want to use tile effect, use transition instead
+            if (transitioning || forceTransition) {
+                // If we forced a transition, reset the flag
+                if (forceTransition) {
+                    forceTransition = false;
+                    doTileTransition(currentIndex, currentIndex);
+                }
+                return;
+            }
+
             // Update background
             const artUrl = currentItem.art || currentItem.thumb ?
                 getImageUrl(currentItem.art || currentItem.thumb) : '';
@@ -758,7 +818,7 @@ $proxy_url = "./proxy.php";
             }
 
             // Add stream info if applicable
-            if (isStreaming) {
+            if (isStreaming && items[currentIndex]) {
                 addStreamInfo(items[currentIndex]);
             }
 
@@ -773,21 +833,27 @@ $proxy_url = "./proxy.php";
 
         // Add streaming information display
         function addStreamInfo(stream) {
+            // Check if stream exists before proceeding
+            if (!stream) {
+                debug("ERROR: Called addStreamInfo with undefined stream");
+                return;
+            }
+
             const infoDiv = document.createElement('div');
             infoDiv.className = 'stream-info';
 
-            let title = stream.title;
+            let title = stream.title || 'Unknown Title';
             let details = '';
 
             if (stream.type === 'episode') {
-                title = `${stream.show_title}`;
-                details = `S${stream.season}E${stream.episode} - ${stream.title} • ${stream.user}`;
+                title = `${stream.show_title || 'Unknown Show'}`;
+                details = `S${stream.season || '?'}E${stream.episode || '?'} - ${stream.title || 'Unknown'} • ${stream.user || 'Unknown User'}`;
             } else {
-                details = `${stream.year} • ${stream.user}`;
+                details = `${stream.year || ''} • ${stream.user || 'Unknown User'}`;
             }
 
-            // Create progress bar
-            const progress = Math.floor((stream.viewOffset / stream.duration) * 100);
+            // Create progress bar (with safety checks)
+            const progress = stream.duration ? Math.floor((stream.viewOffset / stream.duration) * 100) : 0;
 
             infoDiv.innerHTML = `
                 <div class="stream-title">${title}</div>
@@ -803,23 +869,95 @@ $proxy_url = "./proxy.php";
         // Start transition timer
         function startTransitionTimer() {
             clearInterval(timerInterval);
+            debug(`Starting transition timer - will rotate every ${displayDuration / 1000} seconds`);
             timerInterval = setInterval(transition, displayDuration);
         }
 
         // Handle transition between posters
         function transition() {
-            if (transitioning) return;
-            transitioning = true;
+            // Update the last transition time
+            lastTransitionTime = Date.now();
+
+            // Don't transition if we're already in the middle of one
+            if (transitioning) {
+                debug('Already transitioning, skipping this transition request');
+                return;
+            }
+
+            // Only proceed if we have items to transition between
+            if (!items || items.length <= 1) {
+                debug('Not enough items to transition between');
+                return;
+            }
+
+            // Ensure current index is valid
+            if (currentIndex < 0 || currentIndex >= items.length) {
+                debug(`Invalid current index: ${currentIndex}, resetting to 0`);
+                currentIndex = 0;
+            }
 
             // Prepare next item
             const nextIndex = (currentIndex + 1) % items.length;
-            const nextItem = items[nextIndex];
-            const nextPosterUrl = nextItem && nextItem.thumb ?
-                getImageUrl(nextItem.thumb) : '';
+            debug(`TRANSITION: from item ${currentIndex} to item ${nextIndex} of ${items.length} items`);
 
-            if (!nextPosterUrl) {
+            if (items[currentIndex] && items[nextIndex]) {
+                debug(`Transitioning from "${items[currentIndex].title || 'Unknown'}" to "${items[nextIndex].title || 'Unknown'}"`);
+            }
+
+            // Use our tile transition helper function
+            doTileTransition(currentIndex, nextIndex);
+        }
+
+        // Helper function to perform tile transition between any two items
+        function doTileTransition(fromIndex, toIndex) {
+            if (transitioning) {
+                debug('Already transitioning, cannot start another transition');
+                return;
+            }
+
+            debug(`Starting tile transition from index ${fromIndex} to index ${toIndex}`);
+            transitioning = true;
+
+            // Check for valid indices
+            if (fromIndex < 0 || fromIndex >= items.length || toIndex < 0 || toIndex >= items.length) {
+                debug(`Invalid indices for transition: ${fromIndex} to ${toIndex} (valid range: 0-${items.length - 1})`);
                 transitioning = false;
                 return;
+            }
+
+            // Get items for transition
+            const fromItem = items[fromIndex];
+            const toItem = items[toIndex];
+
+            if (!fromItem || !toItem) {
+                debug('Missing item for transition, using fallback display');
+                transitioning = false;
+                currentIndex = toIndex; // Still update the index
+                updateDisplay();
+                return;
+            }
+
+            // Get URLs for the transition
+            const fromPosterUrl = fromItem && fromItem.thumb ?
+                getImageUrl(fromItem.thumb) : '';
+            const toPosterUrl = toItem && toItem.thumb ?
+                getImageUrl(toItem.thumb) : '';
+
+            if (!toPosterUrl || !fromPosterUrl) {
+                debug('Missing poster URL for transition, using fallback display');
+                transitioning = false;
+                currentIndex = toIndex; // Still update the index
+                updateDisplay();
+                return;
+            }
+
+            debug(`Transitioning from poster ${fromPosterUrl} to ${toPosterUrl}`);
+
+            // Update background for the destination item
+            const artUrl = toItem.art || toItem.thumb ?
+                getImageUrl(toItem.art || toItem.thumb) : '';
+            if (artUrl) {
+                background.style.backgroundImage = `url(${artUrl})`;
             }
 
             // Clear existing content and create tiles for transition effect
@@ -842,18 +980,15 @@ $proxy_url = "./proxy.php";
                     tile.style.top = (row * tileHeight) + 'px';
                     tile.style.left = (col * tileWidth) + 'px';
 
-                    // Current poster image
-                    const currentPosterUrl = items[currentIndex] && items[currentIndex].thumb ?
-                        getImageUrl(items[currentIndex].thumb) : '';
-
-                    tile.style.backgroundImage = `url(${currentPosterUrl})`;
+                    // From poster image
+                    tile.style.backgroundImage = `url(${fromPosterUrl})`;
                     tile.style.backgroundPosition = `-${col * tileWidth}px -${row * tileHeight}px`;
                     tile.style.backgroundSize = `${containerWidth}px ${containerHeight}px`;
 
-                    // Add back face (next poster)
+                    // Add back face (to poster)
                     const tileBack = document.createElement('div');
                     tileBack.className = 'tile-back';
-                    tileBack.style.backgroundImage = `url(${nextPosterUrl})`;
+                    tileBack.style.backgroundImage = `url(${toPosterUrl})`;
                     tileBack.style.backgroundPosition = `-${col * tileWidth}px -${row * tileHeight}px`;
                     tileBack.style.backgroundSize = `${containerWidth}px ${containerHeight}px`;
 
@@ -865,7 +1000,7 @@ $proxy_url = "./proxy.php";
 
             // Add streaming info if applicable
             if (isStreaming) {
-                addStreamInfo(items[currentIndex]);
+                addStreamInfo(fromItem);
             }
 
             // Create streaming badge if applicable
@@ -890,7 +1025,8 @@ $proxy_url = "./proxy.php";
 
             // After transition completes, display single seamless poster
             setTimeout(() => {
-                currentIndex = nextIndex;
+                debug(`Transition animation complete, updating display to show item ${toIndex}`);
+                currentIndex = toIndex;
 
                 // Clear all tiles
                 posterContainer.innerHTML = '';
@@ -899,14 +1035,14 @@ $proxy_url = "./proxy.php";
                 const poster = document.createElement('div');
                 poster.style.width = '100%';
                 poster.style.height = '100%';
-                poster.style.backgroundImage = `url(${nextPosterUrl})`;
+                poster.style.backgroundImage = `url(${toPosterUrl})`;
                 poster.style.backgroundSize = 'cover';
                 poster.style.backgroundPosition = 'center';
                 poster.style.position = 'absolute';
                 posterContainer.appendChild(poster);
 
                 // Add stream info if applicable
-                if (isStreaming) {
+                if (isStreaming && items[currentIndex]) {
                     addStreamInfo(items[currentIndex]);
                 }
 
@@ -919,6 +1055,12 @@ $proxy_url = "./proxy.php";
                 }
 
                 transitioning = false;
+
+                // CRUCIAL: If we have multiple streams, make sure the timer is running
+                if (multipleStreams && !timerInterval) {
+                    debug("CRITICAL: Transition completed but timer not running with multiple streams!");
+                    startTransitionTimer();
+                }
             }, transitionDuration + 100);
         }
 

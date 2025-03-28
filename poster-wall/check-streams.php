@@ -215,11 +215,15 @@ if (empty($active_streams)) {
     $random_items = getRandomLibraryItems($plex_url, $plex_token, 20);
 }
 
+// Add a timestamp to help with debugging
+$response = [
+    'active_streams' => $active_streams,
+    'random_items' => $random_items,
+    'timestamp' => time()
+];
+
 // Return JSON response
 header('Content-Type: application/json');
-echo json_encode([
-    'active_streams' => $active_streams,
-    'random_items' => $random_items
-]);
+echo json_encode($response);
 
 ?>
