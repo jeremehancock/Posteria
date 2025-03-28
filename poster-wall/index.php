@@ -474,9 +474,23 @@ $proxy_url = "./proxy.php";
             streamCheckTimer = setInterval(checkForStreams, streamCheckInterval);
         }
 
+        // Variable to track if we're in initial stream detection mode
+        let streamDetectionLock = false;
+
         // Function to check for active streams via AJAX
         function checkForStreams() {
             debug('Checking for active streams...');
+
+            // Check if we're currently locked from checking streams
+            if (streamDetectionLock) {
+                debug('LOCKED: Stream checking currently locked, skipping');
+                return;
+            }
+
+            // Check if we're in a transition
+            if (transitioning) {
+                debug('Note: Still transitioning during stream check');
+            }
 
             fetch(checkStreamsUrl)
                 .then(response => {
@@ -489,24 +503,79 @@ $proxy_url = "./proxy.php";
                     debug(`Got stream data at timestamp ${data.timestamp || 'unknown'}`);
                     debug(`Found ${data.active_streams ? data.active_streams.length : 0} active streams`);
 
-                    if (data.active_streams && data.active_streams.length > 1) {
-                        multipleStreams = true;
-                        debug("MULTIPLE STREAMS DETECTED");
+                    const activeStreams = data.active_streams || [];
+                    const wasStreaming = isStreaming;
+                    const newStreaming = activeStreams.length > 0;
+
+                    // Process stream data regardless of transition state
+                    if (!wasStreaming && newStreaming) {
+                        // CRITICAL: We're changing from no streams to having streams
+                        debug('DETECTED FIRST STREAM - PROCESSING IMMEDIATELY');
+
+                        // Lock stream checking for a period to prevent conflicts
+                        streamDetectionLock = true;
+
+                        // Handle the initial stream detection
+                        handleFirstStreamDetection(data);
+
+                        // Unlock stream checking after a delay
+                        setTimeout(() => {
+                            streamDetectionLock = false;
+                            debug('STREAM DETECTION UNLOCKED');
+                        }, 10000); // 10 second lock
                     } else {
-                        multipleStreams = false;
-                    }
-
-                    handleStreamUpdate(data);
-
-                    // CRITICAL: Double-check timer status after handling the update
-                    if (multipleStreams && !timerInterval) {
-                        debug("CRITICAL: Multiple streams but no timer running! Restarting timer.");
-                        startTransitionTimer();
+                        // Normal update for existing state
+                        handleStreamUpdate(data);
                     }
                 })
                 .catch(error => {
                     debug(`Error checking streams: ${error.message}`);
                 });
+        }
+
+        // Special handler for first stream detection
+        function handleFirstStreamDetection(data) {
+            debug('HANDLING FIRST STREAM DETECTION - COMPLETE RESET');
+
+            const activeStreams = data.active_streams || [];
+
+            // Store random items for later
+            if (data.random_items && data.random_items.length > 0) {
+                randomItems = data.random_items;
+            }
+
+            // Reset all state variables
+            isStreaming = true;
+            multipleStreams = activeStreams.length > 1;
+            streamIds = activeStreams.map(stream => `${stream.title}-${stream.user}-${stream.viewOffset}`);
+
+            // Update items array with active streams
+            items = activeStreams;
+
+            // Stop all timers
+            stopTransitionTimer();
+
+            // Clear display completely
+            posterContainer.innerHTML = '';
+            background.style.backgroundImage = '';
+
+            // Always start with the first stream
+            currentIndex = 0;
+
+            // Force direct display update (no transitions)
+            debug(`NOW SHOWING FIRST STREAM: ${items[0] ? items[0].title : 'Unknown'}`);
+
+            // Ensure transitioning is false before updating display
+            transitioning = false;
+
+            // Update the display immediately
+            updateDisplay();
+
+            // If multiple streams, start transitions
+            if (multipleStreams) {
+                debug('Multiple streams detected, starting transition timer');
+                startTransitionTimer();
+            }
         }
 
         // Function to handle stream updates
@@ -626,6 +695,21 @@ $proxy_url = "./proxy.php";
 
         // Initialize the display
         function init() {
+            // Set up a global safety check to ensure the transitioning flag doesn't get stuck
+            setInterval(() => {
+                if (transitioning) {
+                    const now = Date.now();
+                    const timeSinceLastTransition = now - lastTransitionTime;
+
+                    // If it's been more than 10 seconds since last transition started,
+                    // something is wrong and we should reset the flag
+                    if (timeSinceLastTransition > 10000) {
+                        debug('GLOBAL SAFETY: Transitioning flag stuck for too long, resetting');
+                        transitioning = false;
+                    }
+                }
+            }, 5000); // Check every 5 seconds
+
             // Check if we have items to display
             if (!items || items.length === 0) {
                 debug('No items to display');
@@ -771,14 +855,22 @@ $proxy_url = "./proxy.php";
 
         // Update the display with the current item
         function updateDisplay() {
-            if (!items || items.length === 0 || currentIndex >= items.length) {
-                debug('Invalid items or index');
+            // First, verify we have valid items and index
+            if (!items || items.length === 0) {
+                debug('No items to display');
+                posterContainer.innerHTML = '';
                 return;
+            }
+
+            // Make sure current index is valid
+            if (currentIndex < 0 || currentIndex >= items.length) {
+                debug(`Invalid currentIndex: ${currentIndex}, resetting to 0`);
+                currentIndex = 0;
             }
 
             const currentItem = items[currentIndex];
             if (!currentItem) {
-                debug('Current item is undefined');
+                debug('Current item is undefined, cannot update display');
                 return;
             }
 
@@ -792,21 +884,26 @@ $proxy_url = "./proxy.php";
                 return;
             }
 
+            debug(`Updating display to show item: ${currentIndex} - ${currentItem.title || 'Unknown'}`);
+
+            // IMPORTANT - Clear existing content completely first
+            posterContainer.innerHTML = '';
+
             // Update background
             const artUrl = currentItem.art || currentItem.thumb ?
                 getImageUrl(currentItem.art || currentItem.thumb) : '';
             if (artUrl) {
                 background.style.backgroundImage = `url(${artUrl})`;
+            } else {
+                background.style.backgroundImage = '';
             }
-
-            // Clear existing content
-            posterContainer.innerHTML = '';
 
             // Create single seamless poster
             const posterUrl = currentItem && currentItem.thumb ?
                 getImageUrl(currentItem.thumb) : '';
 
             if (posterUrl) {
+                debug(`Setting poster image to: ${posterUrl}`);
                 const poster = document.createElement('div');
                 poster.style.width = '100%';
                 poster.style.height = '100%';
@@ -815,19 +912,26 @@ $proxy_url = "./proxy.php";
                 poster.style.backgroundPosition = 'center';
                 poster.style.position = 'absolute';
                 posterContainer.appendChild(poster);
+            } else {
+                debug('No poster URL available');
             }
 
-            // Add stream info if applicable
-            if (isStreaming && items[currentIndex]) {
-                addStreamInfo(items[currentIndex]);
-            }
-
-            // Create streaming badge if applicable
+            // Only add streaming elements if we're actually in streaming mode
             if (isStreaming) {
+                // Create streaming badge
+                debug('Adding streaming badge to index ' + currentIndex);
                 const badge = document.createElement('div');
                 badge.className = 'streaming-badge';
                 badge.textContent = 'Currently Streaming';
                 posterContainer.appendChild(badge);
+
+                // Add stream info 
+                if (items[currentIndex]) {
+                    debug('Adding stream info for ' + (items[currentIndex].title || 'Unknown'));
+                    addStreamInfo(items[currentIndex]);
+                }
+            } else {
+                debug('Not in streaming mode, skipping streaming elements');
             }
         }
 
@@ -906,6 +1010,12 @@ $proxy_url = "./proxy.php";
 
             // Use our tile transition helper function
             doTileTransition(currentIndex, nextIndex);
+
+            // Reset the transition timer to ensure continual cycling
+            if (multipleStreams) {
+                debug('Resetting transition timer after transition');
+                startTransitionTimer();
+            }
         }
 
         // Helper function to perform tile transition between any two items
@@ -1024,7 +1134,7 @@ $proxy_url = "./proxy.php";
             });
 
             // After transition completes, display single seamless poster
-            setTimeout(() => {
+            const completionTimeout = setTimeout(() => {
                 debug(`Transition animation complete, updating display to show item ${toIndex}`);
                 currentIndex = toIndex;
 
@@ -1041,20 +1151,33 @@ $proxy_url = "./proxy.php";
                 poster.style.position = 'absolute';
                 posterContainer.appendChild(poster);
 
-                // Add stream info if applicable
-                if (isStreaming && items[currentIndex]) {
-                    addStreamInfo(items[currentIndex]);
-                }
-
-                // Create streaming badge if applicable
+                // First add streaming badge if applicable
                 if (isStreaming) {
+                    debug('Adding streaming badge after transition');
                     const badge = document.createElement('div');
                     badge.className = 'streaming-badge';
                     badge.textContent = 'Currently Streaming';
                     posterContainer.appendChild(badge);
                 }
 
+                // Then add stream info if applicable
+                if (isStreaming && items[currentIndex]) {
+                    debug('Adding stream info for ' + (items[currentIndex].title || 'Unknown'));
+                    addStreamInfo(items[currentIndex]);
+                }
+
+                // IMPORTANT: Reset transitioning flag
+                debug('Resetting transitioning flag to false');
                 transitioning = false;
+
+                // Clear the safety timeout - only if it exists in this scope
+                try {
+                    if (typeof safetyTimeout !== 'undefined') {
+                        clearTimeout(safetyTimeout);
+                    }
+                } catch (e) {
+                    debug('Note: Could not clear safety timeout: ' + e.message);
+                }
 
                 // CRUCIAL: If we have multiple streams, make sure the timer is running
                 if (multipleStreams && !timerInterval) {
