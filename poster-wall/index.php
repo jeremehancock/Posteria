@@ -1,10 +1,52 @@
 <?php
-// Include configuration
+# Posteria: A Media Poster Collection App
+# Save all your favorite custom media server posters in one convenient place
+#
+# Developed by Jereme Hancock
+# https://github.com/jeremehancock/Posteria
+#
+# MIT License
+#
+# Copyright (c) 2024 Jereme Hancock
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
 require_once '../include/config.php';
 
 // Initialize Plex server connection
 $plex_url = $plex_config['server_url'];
 $plex_token = $plex_config['token'];
+
+
+// Helper function to get environment variable with fallback
+function getEnvWithFallback($key, $default)
+{
+    $value = getenv($key);
+    return $value !== false ? $value : $default;
+}
+
+$config = [
+    'siteUrl' => (!empty($_SERVER['HTTPS']) ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . rtrim(dirname($_SERVER['PHP_SELF']), '/') . '/',
+];
+
+// Site title configuration
+$site_title = getEnvWithFallback('SITE_TITLE', 'Posteria') . ' Poster Wall';
 
 // Function to check for active streams - direct connection
 function getActiveStreams($server_url, $token)
@@ -244,9 +286,45 @@ $proxy_url = "./proxy.php";
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Plex Poster Display</title>
+    <title><?php echo htmlspecialchars($site_title); ?></title>
+    <meta property="og:title" content="Posteria" />
+    <meta property="og:type" content="website" />
+    <meta property="og:description" content="Posteria" />
+    <meta property="og:url" content="<?php echo htmlspecialchars($config['siteUrl']); ?>" />
+    <meta property="og:image"
+        content="<?php echo htmlspecialchars($config['siteUrl']); ?>/assets/web-app-manifest-512x512.png" />
+    <link rel="icon" type="image/png" href="/assets/favicon-96x96.png" sizes="96x96" />
+    <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg" />
+    <link rel="shortcut icon" href="../assets/favicon.ico" />
+    <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-title" content="Posteria" />
+    <link rel="manifest" href="../assets/site.webmanifest" />
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap" rel="stylesheet">
     <style>
+        /* ==========================================================================
+           1. Theme Variables
+           ========================================================================== */
+        :root {
+            /* Colors */
+            --bg-primary: #1f1f1f;
+            --bg-secondary: #282828;
+            --bg-tertiary: #333333;
+            --text-primary: #ffffff;
+            --text-secondary: #999999;
+            --accent-primary: #e5a00d;
+            --accent-hover: #f5b025;
+            --border-color: #3b3b3b;
+            --card-bg: #282828;
+            --card-hover: #333333;
+            --success-color: #2ed573;
+            --danger-color: #ff4757;
+            --action-bg: rgba(0, 0, 0, 0.85);
+
+            /* Shadows */
+            --shadow-sm: 0 4px 6px rgba(0, 0, 0, 0.4);
+            --shadow-md: 0 6px 12px rgba(0, 0, 0, 0.5);
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -338,7 +416,7 @@ $proxy_url = "./proxy.php";
 
         .stream-progress-bar {
             height: 100%;
-            background: #cc7b19;
+            background: linear-gradient(45deg, var(--accent-primary), #ff9f43);
         }
 
         .streaming-badge {
@@ -346,8 +424,8 @@ $proxy_url = "./proxy.php";
             top: 0;
             left: 0;
             width: 100%;
-            background: rgba(204, 123, 25, 0.9);
-            color: white;
+            background: linear-gradient(45deg, var(--accent-primary), #ff9f43);
+            color: #000;
             padding: 10px;
             text-align: center;
             font-weight: 700;
