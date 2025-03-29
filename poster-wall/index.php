@@ -446,6 +446,7 @@ $proxy_url = "./proxy.php";
         let randomItems = []; // Store random items for fallback
         let forceTransition = false; // Flag to force transition even when updating display
         let multipleStreams = isInitialStreaming && initialItems.length > 1; // Flag to track multiple streams
+        let currentTransitionTimeout = null; // Track the current transition timeout
 
         // Debug helper
         function debug(message) {
@@ -492,6 +493,12 @@ $proxy_url = "./proxy.php";
                 debug('Note: Still transitioning during stream check');
             }
 
+            // For debugging: log current state
+            debug(`Current state before check: isStreaming=${isStreaming}, multipleStreams=${multipleStreams}, currentIndex=${currentIndex}, timerRunning=${timerInterval !== null}`);
+            if (items && items.length > 0 && currentIndex < items.length) {
+                debug(`Current item: ${items[currentIndex].title || 'Unknown'}`);
+            }
+
             fetch(checkStreamsUrl)
                 .then(response => {
                     if (!response.ok) {
@@ -536,6 +543,16 @@ $proxy_url = "./proxy.php";
         // Special handler for first stream detection
         function handleFirstStreamDetection(data) {
             debug('HANDLING FIRST STREAM DETECTION - COMPLETE RESET');
+
+            // Cancel any ongoing transition
+            if (currentTransitionTimeout) {
+                debug('Cancelling any existing transition timeout');
+                clearTimeout(currentTransitionTimeout);
+                currentTransitionTimeout = null;
+            }
+
+            // Force transitioning to false immediately
+            transitioning = false;
 
             const activeStreams = data.active_streams || [];
 
@@ -590,25 +607,52 @@ $proxy_url = "./proxy.php";
                 debug(`Stored ${randomItems.length} random items for fallback`);
             }
 
-            // Get IDs for current streams (using viewOffset as unique identifier)
+            // Get IDs for current streams (using title and user as unique identifier)
+            // We exclude viewOffset since that changes constantly and isn't a "real" state change
             const newStreamIds = activeStreams.map(stream =>
-                `${stream.title}-${stream.user}-${stream.viewOffset}`);
+                `${stream.title}-${stream.user}`);
 
-            // Check if the stream state has changed
+            // Generate sets for easier comparison
+            const currentStreamSet = new Set(streamIds.map(id => id.split('-').slice(0, 2).join('-')));
+            const newStreamSet = new Set(newStreamIds);
+
+            // Check if the actual streams have changed (not just their progress)
             const streamsChanged = (
                 activeStreams.length !== streamIds.length ||
-                !newStreamIds.every(id => streamIds.includes(id))
+                newStreamSet.size !== currentStreamSet.size ||
+                ![...newStreamSet].every(id => currentStreamSet.has(id))
             );
+
+            debug(`Stream comparison: current=${[...currentStreamSet]}, new=${[...newStreamSet]}, changed=${streamsChanged}`);
 
             if (streamsChanged) {
                 debug('Stream state has changed, updating display');
+
+                // Only cancel ongoing transitions if we're not in the middle of a tile flip
+                // This prevents stream checks from interrupting transitions in progress
+                if (currentTransitionTimeout && !transitioning) {
+                    debug('Cancelling scheduled transition timeout due to stream state change');
+                    clearTimeout(currentTransitionTimeout);
+                    currentTransitionTimeout = null;
+                } else if (transitioning) {
+                    debug('NOT cancelling active transition - letting it complete first');
+                    // Instead of interrupting, we'll just update after the transition finishes
+                    return;
+                }
+
+                // Reset transitioning flag
+                transitioning = false;
 
                 // Save new stream IDs
                 streamIds = newStreamIds;
 
                 // Update streaming state
                 const wasStreaming = isStreaming;
+                const wasMultipleStreams = multipleStreams;
                 isStreaming = activeStreams.length > 0;
+                multipleStreams = activeStreams.length > 1;
+
+                debug(`Stream state update: wasStreaming=${wasStreaming}, isStreaming=${isStreaming}, wasMultipleStreams=${wasMultipleStreams}, multipleStreams=${multipleStreams}`);
 
                 // Handle transition between states
                 if (!wasStreaming && isStreaming) {
@@ -620,7 +664,8 @@ $proxy_url = "./proxy.php";
                     updateDisplay();
 
                     // If multiple streams, start transitions between them
-                    if (activeStreams.length > 1) {
+                    if (multipleStreams) {
+                        debug('Multiple initial streams detected, starting transition timer');
                         startTransitionTimer();
                     }
                 } else if (wasStreaming && !isStreaming) {
@@ -651,10 +696,21 @@ $proxy_url = "./proxy.php";
 
                     updateDisplay();
 
-                    // Manage transition timer based on number of streams
-                    stopTransitionTimer();
-                    if (activeStreams.length > 1) {
+                    // Key fix: If we switched from one stream to multiple streams,
+                    // make sure we start the timer to rotate between them
+                    if (!wasMultipleStreams && multipleStreams) {
+                        debug('IMPORTANT: Changed from one stream to multiple streams, starting transition timer');
+                        stopTransitionTimer();
                         startTransitionTimer();
+                    } else if (multipleStreams) {
+                        // Just restart the timer to be safe
+                        debug('Multiple streams still active, ensuring transition timer is running');
+                        stopTransitionTimer();
+                        startTransitionTimer();
+                    } else {
+                        // Single stream, make sure timer is stopped
+                        debug('Single stream only, stopping transition timer');
+                        stopTransitionTimer();
                     }
                 }
             } else {
@@ -679,14 +735,27 @@ $proxy_url = "./proxy.php";
                     // Just update the stream info without full transition
                     updateStreamInfo(items[currentIndex]);
 
+                    // Update multipleStreams flag to ensure it's correct
+                    const wasMultipleStreams = multipleStreams;
+                    multipleStreams = activeStreams.length > 1;
+
+                    // Log state for debugging
+                    debug(`Progress update: wasMultipleStreams=${wasMultipleStreams}, multipleStreams=${multipleStreams}`);
+
                     // CRITICAL: Make sure transition timer is running if we have multiple streams
-                    if (activeStreams.length > 1) {
+                    if (multipleStreams) {
                         // Check if timer is already running
                         if (!timerInterval) {
                             debug('Multiple streams detected but timer not running - starting transition timer');
                             startTransitionTimer();
                         } else {
                             debug('Multiple streams, timer already running');
+                        }
+                    } else {
+                        // Single stream, make sure timer is stopped
+                        if (timerInterval) {
+                            debug('Only one stream active now, stopping transition timer');
+                            stopTransitionTimer();
                         }
                     }
                 }
@@ -701,11 +770,17 @@ $proxy_url = "./proxy.php";
                     const now = Date.now();
                     const timeSinceLastTransition = now - lastTransitionTime;
 
-                    // If it's been more than 10 seconds since last transition started,
+                    // If it's been more than double the transition duration since last transition started,
                     // something is wrong and we should reset the flag
-                    if (timeSinceLastTransition > 10000) {
+                    if (timeSinceLastTransition > transitionDuration * 2) {
                         debug('GLOBAL SAFETY: Transitioning flag stuck for too long, resetting');
                         transitioning = false;
+
+                        // Also clear any transition timeout that might be lingering
+                        if (currentTransitionTimeout) {
+                            clearTimeout(currentTransitionTimeout);
+                            currentTransitionTimeout = null;
+                        }
                     }
                 }
             }, 5000); // Check every 5 seconds
@@ -765,7 +840,11 @@ $proxy_url = "./proxy.php";
 
         // Stop transition timer
         function stopTransitionTimer() {
-            clearInterval(timerInterval);
+            if (timerInterval) {
+                debug("Stopping transition timer");
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
         }
 
         // Adjust poster size to maintain aspect ratio
@@ -1028,6 +1107,9 @@ $proxy_url = "./proxy.php";
             debug(`Starting tile transition from index ${fromIndex} to index ${toIndex}`);
             transitioning = true;
 
+            // Record the time we started transitioning
+            lastTransitionTime = Date.now();
+
             // Check for valid indices
             if (fromIndex < 0 || fromIndex >= items.length || toIndex < 0 || toIndex >= items.length) {
                 debug(`Invalid indices for transition: ${fromIndex} to ${toIndex} (valid range: 0-${items.length - 1})`);
@@ -1133,8 +1215,13 @@ $proxy_url = "./proxy.php";
                 delay += delayIncrement;
             });
 
+            // Clear any existing transition timeout
+            if (currentTransitionTimeout) {
+                clearTimeout(currentTransitionTimeout);
+            }
+
             // After transition completes, display single seamless poster
-            const completionTimeout = setTimeout(() => {
+            currentTransitionTimeout = setTimeout(() => {
                 debug(`Transition animation complete, updating display to show item ${toIndex}`);
                 currentIndex = toIndex;
 
@@ -1170,14 +1257,17 @@ $proxy_url = "./proxy.php";
                 debug('Resetting transitioning flag to false');
                 transitioning = false;
 
-                // Clear the safety timeout - only if it exists in this scope
-                try {
-                    if (typeof safetyTimeout !== 'undefined') {
-                        clearTimeout(safetyTimeout);
+                // Clear the transition timeout reference
+                currentTransitionTimeout = null;
+
+                // After a transition completes, check if we had a pending stream state change
+                // that was waiting for this transition to complete
+                setTimeout(() => {
+                    if (!streamDetectionLock) {
+                        debug('Checking streams after transition completed');
+                        checkForStreams();
                     }
-                } catch (e) {
-                    debug('Note: Could not clear safety timeout: ' + e.message);
-                }
+                }, 500); // Small delay to ensure display is updated first
 
                 // CRUCIAL: If we have multiple streams, make sure the timer is running
                 if (multipleStreams && !timerInterval) {
@@ -1200,6 +1290,9 @@ $proxy_url = "./proxy.php";
         window.addEventListener('beforeunload', () => {
             clearInterval(timerInterval);
             clearInterval(streamCheckTimer);
+            if (currentTransitionTimeout) {
+                clearTimeout(currentTransitionTimeout);
+            }
         });
 
         // Initialize when page loads
