@@ -257,3 +257,9 @@
 ### Added
 
 - Added new Poster Wall feature
+
+## [1.4.5]
+
+### Fixed
+
+- Poster wall showing wrong poster for TV Shows

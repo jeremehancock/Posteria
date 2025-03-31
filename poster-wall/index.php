@@ -111,6 +111,7 @@ function getActiveStreams($server_url, $token)
                 $stream['show_title'] = (string) $video['grandparentTitle'];
                 $stream['season'] = (string) $video['parentIndex'];
                 $stream['episode'] = (string) $video['index'];
+                $stream['show_thumb'] = (string) $video['grandparentThumb']; // Add the show poster
             }
 
             $streams[] = $stream;
@@ -1056,8 +1057,9 @@ $proxy_url = "./proxy.php";
             }
 
             // Create single seamless poster
-            const posterUrl = currentItem && currentItem.thumb ?
-                getImageUrl(currentItem.thumb) : '';
+            const posterUrl = (currentItem.type === 'episode' && currentItem.show_thumb) ?
+                getImageUrl(currentItem.show_thumb) :
+                (currentItem && currentItem.thumb ? getImageUrl(currentItem.thumb) : '');
 
             if (posterUrl) {
                 debug(`Setting poster image to: ${posterUrl}`);
@@ -1175,8 +1177,6 @@ $proxy_url = "./proxy.php";
             }
         }
 
-        // Modified code for the doTileTransition function
-
         function doTileTransition(fromIndex, toIndex) {
             if (transitioning) {
                 debug('Already transitioning, cannot start another transition');
@@ -1209,10 +1209,12 @@ $proxy_url = "./proxy.php";
             }
 
             // Get URLs for the transition
-            const fromPosterUrl = fromItem && fromItem.thumb ?
-                getImageUrl(fromItem.thumb) : '';
-            const toPosterUrl = toItem && toItem.thumb ?
-                getImageUrl(toItem.thumb) : '';
+            const fromPosterUrl = (fromItem.type === 'episode' && fromItem.show_thumb) ?
+                getImageUrl(fromItem.show_thumb) :
+                (fromItem && fromItem.thumb ? getImageUrl(fromItem.thumb) : '');
+            const toPosterUrl = (toItem.type === 'episode' && toItem.show_thumb) ?
+                getImageUrl(toItem.show_thumb) :
+                (toItem && toItem.thumb ? getImageUrl(toItem.thumb) : '');
 
             if (!toPosterUrl || !fromPosterUrl) {
                 debug('Missing poster URL for transition, using fallback display');

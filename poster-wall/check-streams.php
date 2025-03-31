@@ -111,6 +111,7 @@ function parseJSONStreams($data)
                 $stream['show_title'] = $video['grandparentTitle'] ?? '';
                 $stream['season'] = $video['parentIndex'] ?? '';
                 $stream['episode'] = $video['index'] ?? '';
+                $stream['show_thumb'] = $video['grandparentThumb'] ?? ''; // Add this line
             }
 
             $streams[] = $stream;
@@ -166,6 +167,7 @@ function parseXMLStreams($response)
                 $stream['show_title'] = (string) $video['grandparentTitle'];
                 $stream['season'] = (string) $video['parentIndex'];
                 $stream['episode'] = (string) $video['index'];
+                $stream['show_thumb'] = (string) $video['grandparentThumb']; // Add this line
             }
 
             $streams[] = $stream;
