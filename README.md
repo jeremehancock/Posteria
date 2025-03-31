@@ -19,6 +19,7 @@ Here's the updated version with the PWA line added:
 - 🤖 Schedule Auto Imports
 - 🧹 Orphan Poster detection
 - 🎨 Support for JPG, JPEG, PNG, and WebP formats
+- 🖼️ Includes built-in Poster Wall for showing off your posters
 - 🛒 Available in the [Unraid Community App Store](https://unraid.net/community/apps?q=posteria#r)
   - Thanks to [@ctrlaltd1337ed](https://github.com/ctrlaltd1337ed/unraid-templates) for putting this together.
 
@@ -26,9 +27,11 @@ Here's the updated version with the PWA line added:
 
 [![Donate](https://raw.githubusercontent.com/jeremehancock/Posteria/main/images/donate-button.png)](https://www.buymeacoffee.com/jeremehancock)
 
-## Screenshot
+## Screenshot/Video
 
 ![Posteria](https://raw.githubusercontent.com/jeremehancock/Posteria/main/images/screenshot.png "Posteria")
+
+![Poster Wall](https://raw.githubusercontent.com/jeremehancock/Posteria/main/videos/poster-wall.mp4)
 
 ## Installation
 

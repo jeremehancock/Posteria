@@ -251,3 +251,9 @@
 ### Removed
 
 - Find Posters modal filter since it really didn't have much use
+
+## [1.4.4]
+
+### Added
+
+- Added new Poster Wall feature
