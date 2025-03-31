@@ -9416,6 +9416,109 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			});
 		});
 	</script>
+
+	<script>
+		document.addEventListener('DOMContentLoaded', function () {
+			// Create the Poster Wall button
+			const posterWallButton = document.createElement('button');
+			posterWallButton.id = 'posterWallButton';
+			posterWallButton.className = 'poster-wall-button';
+			posterWallButton.setAttribute('title', 'Poster Wall');
+			posterWallButton.innerHTML = `
+		<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+			<rect x="3" y="3" width="7" height="9"></rect>
+			<rect x="14" y="3" width="7" height="5"></rect>
+			<rect x="14" y="12" width="7" height="9"></rect>
+			<rect x="3" y="16" width="7" height="5"></rect>
+		</svg>
+	`;
+
+			// Add CSS for the Poster Wall button
+			const style = document.createElement('style');
+			style.textContent = `
+		.poster-wall-button {
+			background: transparent;
+			border: none;
+			cursor: pointer;
+			padding: 8px;
+			margin-right: 8px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			border-radius: 50%;
+			transition: all 0.2s ease;
+		}
+		
+		.poster-wall-button:hover {
+			background-color: rgba(229, 160, 13, 0.1);
+			transform: scale(1.1);
+		}
+		
+		.poster-wall-button svg {
+			width: 30px;
+			height: 30px;
+			fill: none;
+			stroke: var(--accent-primary);
+			filter: drop-shadow(0 1px 3px rgba(0,0,0,0.3));
+		}
+		
+		@media (max-width: 768px) {
+			.poster-wall-button {
+				padding: 6px;
+			}
+			
+			.poster-wall-button svg {
+				width: 28px;
+				height: 28px;
+			}
+		}
+		
+		@media (max-width: 480px) {
+			.poster-wall-button {
+				padding: 5px;
+			}
+			
+			.poster-wall-button svg {
+				width: 26px;
+				height: 26px;
+			}
+		}
+	`;
+			document.head.appendChild(style);
+
+			// Check if user is logged in by looking for the logout button
+			const isLoggedIn = document.querySelector('.logout-button') !== null;
+
+			// Find the support button to position our new button next to it
+			setTimeout(() => {
+				// For logged in users - look for support button in auth-actions
+				if (isLoggedIn) {
+					const supportButton = document.querySelector('.support-button');
+					if (supportButton) {
+						// Insert after support button
+						supportButton.insertAdjacentElement('afterend', posterWallButton);
+					} else {
+						// Fallback - add to auth-actions if support button not found
+						const authActions = document.querySelector('.auth-actions');
+						if (authActions) {
+							authActions.insertBefore(posterWallButton, authActions.firstChild);
+						}
+					}
+				} else {
+					// For non-logged in users - add to the button container that has login button
+					const supportButton = document.querySelector('.support-button');
+					if (supportButton && supportButton.parentNode) {
+						supportButton.parentNode.insertBefore(posterWallButton, supportButton.nextSibling);
+					}
+				}
+
+				// Add click handler to open poster wall in new tab
+				posterWallButton.addEventListener('click', function () {
+					window.open('./poster-wall', '_blank');
+				});
+			}, 300); // Short delay to ensure support button is created first
+		});
+	</script>
 </body>
 
 </html>
