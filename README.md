@@ -31,10 +31,6 @@ Here's the updated version with the PWA line added:
 
 ![Posteria](https://raw.githubusercontent.com/jeremehancock/Posteria/main/images/screenshot.png "Posteria")
 
-<div align="center">
-  <iframe width="560" height="315" src="https://raw.githubusercontent.com/jeremehancock/Posteria/main/videos/poster-wall.mp4" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
-</div>
-
 ## Installation
 
 1. Create a `docker-compose.yml` file with the following content:
