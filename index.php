@@ -8392,7 +8392,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				border: none;
 				cursor: pointer;
 				padding: 8px;
-				margin-right: 8px;
+				margin-right: -5px;
 				display: flex;
 				align-items: center;
 				justify-content: center;
