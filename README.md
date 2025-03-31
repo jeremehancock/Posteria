@@ -13,7 +13,7 @@ Here's the updated version with the PWA line added:
 - 📲 Installable as a PWA (Progressive Web App)
 - 🔒 Simple authentication system
 - ⚡ Easy poster upload from local files or URLs
-- 🎬 Grab posters directly from [TMDB](https://www.themoviedb.org/), [TVDB](https://www.thetvdb.com/) & ]Fanart.tv](https://fanart.tv)
+- 🎬 Grab posters directly from [TMDB](https://www.themoviedb.org/), [TVDB](https://www.thetvdb.com/) & [Fanart.tv](https://fanart.tv)
 - 📥 Import posters from Plex
 - 🔄 Sync posters to Plex
 - 🤖 Schedule Auto Imports
