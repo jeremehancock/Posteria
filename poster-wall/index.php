@@ -1175,7 +1175,8 @@ $proxy_url = "./proxy.php";
             }
         }
 
-        // Helper function to perform tile transition between any two items
+        // Modified code for the doTileTransition function
+
         function doTileTransition(fromIndex, toIndex) {
             if (transitioning) {
                 debug('Already transitioning, cannot start another transition');
@@ -1283,14 +1284,25 @@ $proxy_url = "./proxy.php";
 
             // Shuffle tiles for random flip effect and animate
             shuffleArray(tiles);
-            let delay = 0;
-            const delayIncrement = transitionDuration / tiles.length;
 
-            tiles.forEach(tile => {
+            // FIX: Calculate the delay differently to ensure smoother distribution
+            // Use a curve that slows down slightly toward the end rather than linear distribution
+            const totalTiles = tiles.length;
+            const maxDelay = transitionDuration * 0.95; // Reserve a small buffer at the end
+
+            tiles.forEach((tile, index) => {
+                // Use a non-linear scaling to make the last tiles flip more smoothly
+                // This creates a slight ease-out effect for the final tiles
+                const progress = index / totalTiles;
+                const easedProgress = progress < 0.8 ?
+                    progress :
+                    0.8 + (progress - 0.8) * 0.7; // Slow down the last 20% of tiles
+
+                const delay = easedProgress * maxDelay;
+
                 setTimeout(() => {
                     tile.style.transform = 'rotateY(180deg)';
                 }, delay);
-                delay += delayIncrement;
             });
 
             // Clear any existing transition timeout
