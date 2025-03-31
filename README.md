@@ -31,7 +31,7 @@ Here's the updated version with the PWA line added:
 
 #### Main Screen
 
-![Posteria](https://raw.githubusercontent.com/jeremehancock/Posteria/main/images/screenshot.png "Posteria")
+![Posteria](https://raw.githubusercontent.com/jeremehancock/Posteria/main/images/posteria.png "Posteria")
 
 #### Poster Wall
 
