@@ -513,6 +513,10 @@ $proxy_url = "./proxy.php";
         const transitionDuration = 3000; // 3 seconds for the transition animation
         const streamCheckInterval = 10000; // Check for streams every 10 seconds
 
+        // Add this to the JavaScript configuration section, after the other configuration variables
+        const randomRefreshInterval = 300000; // 5 minutes (in milliseconds) to refresh random posters
+        let randomRefreshTimer = null; // Timer for refreshing random posters
+
         // Current state
         let currentIndex = 0;
         let transitioning = false;
@@ -530,6 +534,81 @@ $proxy_url = "./proxy.php";
         // Debug helper
         function debug(message) {
             console.log(`[Debug] ${message}`);
+        }
+
+        // Function to start random poster refresh timer
+        function startRandomRefreshTimer() {
+            debug('Starting random poster refresh timer');
+            // Clear any existing timer first
+            stopRandomRefreshTimer();
+
+            // Set new timer
+            randomRefreshTimer = setInterval(refreshRandomPosters, randomRefreshInterval);
+        }
+
+        // Function to stop random poster refresh timer
+        function stopRandomRefreshTimer() {
+            if (randomRefreshTimer) {
+                debug('Stopping random poster refresh timer');
+                clearInterval(randomRefreshTimer);
+                randomRefreshTimer = null;
+            }
+        }
+
+        // Function to refresh random posters
+        function refreshRandomPosters() {
+            // Only refresh if we're not streaming and not in transition
+            if (isStreaming || transitioning) {
+                debug('Not refreshing random posters: streaming or in transition');
+                return;
+            }
+
+            debug('Refreshing random posters');
+
+            fetch(checkStreamsUrl)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! Status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    debug(`Got fresh random posters at timestamp ${data.timestamp || 'unknown'}`);
+
+                    // Check if we're still in non-streaming mode before applying changes
+                    if (!isStreaming && !transitioning) {
+                        const activeStreams = data.active_streams || [];
+
+                        // If there are suddenly active streams, handle stream detection
+                        if (activeStreams.length > 0) {
+                            debug('Active streams detected during random refresh, handling stream detection');
+                            handleFirstStreamDetection(data);
+                            return;
+                        }
+
+                        // Get new random items
+                        if (data.random_items && data.random_items.length > 0) {
+                            debug(`Received ${data.random_items.length} new random posters`);
+
+                            // Remember current index position as a percentage
+                            const currentPosition = currentIndex / Math.max(items.length, 1);
+
+                            // Update random items
+                            randomItems = data.random_items;
+                            items = randomItems;
+
+                            // Calculate new index to maintain approximate position
+                            currentIndex = Math.min(Math.floor(currentPosition * items.length), items.length - 1);
+
+                            // Force a transition to a new poster
+                            forceTransition = true;
+                            transition();
+                        }
+                    }
+                })
+                .catch(error => {
+                    debug(`Error refreshing random posters: ${error.message}`);
+                });
         }
 
         // Helper function to convert Plex URLs to our proxy handler
@@ -740,6 +819,7 @@ $proxy_url = "./proxy.php";
                     items = activeStreams;
                     currentIndex = 0;
                     stopTransitionTimer();
+                    stopRandomRefreshTimer(); // Stop random refresh timer
                     updateDisplay();
 
                     // If multiple streams, start transitions between them
@@ -754,6 +834,7 @@ $proxy_url = "./proxy.php";
                     currentIndex = 0;
                     updateDisplay();
                     startTransitionTimer();
+                    startRandomRefreshTimer(); // Start random refresh timer
                 } else if (isStreaming) {
                     // Update the current streams
                     debug('Updating active streams');
@@ -869,15 +950,15 @@ $proxy_url = "./proxy.php";
                 debug('No items to display');
                 // Create error message display
                 posterContainer.innerHTML = `
-                    <div class="error-container">
-                        <h2>No Content Available</h2>
-                        <p>Unable to retrieve content from your Plex server.</p>
-                        <p>Please check your server connection and refresh the page.</p>
-                        <button onclick="location.reload()" style="margin-top: 20px; padding: 10px 20px; background: #cc7b19; border: none; color: white; border-radius: 5px; cursor: pointer;">
-                            Retry
-                        </button>
-                    </div>
-                `;
+            <div class="error-container">
+                <h2>No Content Available</h2>
+                <p>Unable to retrieve content from your Plex server.</p>
+                <p>Please check your server connection and refresh the page.</p>
+                <button onclick="location.reload()" style="margin-top: 20px; padding: 10px 20px; background: #cc7b19; border: none; color: white; border-radius: 5px; cursor: pointer;">
+                    Retry
+                </button>
+            </div>
+        `;
                 return;
             }
 
@@ -899,6 +980,11 @@ $proxy_url = "./proxy.php";
             if ((isStreaming && items.length > 1) || !isStreaming) {
                 debug("Starting transition timer on init");
                 startTransitionTimer();
+
+                // Also start random refresh timer if we're not streaming
+                if (!isStreaming) {
+                    startRandomRefreshTimer();
+                }
             }
 
             // Start periodic stream checking
@@ -913,6 +999,12 @@ $proxy_url = "./proxy.php";
                 if (multipleStreams && !timerInterval) {
                     debug("CRITICAL: Post-init check found multiple streams but no timer running!");
                     startTransitionTimer();
+                }
+
+                // Also check random refresh timer
+                if (!isStreaming && !randomRefreshTimer) {
+                    debug("CRITICAL: Post-init check found no random refresh timer in random mode!");
+                    startRandomRefreshTimer();
                 }
             }, 5000);
         }
@@ -1382,6 +1474,7 @@ $proxy_url = "./proxy.php";
         window.addEventListener('beforeunload', () => {
             clearInterval(timerInterval);
             clearInterval(streamCheckTimer);
+            clearInterval(randomRefreshTimer); // Add this line
             if (currentTransitionTimeout) {
                 clearTimeout(currentTransitionTimeout);
             }
