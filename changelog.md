@@ -263,3 +263,9 @@
 ### Fixed
 
 - Poster wall showing wrong poster for TV Shows
+
+## [1.4.6]
+
+### Fixed
+
+- Poster Wall would only show 20 random posters
