@@ -531,6 +531,11 @@ $proxy_url = "./proxy.php";
         let multipleStreams = isInitialStreaming && initialItems.length > 1; // Flag to track multiple streams
         let currentTransitionTimeout = null; // Track the current transition timeout
 
+        let allRandomItems = []; // To store all random items we've ever fetched
+        let displayedItemsCount = 0; // Track how many unique items we've displayed
+        let shouldLoadMoreItems = false; // Flag to trigger loading more items
+        let currentBatch = 1; // Track which batch of posters we're on
+
         // Debug helper
         function debug(message) {
             console.log(`[Debug] ${message}`);
@@ -542,8 +547,14 @@ $proxy_url = "./proxy.php";
             // Clear any existing timer first
             stopRandomRefreshTimer();
 
-            // Set new timer
-            randomRefreshTimer = setInterval(refreshRandomPosters, randomRefreshInterval);
+            // Set new timer - more frequent refreshes at the beginning to build up collection
+            const initialRefreshInterval = currentBatch <= 3 ? 60000 : randomRefreshInterval; // 1 min for first 3 batches
+            randomRefreshTimer = setInterval(refreshRandomPosters, initialRefreshInterval);
+
+            // Immediate refresh to start building the collection
+            if (currentBatch === 1) {
+                refreshRandomPosters();
+            }
         }
 
         // Function to stop random poster refresh timer
@@ -555,7 +566,6 @@ $proxy_url = "./proxy.php";
             }
         }
 
-        // Function to refresh random posters
         function refreshRandomPosters() {
             // Only refresh if we're not streaming and not in transition
             if (isStreaming || transitioning) {
@@ -563,9 +573,10 @@ $proxy_url = "./proxy.php";
                 return;
             }
 
-            debug('Refreshing random posters');
+            debug('Refreshing random posters, batch: ' + currentBatch);
 
-            fetch(checkStreamsUrl)
+            // Add batch parameter to get different sets of posters each time
+            fetch(`${checkStreamsUrl}?batch=${currentBatch}`)
                 .then(response => {
                     if (!response.ok) {
                         throw new Error(`HTTP error! Status: ${response.status}`);
@@ -588,27 +599,83 @@ $proxy_url = "./proxy.php";
 
                         // Get new random items
                         if (data.random_items && data.random_items.length > 0) {
-                            debug(`Received ${data.random_items.length} new random posters`);
+                            debug(`Received ${data.random_items.length} new random posters in batch ${currentBatch}`);
 
-                            // Remember current index position as a percentage
-                            const currentPosition = currentIndex / Math.max(items.length, 1);
+                            // Add new items to our master collection, avoiding duplicates
+                            const newItemsAdded = [];
 
-                            // Update random items
-                            randomItems = data.random_items;
+                            data.random_items.forEach(newItem => {
+                                // Generate a unique ID for this item based on its properties
+                                const itemId = `${newItem.title}-${newItem.type}-${newItem.year}`;
+
+                                // Check if this item already exists in our collection
+                                const alreadyExists = allRandomItems.some(existingItem =>
+                                    `${existingItem.title}-${existingItem.type}-${existingItem.year}` === itemId);
+
+                                // If it doesn't exist, add it
+                                if (!alreadyExists) {
+                                    // Add a batch marker to track which refresh cycle added this item
+                                    newItem.batchId = currentBatch;
+                                    allRandomItems.push(newItem);
+                                    newItemsAdded.push(newItem);
+                                }
+                            });
+
+                            debug(`Added ${newItemsAdded.length} new unique posters to collection`);
+                            debug(`Total unique posters in master collection: ${allRandomItems.length}`);
+
+                            // Update our active items array with the full collection
+                            randomItems = [...allRandomItems]; // Make a copy to be safe
                             items = randomItems;
 
-                            // Calculate new index to maintain approximate position
-                            currentIndex = Math.min(Math.floor(currentPosition * items.length), items.length - 1);
+                            // If we're waiting to show new items, force a transition
+                            if (shouldLoadMoreItems && newItemsAdded.length > 0) {
+                                debug('Showing newly loaded items immediately');
+                                shouldLoadMoreItems = false;
 
-                            // Force a transition to a new poster
-                            forceTransition = true;
-                            transition();
+                                // Set index to the first poster from the new batch that wasn't already in our collection
+                                const nextItem = newItemsAdded[0];
+                                const nextItemIndex = items.findIndex(item =>
+                                    item.title === nextItem.title &&
+                                    item.type === nextItem.type &&
+                                    item.year === nextItem.year);
+
+                                if (nextItemIndex !== -1) {
+                                    debug(`Transitioning to new poster: ${nextItem.title}`);
+                                    currentIndex = nextItemIndex - 1; // Set to one before so transition() will move to it
+                                    if (currentIndex < 0) currentIndex = items.length - 1;
+                                }
+
+                                // Force a transition to show a new poster
+                                forceTransition = true;
+                                transition();
+                            }
+
+                            // Increment batch counter for next refresh
+                            currentBatch++;
                         }
                     }
                 })
                 .catch(error => {
                     debug(`Error refreshing random posters: ${error.message}`);
                 });
+        }
+
+        // Add this function to check if we're nearing the end of our available posters
+        function checkIfMorePostersNeeded() {
+            // If we've shown most of the posters we have, request more
+            if (!isStreaming && items.length > 0) {
+                const remainingItems = items.length - displayedItemsCount;
+
+                if (remainingItems < 5) {
+                    debug(`Only ${remainingItems} posters left to display, requesting more`);
+                    shouldLoadMoreItems = true;
+                    refreshRandomPosters();
+
+                    // Reset the counter once we've gone through most posters
+                    displayedItemsCount = 0;
+                }
+            }
         }
 
         // Helper function to convert Plex URLs to our proxy handler
@@ -988,6 +1055,8 @@ $proxy_url = "./proxy.php";
             }
 
             // Start periodic stream checking
+            setTimeout(refreshRandomPosters, 5000); // Wait 5 seconds after initial load
+
             startStreamChecking();
 
             // Handle window resize
@@ -1253,6 +1322,12 @@ $proxy_url = "./proxy.php";
 
             // Prepare next item
             const nextIndex = (currentIndex + 1) % items.length;
+
+            // Track that we've displayed another poster
+            displayedItemsCount++;
+
+            // Check if we need to load more posters
+            checkIfMorePostersNeeded();
             debug(`TRANSITION: from item ${currentIndex} to item ${nextIndex} of ${items.length} items`);
 
             if (items[currentIndex] && items[nextIndex]) {
@@ -1266,6 +1341,11 @@ $proxy_url = "./proxy.php";
             if (multipleStreams) {
                 debug('Resetting transition timer after transition');
                 startTransitionTimer();
+            }
+
+            // Check if we need to load more posters
+            if (!isStreaming) {
+                checkIfMorePostersNeeded();
             }
         }
 

@@ -177,8 +177,8 @@ function parseXMLStreams($response)
     return $streams;
 }
 
-// Function to get random library items
-function getRandomLibraryItems($server_url, $token, $count = 10)
+// Function to get random library items - MODIFIED to fetch more varied items
+function getRandomLibraryItems($server_url, $token, $count = 20)
 {
     // Get all libraries
     $libraries_url = "{$server_url}/library/sections?X-Plex-Token={$token}";
@@ -229,7 +229,112 @@ function getRandomLibraryItems($server_url, $token, $count = 10)
         }
     }
 
-    return fetchRandomItemsFromLibraries($library_keys, $server_url, $token, $count);
+    // Fetch items from each library with a better distribution
+    $all_items = [];
+    $items_per_library = ceil($count * 2 / max(1, count($library_keys))); // Fetch more than we need
+
+    foreach ($library_keys as $key) {
+        $library_items = fetchItemsFromLibrary($key, $server_url, $token, $items_per_library);
+        $all_items = array_merge($all_items, $library_items);
+
+        error_log("Fetched " . count($library_items) . " items from library {$key}");
+    }
+
+    // Shuffle and limit the items
+    shuffle($all_items);
+    return array_slice($all_items, 0, $count);
+}
+
+// Helper function to fetch items from a single library
+function fetchItemsFromLibrary($library_key, $server_url, $token, $items_count)
+{
+    $items_url = "{$server_url}/library/sections/{$library_key}/all?X-Plex-Token={$token}";
+    error_log("Fetching items from library {$library_key}: {$items_url}");
+
+    $ch = curl_init();
+    curl_setopt_array($ch, [
+        CURLOPT_URL => $items_url,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_TIMEOUT => 30,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => false,
+        CURLOPT_HTTPHEADER => ['Accept: application/json'] // Request JSON response
+    ]);
+    $response = curl_exec($ch);
+
+    if (curl_errno($ch)) {
+        error_log("cURL error when fetching items from library {$library_key}: " . curl_error($ch));
+        curl_close($ch);
+        return []; // Return empty array on error
+    }
+
+    curl_close($ch);
+
+    if (!$response) {
+        error_log("Empty response when fetching items from library {$library_key}");
+        return []; // Return empty array if no response
+    }
+
+    // Parse the response and extract items
+    $library_items = [];
+
+    // Try to parse JSON
+    $data = json_decode($response, true);
+    if (json_last_error() !== JSON_ERROR_NONE) {
+        error_log("JSON parsing error in library {$library_key}: " . json_last_error_msg());
+
+        // Try parsing as XML
+        $library_items = parseLibraryItemsXML($response);
+    } else {
+        // Parse JSON items
+        if (isset($data['MediaContainer']['Metadata'])) {
+            foreach ($data['MediaContainer']['Metadata'] as $item) {
+                // Skip music and live items
+                if (
+                    (isset($item['type']) && $item['type'] == 'track') ||
+                    (isset($item['live']) && $item['live'] == 1)
+                ) {
+                    continue;
+                }
+
+                $newItem = [
+                    'title' => $item['title'] ?? '',
+                    'type' => $item['type'] ?? '',
+                    'thumb' => $item['thumb'] ?? '',
+                    'art' => $item['art'] ?? '',
+                    'year' => $item['year'] ?? ''
+                ];
+
+                $library_items[] = $newItem;
+            }
+        }
+    }
+
+    // If we have many items, take a diverse sample
+    if (count($library_items) > $items_count * 2) {
+        error_log("Taking diverse sample from " . count($library_items) . " items in library {$library_key}");
+
+        // Get a diverse selection by taking items at regular intervals
+        $sampled_items = [];
+        $step = count($library_items) / $items_count;
+
+        for ($i = 0; $i < $items_count; $i++) {
+            $index = min(floor($i * $step), count($library_items) - 1);
+            $sampled_items[] = $library_items[$index];
+        }
+
+        // Also add some random items for variety
+        $random_count = min(5, ceil($items_count / 4));
+        for ($i = 0; $i < $random_count; $i++) {
+            $random_index = mt_rand(0, count($library_items) - 1);
+            $sampled_items[] = $library_items[$random_index];
+        }
+
+        return $sampled_items;
+    }
+
+    return $library_items;
 }
 
 // Fallback XML parsing for libraries
@@ -258,79 +363,18 @@ function getRandomLibraryItemsXML($response, $server_url, $token, $count)
         }
     }
 
-    return fetchRandomItemsFromLibraries($library_keys, $server_url, $token, $count);
-}
+    // Fetch items from each library
+    $all_items = [];
+    $items_per_library = ceil($count * 2 / max(1, count($library_keys))); // Fetch more than we need
 
-// Fetch random items from selected libraries
-function fetchRandomItemsFromLibraries($library_keys, $server_url, $token, $count)
-{
-    $items = [];
     foreach ($library_keys as $key) {
-        $items_url = "{$server_url}/library/sections/{$key}/all?X-Plex-Token={$token}";
-        error_log("Fetching items from library {$key}: {$items_url}");
-
-        $ch = curl_init();
-        curl_setopt_array($ch, [
-            CURLOPT_URL => $items_url,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_TIMEOUT => 30,
-            CURLOPT_SSL_VERIFYPEER => false,
-            CURLOPT_SSL_VERIFYHOST => false,
-            CURLOPT_HTTPHEADER => ['Accept: application/json'] // Request JSON response
-        ]);
-        $response = curl_exec($ch);
-
-        if (curl_errno($ch)) {
-            error_log("cURL error when fetching items from library {$key}: " . curl_error($ch));
-            curl_close($ch);
-            continue; // Skip to next library
-        }
-
-        curl_close($ch);
-
-        if (!$response) {
-            error_log("Empty response when fetching items from library {$key}");
-            continue; // Skip to next library
-        }
-
-        // Try to parse JSON
-        $data = json_decode($response, true);
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            error_log("JSON parsing error in library {$key}: " . json_last_error_msg());
-
-            // Try to parse as XML if JSON fails
-            $items = array_merge($items, parseLibraryItemsXML($response));
-            continue;
-        }
-
-        // Parse JSON items
-        if (isset($data['MediaContainer']['Metadata'])) {
-            foreach ($data['MediaContainer']['Metadata'] as $item) {
-                // Skip music and live items
-                if (
-                    (isset($item['type']) && $item['type'] == 'track') ||
-                    (isset($item['live']) && $item['live'] == 1)
-                ) {
-                    continue;
-                }
-
-                $newItem = [
-                    'title' => $item['title'] ?? '',
-                    'type' => $item['type'] ?? '',
-                    'thumb' => $item['thumb'] ?? '',
-                    'art' => $item['art'] ?? '',
-                    'year' => $item['year'] ?? ''
-                ];
-
-                $items[] = $newItem;
-            }
-        }
+        $library_items = fetchItemsFromLibrary($key, $server_url, $token, $items_per_library);
+        $all_items = array_merge($all_items, $library_items);
     }
 
     // Shuffle and limit the items
-    shuffle($items);
-    return array_slice($items, 0, $count);
+    shuffle($all_items);
+    return array_slice($all_items, 0, $count);
 }
 
 // Parse XML formatted library items (fallback method)
@@ -396,16 +440,35 @@ function parseLibraryItemsXML($response)
 // Get active streams
 $active_streams = getActiveStreams($plex_url, $plex_token);
 
+// Get batch parameter for poster variety
+$batch = isset($_GET['batch']) ? intval($_GET['batch']) : 1;
+
+// Get a higher count for random items to allow for more variety
+$random_items_count = 40; // Get more items than we'll return
+
 // Get random items if needed
 $random_items = [];
 if (empty($active_streams)) {
-    $random_items = getRandomLibraryItems($plex_url, $plex_token, 20);
+    $random_items = getRandomLibraryItems($plex_url, $plex_token, $random_items_count);
+}
+
+// Use the batch number to provide variety in which random items we return
+if (!empty($random_items) && count($random_items) > 20) {
+    // Seed random generator with batch to get consistent but different results per batch
+    srand($batch * 13); // Multiply by a prime number for better distribution
+    shuffle($random_items);
+
+    // Take the first 20 items after shuffling
+    $random_items = array_slice($random_items, 0, 20);
+
+    error_log("Returning 20 random items for batch {$batch}");
 }
 
 // Add a timestamp to help with debugging
 $response = [
     'active_streams' => $active_streams,
     'random_items' => $random_items,
+    'batch' => $batch,
     'timestamp' => time()
 ];
 
