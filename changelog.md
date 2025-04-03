@@ -269,3 +269,9 @@
 ### Fixed
 
 - Poster Wall would only show 20 random posters
+
+## [1.4.7]
+
+### Fixed
+
+- Enhanced randomization of poster wall
