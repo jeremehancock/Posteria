@@ -2837,7 +2837,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 
 				<div class="plex-info"
 					style="margin: 0 24px 10px; padding: 10px; background: rgba(46, 213, 115, 0.1); border: 1px solid var(--accent-primary); border-radius: 6px;">
-					<span>Updated poster will be automatically synced with Plex after upload</span>
+					<span>Poster will be automatically updated in Plex after upload</span>
 				</div>
 
 				<div class="upload-tabs">
