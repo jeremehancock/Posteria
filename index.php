@@ -9582,21 +9582,23 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 
 			// Check current sorting state
 			const urlParams = new URLSearchParams(window.location.search);
-			let isSortByDate = true; // Assume default is true based on your setup
 
-			// If the parameter exists in URL, it overrides the default
+			const phpSortByDateAdded = <?= isset($display_config['sort_by_date_added']) && $display_config['sort_by_date_added'] === true ? 'true' : 'false' ?>;
+
+			let isSortByDate = false;
+
 			if (urlParams.has('sort_by_date')) {
 				isSortByDate = urlParams.get('sort_by_date') === 'true';
+			} else {
+				isSortByDate = phpSortByDateAdded;
 			}
 
-			// Set initial icon state based on current sorting
+			// Set icon with new calendar icon
 			sortByDateButton.innerHTML = `
-		<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-			<rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-			<line x1="16" y1="2" x2="16" y2="6"></line>
-			<line x1="8" y1="2" x2="8" y2="6"></line>
-			<line x1="3" y1="10" x2="21" y2="10"></line>
-			${isSortByDate ? '<path d="M12 16l-3-3 3-3"></path>' : '<path d="M12 10l3 3-3 3"></path>'}
+		<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" enable-background="new 0 0 52 52" xml:space="preserve">
+			<path d="M43.6,6.8h-4V5.2c0-1.8-1.4-3.2-3.2-3.2c-1.8,0-3.2,1.4-3.2,3.2v1.6H18.8V5.2c0-1.8-1.4-3.2-3.2-3.2 s-3.2,1.4-3.2,3.2v1.6h-4c-2.6,0-4.8,2.2-4.8,4.8v1.6c0,0.9,0.7,1.6,1.6,1.6h41.6c0.9,0,1.6-0.7,1.6-1.6v-1.6 C48.4,9,46.2,6.8,43.6,6.8z"></path>
+			<path d="M46.8,19.6H5.2c-0.9,0-1.6,0.7-1.6,1.6v24c0,2.6,2.2,4.8,4.8,4.8h35.2c2.6,0,4.8-2.2,4.8-4.8v-24 C48.4,20.3,47.7,19.6,46.8,19.6z M26,46.7c-6.6,0-11.9-5.4-11.9-11.9c0-6.6,5.4-11.9,11.9-11.9s11.9,5.4,11.9,11.9 C37.9,41.4,32.6,46.7,26,46.7z"></path>
+			<path d="M27.2,34.3v-5.1c0-0.4-0.4-0.8-0.8-0.8h-0.8c-0.4,0-0.8,0.4-0.8,0.8v5.6c0,0.3,0.1,0.6,0.4,0.8l3.8,3.8 c0.3,0.3,0.8,0.3,1.1,0l0.6-0.6c0.3-0.3,0.3-0.8,0-1.1L27.2,34.3z"></path>
 		</svg>
 	`;
 
@@ -9629,13 +9631,12 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		.sort-by-date-button svg {
 			width: 30px;
 			height: 30px;
-			fill: none;
-			stroke: var(--text-secondary);
+			fill: var(--text-secondary);
 			filter: drop-shadow(0 1px 3px rgba(0,0,0,0.3));
 		}
 		
 		.sort-by-date-button.active svg {
-			stroke: var(--accent-primary);
+			fill: var(--accent-primary);
 		}
 		
 		@media (max-width: 768px) {
