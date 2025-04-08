@@ -3383,9 +3383,18 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 					<div class="gallery-image-placeholder">
 						<div class="loading-spinner"></div>
 					</div>
-					<img src="" alt="<?php echo htmlspecialchars(pathinfo($image['filename'], PATHINFO_FILENAME)); ?>"
+					<!-- <img src="" alt="<?php echo htmlspecialchars(pathinfo($image['filename'], PATHINFO_FILENAME)); ?>"
 						class="gallery-image" loading="lazy"
-						data-src="<?php echo htmlspecialchars($image['fullpath']); ?>">
+						data-src="<?php echo htmlspecialchars($image['fullpath']); ?>"> -->
+					<?php
+					$filename = htmlspecialchars($image['filename']);
+					$filepath = htmlspecialchars($image['fullpath']);
+					$cacheBuster = '?v=' . time(); // or use uniqid() if preferred
+					?>
+
+					<img src="" alt="<?php echo htmlspecialchars(pathinfo($filename, PATHINFO_FILENAME)); ?>"
+						class="gallery-image lazy" loading="lazy" data-src="<?php echo $filepath . $cacheBuster; ?>">
+
 					<div class="image-overlay-actions">
 						<button class="overlay-action-button copy-url-btn"
 							data-url="<?php echo htmlspecialchars($config['siteUrl'] . $image['fullpath']); ?>">
@@ -9518,6 +9527,28 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				});
 			}, 300); // Short delay to ensure support button is created first
 		});
+	</script>
+	<script>
+		document.addEventListener("DOMContentLoaded", function () {
+			const lazyImages = document.querySelectorAll("img.lazy");
+
+			const lazyLoad = function () {
+				lazyImages.forEach(img => {
+					if (img.dataset.src && img.getBoundingClientRect().top < window.innerHeight + 200) {
+						img.src = img.dataset.src;
+						img.classList.remove("lazy");
+					}
+				});
+			};
+
+			window.addEventListener("scroll", lazyLoad);
+			window.addEventListener("resize", lazyLoad);
+			window.addEventListener("orientationchange", lazyLoad);
+
+			// Optional: initial load
+			lazyLoad();
+		});
+
 	</script>
 </body>
 
