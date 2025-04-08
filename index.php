@@ -512,6 +512,7 @@ function isAllowedFileType($filename, $allowedExtensions)
 }
 
 // Generate pagination links
+// Generate pagination links
 function generatePaginationLinks($currentPage, $totalPages, $searchQuery, $currentDirectory)
 {
 	$links = '';
@@ -520,6 +521,9 @@ function generatePaginationLinks($currentPage, $totalPages, $searchQuery, $curre
 		$params['search'] = $searchQuery;
 	if (!empty($currentDirectory))
 		$params['directory'] = $currentDirectory;
+	// Preserve sort_by_date parameter if present
+	if (isset($_GET['sort_by_date']))
+		$params['sort_by_date'] = $_GET['sort_by_date'];
 	$queryString = http_build_query($params);
 	$baseUrl = '?' . ($queryString ? $queryString . '&' : '');
 
@@ -3326,6 +3330,9 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				<?php if (!empty($currentDirectory)): ?>
 				<input type="hidden" name="directory" value="<?php echo htmlspecialchars($currentDirectory); ?>">
 				<?php endif; ?>
+				<?php if (isset($_GET['sort_by_date'])): ?>
+				<input type="hidden" name="sort_by_date" value="<?php echo htmlspecialchars($_GET['sort_by_date']); ?>">
+				<?php endif; ?>
 				<input type="text" name="search" class="search-input" placeholder="Search posters..."
 					value="<?php echo htmlspecialchars($searchQuery); ?>" autocomplete="off">
 				<button type="submit" class="search-button">Search</button>
@@ -3334,10 +3341,10 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 
 		<div class="filter-container">
 			<div class="filter-buttons">
-				<a href="<?php echo !empty($searchQuery) ? '?search=' . urlencode($searchQuery) : '?'; ?>"
+				<a href="<?php echo !empty($searchQuery) ? '?search=' . urlencode($searchQuery) : '?'; ?><?php echo isset($_GET['sort_by_date']) ? '&sort_by_date=' . urlencode($_GET['sort_by_date']) : ''; ?>"
 					class="filter-button <?php echo empty($currentDirectory) ? 'active' : ''; ?>">All</a>
 				<?php foreach ($config['directories'] as $dirKey => $dirPath): ?>
-				<a href="?directory=<?php echo urlencode($dirKey); ?><?php echo !empty($searchQuery) ? '&search=' . urlencode($searchQuery) : ''; ?>"
+				<a href="?directory=<?php echo urlencode($dirKey); ?><?php echo !empty($searchQuery) ? '&search=' . urlencode($searchQuery) : ''; ?><?php echo isset($_GET['sort_by_date']) ? '&sort_by_date=' . urlencode($_GET['sort_by_date']) : ''; ?>"
 					class="filter-button <?php echo $currentDirectory === $dirKey ? 'active' : ''; ?>">
 					<?php echo formatDirectoryName($dirKey); ?>
 				</a>
@@ -3348,7 +3355,8 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		<div class="gallery-stats">
 			<?php if (!empty($searchQuery)): ?>
 			Showing <?php echo count($filteredImages); ?> of <?php echo count($allImages); ?> images
-			<a href="?<?php echo !empty($currentDirectory) ? 'directory=' . urlencode($currentDirectory) : ''; ?>">Clear
+			<a
+				href="?<?php echo !empty($currentDirectory) ? 'directory=' . urlencode($currentDirectory) : ''; ?><?php echo isset($_GET['sort_by_date']) ? (!empty($currentDirectory) ? '&' : '') . 'sort_by_date=' . urlencode($_GET['sort_by_date']) : ''; ?>">Clear
 				search</a>
 			<?php elseif (!empty($currentDirectory)): ?>
 			Showing <?php echo count($filteredImages); ?> of <?php echo count(getImageFiles($config, '')); ?> images in
@@ -6368,11 +6376,17 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 
 					// But we should update filter hrefs to maintain search parameter when clicked
 					const searchValue = this.querySelector('.search-input').value;
+					const urlParams = new URLSearchParams(window.location.search);
+					const sortByDate = urlParams.get('sort_by_date');
 					if (searchValue) {
 						// Update All button
 						const allFilterButton = document.querySelector('.filter-buttons a:first-child');
 						if (allFilterButton) {
-							allFilterButton.href = `?search=${encodeURIComponent(searchValue)}`;
+							let allUrl = `?search=${encodeURIComponent(searchValue)}`;
+							if (sortByDate) {
+								allUrl += `&sort_by_date=${sortByDate}`;
+							}
+							allFilterButton.href = allUrl;
 						}
 
 						// Update directory filter buttons
@@ -6381,7 +6395,11 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 							const href = button.getAttribute('href');
 							const directoryMatch = href.match(/\?directory=([^&]*)/);
 							if (directoryMatch && directoryMatch[1]) {
-								button.href = `?directory=${directoryMatch[1]}&search=${encodeURIComponent(searchValue)}`;
+								let btnUrl = `?directory=${directoryMatch[1]}&search=${encodeURIComponent(searchValue)}`;
+								if (sortByDate) {
+									btnUrl += `&sort_by_date=${sortByDate}`;
+								}
+								button.href = btnUrl;
 							}
 						});
 					}
@@ -9553,6 +9571,125 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			lazyLoad();
 		});
 
+	</script>
+	<script>
+		document.addEventListener('DOMContentLoaded', function () {
+			// Create the Sort by Date button
+			const sortByDateButton = document.createElement('button');
+			sortByDateButton.id = 'sortByDateButton';
+			sortByDateButton.className = 'sort-by-date-button';
+			sortByDateButton.setAttribute('title', 'Toggle Sort by Date');
+
+			// Check current sorting state
+			const urlParams = new URLSearchParams(window.location.search);
+			let isSortByDate = true; // Assume default is true based on your setup
+
+			// If the parameter exists in URL, it overrides the default
+			if (urlParams.has('sort_by_date')) {
+				isSortByDate = urlParams.get('sort_by_date') === 'true';
+			}
+
+			// Set initial icon state based on current sorting
+			sortByDateButton.innerHTML = `
+		<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+			<rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+			<line x1="16" y1="2" x2="16" y2="6"></line>
+			<line x1="8" y1="2" x2="8" y2="6"></line>
+			<line x1="3" y1="10" x2="21" y2="10"></line>
+			${isSortByDate ? '<path d="M12 16l-3-3 3-3"></path>' : '<path d="M12 10l3 3-3 3"></path>'}
+		</svg>
+	`;
+
+			// Add active class if sorting by date
+			if (isSortByDate) {
+				sortByDateButton.classList.add('active');
+			}
+
+			// Add CSS for the Sort by Date button
+			const style = document.createElement('style');
+			style.textContent = `
+		.sort-by-date-button {
+			background: transparent;
+			border: none;
+			cursor: pointer;
+			padding: 8px;
+			margin-right: 8px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			border-radius: 50%;
+			transition: all 0.2s ease;
+		}
+		
+		.sort-by-date-button:hover {
+			background-color: rgba(229, 160, 13, 0.1);
+			transform: scale(1.1);
+		}
+		
+		.sort-by-date-button svg {
+			width: 30px;
+			height: 30px;
+			fill: none;
+			stroke: var(--text-secondary);
+			filter: drop-shadow(0 1px 3px rgba(0,0,0,0.3));
+		}
+		
+		.sort-by-date-button.active svg {
+			stroke: var(--accent-primary);
+		}
+		
+		@media (max-width: 768px) {
+			.sort-by-date-button {
+				padding: 6px;
+			}
+			
+			.sort-by-date-button svg {
+				width: 28px;
+				height: 28px;
+			}
+		}
+		
+		@media (max-width: 480px) {
+			.sort-by-date-button {
+				padding: 5px;
+			}
+			
+			.sort-by-date-button svg {
+				width: 26px;
+				height: 26px;
+			}
+		}
+	`;
+			document.head.appendChild(style);
+
+			// Find the poster wall button after a short delay to ensure it exists
+			setTimeout(() => {
+				const posterWallButton = document.getElementById('posterWallButton');
+				if (posterWallButton) {
+					// Insert after poster wall button
+					posterWallButton.insertAdjacentElement('afterend', sortByDateButton);
+				} else {
+					// Fallback - add to auth-actions if poster wall button not found
+					const authActions = document.querySelector('.auth-actions');
+					if (authActions) {
+						authActions.insertBefore(sortByDateButton, authActions.firstChild);
+					}
+				}
+
+				// Add click handler to toggle sort_by_date parameter
+				sortByDateButton.addEventListener('click', function () {
+					const url = new URL(window.location.href);
+					const params = new URLSearchParams(url.search);
+
+					// Toggle the parameter to the opposite of current state
+					params.set('sort_by_date', (!isSortByDate).toString());
+
+					// Update URL and reload page
+					url.search = params.toString();
+					window.location.href = url.toString();
+				});
+			}, 400); // Slightly longer delay than poster wall button to ensure correct order
+		});
 	</script>
 </body>
 
