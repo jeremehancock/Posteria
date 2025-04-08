@@ -197,7 +197,10 @@ function getImageFiles($config, $currentDirectory = '')
 // Sort files based on configuration
 	usort($files, function ($a, $b) use ($display_config) {
 		// Check if we should sort by date added
-		if (isset($display_config['sort_by_date_added']) && $display_config['sort_by_date_added'] === true) {
+		if (
+			(isset($_GET['sort_by_date']) && filter_var($_GET['sort_by_date'], FILTER_VALIDATE_BOOLEAN)) ||
+			(!isset($_GET['sort_by_date']) && isset($display_config['sort_by_date_added']) && $display_config['sort_by_date_added'] === true)
+		) {
 			// Extract the addedAt timestamp from both filenames using regex
 			$addedAtA = 0;
 			$addedAtB = 0;
