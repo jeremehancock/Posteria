@@ -2640,6 +2640,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 
 			.site-name svg {
 				height: 75px;
+				width: 0px;
 			}
 
 			.search-input,
@@ -2719,6 +2720,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 
 			.site-name svg {
 				height: 75px;
+				width: 0px;
 			}
 
 			.auth-actions {
@@ -8423,7 +8425,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				border: none;
 				cursor: pointer;
 				padding: 8px;
-				margin-right: -5px;
+				margin-right: -10px;
 				display: flex;
 				align-items: center;
 				justify-content: center;
@@ -9472,7 +9474,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			border: none;
 			cursor: pointer;
 			padding: 8px;
-			margin-right: 8px;
+			margin-right: -11px;
 			display: flex;
 			align-items: center;
 			justify-content: center;
