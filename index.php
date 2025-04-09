@@ -3787,7 +3787,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			</div>
 			<p>Are you sure you want to delete this poster? This action cannot be undone.</p>
 			<div
-				style="margin: 20px 0; padding: 15px; background: rgba(255, 159, 67, 0.1); border: 1px solid var(--accent-primary); border-radius: 6px;">
+				style="margin: 20px 0; padding: 15px; background: rgba(255, 159, 67, 0.1); border: 1px solid var(--accent-primary); border-radius: 6px; text-align: center;">
 				<p style="margin: 0;">This is an orphaned poster.</p>
 			</div>
 			<form id="deleteForm" method="POST">
