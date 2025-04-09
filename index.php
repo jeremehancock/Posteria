@@ -2645,7 +2645,11 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 
 			.site-name svg {
 				height: 75px;
-				width: 0px;
+				margin-left: -18px;
+			}
+
+			.auth-actions {
+				gap: 8px;
 			}
 
 			.search-input,
@@ -2725,11 +2729,12 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 
 			.site-name svg {
 				height: 75px;
-				width: 0px;
+				margin-left: -18px;
 			}
 
 			.auth-actions {
 				justify-content: center;
+				gap: 8px;
 			}
 
 			.modal-content {
