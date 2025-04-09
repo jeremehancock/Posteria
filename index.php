@@ -2787,7 +2787,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			border: none;
 			poster-wall cursor: pointer;
 			padding: 8px;
-			margin-right: -11px;
+			margin-right: -5px;
 			display: flex;
 			align-items: center;
 			justify-content: center;
@@ -2886,7 +2886,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			border: none;
 			cursor: pointer;
 			padding: 8px;
-			margin-right: -10px;
+			margin-right: -6px;
 			display: flex;
 			align-items: center;
 			justify-content: center;
@@ -3024,7 +3024,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				<div class="modal-body">
 					<p>Are you sure you want to delete <strong>ALL</strong> posters? This action cannot be undone.</p>
 					<div
-						style="margin: 20px 0; padding: 15px; background: rgba(239, 68, 68, 0.1); border: 1px solid var(--danger-color); border-radius: 6px;">
+						style="margin: 20px 0; padding: 15px; background: rgba(239, 68, 68, 0.1); border: 1px solid var(--danger-color); border-radius: 6px; text-align: justify;">
 						<p style="margin: 0;">⚠️ Warning: This will permanently delete all posters in your Posteria
 							collection.</p>
 						<p style="margin-top: 10px;">This will not remove any posters from Plex.</p>
@@ -3395,7 +3395,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 					?>
 					<p>Are you sure you want to delete all orphaned posters? This action cannot be undone.</p>
 					<div
-						style="margin: 20px 0; padding: 15px; background: rgba(255, 159, 67, 0.1); border: 1px solid var(--accent-primary); border-radius: 6px;">
+						style="margin: 20px 0; padding: 15px; background: rgba(255, 159, 67, 0.1); border: 1px solid var(--accent-primary); border-radius: 6px; text-align: center;">
 						<p style="margin: 0;">This will delete <?php echo $orphanCount; ?> orphaned posters.</p>
 					</div>
 					<div id="deleteOrphansProgress" style="display: none;">
