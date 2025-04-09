@@ -2104,6 +2104,11 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			color: #1e1e1e;
 		}
 
+		.plex-notification.plex-loading {
+			background: #000;
+			color: #fff;
+		}
+
 		.plex-notification.plex-success svg {
 			margin-right: 10px;
 		}
