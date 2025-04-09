@@ -145,6 +145,10 @@ The Docker container uses the following volume mounts:
 
 Posteria can import posters directly from your Plex Media Server and sync customized posters back to it. To enable this functionality, you need to provide your Plex server URL and authentication token in the configuration. This allows Posteria to securely communicate with your server while maintaining all your customizations.
 
+Keep in mind that Posteria considers Plex to be the "source of truth" for posters. So any changes to the posters in Plex directly or via another tool will override the posters in Posteria on the next import.
+
+To prevent Plex from making changes to the posters during metadata refreshes any poster updated in Posteria will be locked in Plex.
+
 #### How do I find my Plex auth token?
 
 You can find your Plex authentication token (X-Plex-Token) by following these steps:
