@@ -3282,7 +3282,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 					</div>
 					<div>
 						<button id="sortByDateButton" class="sort-by-date-button tooltip-trigger"
-							data-tooltip="Toggle Sort by Date">
+							data-tooltip="Toggle Sort by Date Added">
 							<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52"
 								enable-background="new 0 0 52 52" xml:space="preserve">
 								<path
