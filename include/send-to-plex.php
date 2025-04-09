@@ -302,7 +302,152 @@ try {
         }
     }
 
-    // Send to Plex functionality
+    // Function to lock a poster in Plex after uploading
+    function lockPosterInPlex($ratingKey, $mediaType)
+    {
+        global $plex_config;
+
+        try {
+            logDebug("Attempting to lock poster", [
+                'ratingKey' => $ratingKey,
+                'mediaType' => $mediaType
+            ]);
+
+            // Map media type to Plex type parameter
+            $typeMap = [
+                'movie' => 1,
+                'show' => 2,
+                'season' => 3,
+                'collection' => 18
+            ];
+
+            if (!isset($typeMap[$mediaType])) {
+                logDebug("Unsupported media type for locking", ['mediaType' => $mediaType]);
+                return [
+                    'success' => false,
+                    'error' => "Unsupported media type for locking: $mediaType"
+                ];
+            }
+
+            $type = $typeMap[$mediaType];
+
+            // First, get the library section ID for this item
+            $plexServerUrl = rtrim($plex_config['server_url'], '/');
+            $metadataUrl = "{$plexServerUrl}/library/metadata/{$ratingKey}";
+
+            $headers = [];
+            foreach (getPlexHeaders($plex_config['token']) as $key => $value) {
+                $headers[] = $key . ': ' . $value;
+            }
+
+            // Get the item's metadata to find its library section ID
+            $ch = curl_init();
+            curl_setopt_array($ch, [
+                CURLOPT_URL => $metadataUrl,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER => $headers,
+                CURLOPT_SSL_VERIFYPEER => false,
+                CURLOPT_SSL_VERIFYHOST => false,
+                CURLOPT_CONNECTTIMEOUT => $plex_config['connect_timeout'],
+                CURLOPT_TIMEOUT => $plex_config['request_timeout']
+            ]);
+
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $error = curl_error($ch);
+            curl_close($ch);
+
+            if ($response === false || $httpCode < 200 || $httpCode >= 300) {
+                logDebug("Failed to retrieve metadata", [
+                    'httpCode' => $httpCode,
+                    'error' => $error
+                ]);
+                return [
+                    'success' => false,
+                    'error' => "Failed to retrieve metadata for item: $ratingKey"
+                ];
+            }
+
+            // Parse the XML response to extract the librarySectionID
+            $xml = simplexml_load_string($response);
+            if (!$xml) {
+                logDebug("Failed to parse XML response");
+                return [
+                    'success' => false,
+                    'error' => "Failed to parse metadata response for item: $ratingKey"
+                ];
+            }
+
+            // Get the librarySectionID (different structure based on media type)
+            $librarySectionID = null;
+
+            if (isset($xml->Video)) {
+                // For movies
+                $librarySectionID = (string) $xml->Video[0]['librarySectionID'];
+            } elseif (isset($xml->Directory)) {
+                // For shows, seasons, collections
+                $librarySectionID = (string) $xml->Directory[0]['librarySectionID'];
+            }
+
+            if (empty($librarySectionID)) {
+                logDebug("Could not determine library section ID", ['xml' => $xml->asXML()]);
+                return [
+                    'success' => false,
+                    'error' => "Could not determine library section ID for item: $ratingKey"
+                ];
+            }
+
+            // Construct the URL to lock the poster
+            $lockUrl = "{$plexServerUrl}/library/sections/{$librarySectionID}/all?type={$type}&id={$ratingKey}&thumb.locked=1";
+            logDebug("Locking poster with URL", ['url' => $lockUrl]);
+
+            // Make the lock request
+            $ch = curl_init();
+            curl_setopt_array($ch, [
+                CURLOPT_URL => $lockUrl,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_CUSTOMREQUEST => 'PUT',
+                CURLOPT_HTTPHEADER => $headers,
+                CURLOPT_SSL_VERIFYPEER => false,
+                CURLOPT_SSL_VERIFYHOST => false,
+                CURLOPT_CONNECTTIMEOUT => $plex_config['connect_timeout'],
+                CURLOPT_TIMEOUT => $plex_config['request_timeout']
+            ]);
+
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $error = curl_error($ch);
+            curl_close($ch);
+
+            if ($httpCode >= 200 && $httpCode < 300) {
+                logDebug("Successfully locked poster", ['httpCode' => $httpCode]);
+                return [
+                    'success' => true,
+                    'message' => "Poster locked successfully"
+                ];
+            } else {
+                logDebug("Failed to lock poster", [
+                    'httpCode' => $httpCode,
+                    'error' => $error
+                ]);
+                return [
+                    'success' => false,
+                    'error' => "Failed to lock poster. HTTP code: {$httpCode}"
+                ];
+            }
+        } catch (Exception $e) {
+            logDebug("Exception while locking poster", [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return [
+                'success' => false,
+                'error' => "Error locking poster: " . $e->getMessage()
+            ];
+        }
+    }
+
+    // Now modify the Send to Plex functionality to include locking
     if (isset($_POST['action']) && $_POST['action'] === 'send_to_plex') {
         if (!isset($_POST['filename'], $_POST['directory'])) {
             echo json_encode(['success' => false, 'error' => 'Missing required parameters']);
@@ -374,6 +519,7 @@ try {
         // Construct URL for poster upload based on media type
         $plexServerUrl = rtrim($plex_config['server_url'], '/');
         $uploadUrl = "";
+        $uploadSuccess = false;
 
         // For collections we need a more comprehensive approach
         if ($mediaType === 'collection') {
@@ -476,6 +622,7 @@ try {
                 // Check if this method succeeded
                 if ($httpCode >= 200 && $httpCode < 300) {
                     $success = true;
+                    $uploadSuccess = true;
                     logDebug("Method " . ($index + 1) . " succeeded");
                     break;
                 } else {
@@ -516,6 +663,19 @@ try {
                     'http_code' => $refreshHttpCode
                 ]);
 
+                // Now try to lock the poster
+                $lockResult = [
+                    'success' => false,
+                    'attempted' => false
+                ];
+
+                logDebug("Attempting to lock collection poster", [
+                    'ratingKey' => $ratingKey
+                ]);
+
+                $lockResult = lockPosterInPlex($ratingKey, $mediaType);
+                $lockResult['attempted'] = true;
+
                 // Check if we should attempt to remove overlay label
                 $labelResult = [
                     'success' => false,
@@ -528,24 +688,40 @@ try {
                     $labelResult['attempted'] = true;
                 }
 
-                // Return result with label removal info if attempted
-                if ($labelResult['attempted']) {
-                    echo json_encode([
-                        'success' => true,
-                        'message' => 'Collection poster successfully sent to Plex. ' .
-                            ($labelResult['success'] ? 'Overlay label was also removed.' : 'However, failed to remove Overlay label: ' .
-                                (isset($labelResult['error']) ? $labelResult['error'] : 'Unknown error')),
-                        'label_removal' => $labelResult['success'],
-                        'label_message' => isset($labelResult['message']) ? $labelResult['message'] : '',
-                        'label_error' => isset($labelResult['error']) ? $labelResult['error'] : ''
-                    ]);
-                } else {
-                    // Return success response
-                    echo json_encode([
-                        'success' => true,
-                        'message' => 'Collection poster successfully sent to Plex. You may need to refresh your Plex interface to see the change.'
-                    ]);
+                // Prepare response message
+                $message = 'Collection poster successfully sent to Plex.';
+
+                // Add lock status to the message
+                if ($lockResult['attempted']) {
+                    if ($lockResult['success']) {
+                        $message .= ' Poster was locked.';
+                    } else {
+                        $message .= ' However, failed to lock poster: ' .
+                            (isset($lockResult['error']) ? $lockResult['error'] : 'Unknown error');
+                    }
                 }
+
+                // Add label removal status to the message
+                if ($labelResult['attempted']) {
+                    if ($labelResult['success']) {
+                        $message .= ' Overlay label was also removed.';
+                    } else {
+                        $message .= ' However, failed to remove Overlay label: ' .
+                            (isset($labelResult['error']) ? $labelResult['error'] : 'Unknown error');
+                    }
+                }
+
+                // Return result with lock and label removal info
+                echo json_encode([
+                    'success' => true,
+                    'message' => $message,
+                    'poster_locked' => isset($lockResult['success']) ? $lockResult['success'] : false,
+                    'lock_message' => isset($lockResult['message']) ? $lockResult['message'] : '',
+                    'lock_error' => isset($lockResult['error']) ? $lockResult['error'] : '',
+                    'label_removal' => isset($labelResult['success']) ? $labelResult['success'] : false,
+                    'label_message' => isset($labelResult['message']) ? $labelResult['message'] : '',
+                    'label_error' => isset($labelResult['error']) ? $labelResult['error'] : ''
+                ]);
             } else {
                 // All methods failed
                 logDebug("All collection poster upload methods failed", [
@@ -579,6 +755,21 @@ try {
             try {
                 // Use makeApiRequest for the upload
                 $response = makeApiRequest($uploadUrl, $headers, 'POST', $imageData, false);
+                $uploadSuccess = true;
+
+                // Now try to lock the poster
+                $lockResult = [
+                    'success' => false,
+                    'attempted' => false
+                ];
+
+                logDebug("Attempting to lock poster", [
+                    'ratingKey' => $ratingKey,
+                    'mediaType' => $mediaType
+                ]);
+
+                $lockResult = lockPosterInPlex($ratingKey, $mediaType);
+                $lockResult['attempted'] = true;
 
                 // Check if we should attempt to remove overlay label
                 $labelResult = [
@@ -592,24 +783,40 @@ try {
                     $labelResult['attempted'] = true;
                 }
 
-                // Return result with label removal info if attempted
-                if ($labelResult['attempted']) {
-                    echo json_encode([
-                        'success' => true,
-                        'message' => 'Poster successfully sent to Plex. ' .
-                            ($labelResult['success'] ? 'Overlay label was also removed.' : 'However, failed to remove Overlay label: ' .
-                                (isset($labelResult['error']) ? $labelResult['error'] : 'Unknown error')),
-                        'label_removal' => $labelResult['success'],
-                        'label_message' => isset($labelResult['message']) ? $labelResult['message'] : '',
-                        'label_error' => isset($labelResult['error']) ? $labelResult['error'] : ''
-                    ]);
-                } else {
-                    // Return success response without label information
-                    echo json_encode([
-                        'success' => true,
-                        'message' => 'Poster successfully sent to Plex'
-                    ]);
+                // Prepare response message
+                $message = 'Poster successfully sent to Plex.';
+
+                // Add lock status to the message
+                if ($lockResult['attempted']) {
+                    if ($lockResult['success']) {
+                        $message .= ' Poster was locked.';
+                    } else {
+                        $message .= ' However, failed to lock poster: ' .
+                            (isset($lockResult['error']) ? $lockResult['error'] : 'Unknown error');
+                    }
                 }
+
+                // Add label removal status to the message
+                if ($labelResult['attempted']) {
+                    if ($labelResult['success']) {
+                        $message .= ' Overlay label was also removed.';
+                    } else {
+                        $message .= ' However, failed to remove Overlay label: ' .
+                            (isset($labelResult['error']) ? $labelResult['error'] : 'Unknown error');
+                    }
+                }
+
+                // Return result with lock and label removal info
+                echo json_encode([
+                    'success' => true,
+                    'message' => $message,
+                    'poster_locked' => isset($lockResult['success']) ? $lockResult['success'] : false,
+                    'lock_message' => isset($lockResult['message']) ? $lockResult['message'] : '',
+                    'lock_error' => isset($lockResult['error']) ? $lockResult['error'] : '',
+                    'label_removal' => isset($labelResult['success']) ? $labelResult['success'] : false,
+                    'label_message' => isset($labelResult['message']) ? $labelResult['message'] : '',
+                    'label_error' => isset($labelResult['error']) ? $labelResult['error'] : ''
+                ]);
 
             } catch (Exception $e) {
                 echo json_encode(['success' => false, 'error' => 'Error uploading to Plex: ' . $e->getMessage()]);

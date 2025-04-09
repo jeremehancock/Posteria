@@ -374,7 +374,99 @@ try {
         }
     }
 
-    // Helper function to send updated poster to Plex
+    // Function to lock a poster in Plex after uploading
+    function lockPosterInPlex($ratingKey, $mediaType)
+    {
+        global $plex_config;
+
+        try {
+            logDebug("Attempting to lock poster for item: $ratingKey ($mediaType)");
+
+            // Map media type to Plex type parameter
+            $typeMap = [
+                'movie' => 1,
+                'show' => 2,
+                'season' => 3,
+                'collection' => 18
+            ];
+
+            if (!isset($typeMap[$mediaType])) {
+                logDebug("Unsupported media type for locking: $mediaType");
+                return [
+                    'success' => false,
+                    'error' => "Unsupported media type for locking: $mediaType"
+                ];
+            }
+
+            $type = $typeMap[$mediaType];
+
+            // First, get the library section ID for this item
+            $plexServerUrl = rtrim($plex_config['server_url'], '/');
+            $metadataUrl = "{$plexServerUrl}/library/metadata/{$ratingKey}";
+
+            $headers = getPlexHeaders($plex_config['token']);
+            $response = makeApiRequest($metadataUrl, $headers);
+
+            if ($response === false) {
+                logDebug("Failed to retrieve metadata for item: $ratingKey");
+                return [
+                    'success' => false,
+                    'error' => "Failed to retrieve metadata for item: $ratingKey"
+                ];
+            }
+
+            // Parse the XML response to extract the librarySectionID
+            $xml = simplexml_load_string($response);
+            if (!$xml || !isset($xml->Video) && !isset($xml->Directory)) {
+                logDebug("Invalid metadata response format for item: $ratingKey");
+                return [
+                    'success' => false,
+                    'error' => "Invalid metadata response format for item: $ratingKey"
+                ];
+            }
+
+            // Get the first metadata item (Video for movies, Directory for shows/collections)
+            $metadataItem = isset($xml->Video) ? $xml->Video[0] : $xml->Directory[0];
+            $librarySectionID = (string) $metadataItem['librarySectionID'];
+
+            if (empty($librarySectionID)) {
+                logDebug("Could not determine library section ID for item: $ratingKey");
+                return [
+                    'success' => false,
+                    'error' => "Could not determine library section ID for item: $ratingKey"
+                ];
+            }
+
+            // Construct the URL to lock the poster (using the same id as ratingKey)
+            $lockUrl = "{$plexServerUrl}/library/sections/{$librarySectionID}/all?type={$type}&id={$ratingKey}&thumb.locked=1";
+            logDebug("Locking poster with URL: $lockUrl");
+
+            // Make the lock request
+            $response = makeApiRequest($lockUrl, $headers, 'PUT');
+
+            if ($response !== false) {
+                logDebug("Successfully locked poster for item: $ratingKey");
+                return [
+                    'success' => true,
+                    'message' => "Poster locked successfully"
+                ];
+            } else {
+                logDebug("Failed to lock poster for item: $ratingKey");
+                return [
+                    'success' => false,
+                    'error' => "Failed to lock poster for item: $ratingKey"
+                ];
+            }
+        } catch (Exception $e) {
+            logDebug("Exception while locking poster: " . $e->getMessage());
+            return [
+                'success' => false,
+                'error' => "Error locking poster: " . $e->getMessage()
+            ];
+        }
+    }
+
+    // Update the sendToPlex function to include locking functionality
     function sendToPlex($filename, $directory)
     {
         global $plex_config, $directories;
@@ -476,6 +568,18 @@ try {
                 }
             }
 
+            // If poster upload was successful, try to lock the poster
+            $lockResult = [
+                'success' => false,
+                'attempted' => false
+            ];
+
+            if ($uploadResult['success']) {
+                logDebug("Attempting to lock poster for item: $ratingKey ($mediaType)");
+                $lockResult = lockPosterInPlex($ratingKey, $mediaType);
+                $lockResult['attempted'] = true;
+            }
+
             // If poster upload was successful and remove_overlay_label is enabled, try to remove the Overlay label
             $labelResult = [
                 'success' => false,
@@ -491,6 +595,21 @@ try {
             // Return combined result
             $result = $uploadResult;
 
+            // Add lock info if attempted
+            if ($lockResult['attempted']) {
+                $result['poster_locked'] = $lockResult['success'];
+                $result['lock_message'] = isset($lockResult['message']) ? $lockResult['message'] : '';
+                $result['lock_error'] = isset($lockResult['error']) ? $lockResult['error'] : '';
+
+                // Append lock status to the message
+                if ($lockResult['success']) {
+                    $result['message'] .= ". Poster was also locked.";
+                } else {
+                    $result['message'] .= ". However, failed to lock poster: " .
+                        (isset($lockResult['error']) ? $lockResult['error'] : 'Unknown error');
+                }
+            }
+
             // Add label removal info if attempted
             if ($labelResult['attempted']) {
                 $result['label_removal'] = $labelResult['success'];
@@ -499,9 +618,9 @@ try {
 
                 // Append label removal status to the message
                 if ($labelResult['success']) {
-                    $result['message'] .= ". Overlay label was also removed.";
+                    $result['message'] .= " Overlay label was also removed.";
                 } else {
-                    $result['message'] .= ". However, failed to remove Overlay label: " .
+                    $result['message'] .= " However, failed to remove Overlay label: " .
                         (isset($labelResult['error']) ? $labelResult['error'] : 'Unknown error');
                 }
             }
