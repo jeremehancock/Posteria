@@ -2771,6 +2771,203 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				height: 30px;
 			}
 		}
+
+		.poster-wall-button {
+			background: transparent;
+			border: none;
+			poster-wall cursor: pointer;
+			padding: 8px;
+			margin-right: -11px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			border-radius: 50%;
+			transition: all 0.2s ease;
+		}
+
+		.poster-wall-button:hover {
+			background-color: rgba(229, 160, 13, 0.1);
+			transform: scale(1.1);
+		}
+
+		.poster-wall-button svg {
+			width: 30px;
+			height: 30px;
+			fill: none;
+			stroke: var(--accent-primary);
+			filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.3));
+		}
+
+		@media (max-width: 768px) {
+			.poster-wall-button {
+				padding: 6px;
+			}
+
+			.poster-wall-button svg {
+				width: 28px;
+				height: 28px;
+			}
+		}
+
+		@media (max-width: 480px) {
+			.poster-wall-button {
+				padding: 5px;
+			}
+
+			.poster-wall-button svg {
+				width: 26px;
+				height: 26px;
+			}
+		}
+
+		.sort-by-date-button {
+			background: transparent;
+			border: none;
+			cursor: pointer;
+			padding: 8px;
+			margin-right: 8px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			border-radius: 50%;
+			transition: all 0.2s ease;
+		}
+
+		.sort-by-date-button:hover {
+			background-color: rgba(229, 160, 13, 0.1);
+			transform: scale(1.1);
+		}
+
+		.sort-by-date-button svg {
+			width: 30px;
+			height: 30px;
+			fill: var(--text-secondary);
+			filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.3));
+		}
+
+		.sort-by-date-button.active svg {
+			fill: var(--accent-primary);
+		}
+
+		@media (max-width: 768px) {
+			.sort-by-date-button {
+				padding: 6px;
+			}
+
+			.sort-by-date-button svg {
+				width: 28px;
+				height: 28px;
+			}
+		}
+
+		@media (max-width: 480px) {
+			.sort-by-date-button {
+				padding: 5px;
+			}
+
+			.sort-by-date-button svg {
+				width: 26px;
+				height: 26px;
+			}
+		}
+
+		.support-button {
+			background: transparent;
+			border: none;
+			cursor: pointer;
+			padding: 8px;
+			margin-right: -10px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			border-radius: 50%;
+			transition: all 0.2s ease;
+		}
+
+		.support-button:hover {
+			background-color: rgba(231, 76, 60, 0.1);
+			transform: scale(1.1);
+		}
+
+		.support-button svg {
+			width: 30px;
+			height: 30px;
+			filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.3));
+		}
+
+		@media (max-width: 768px) {
+			.support-button {
+				padding: 6px;
+			}
+
+			.support-button svg {
+				width: 28px;
+				height: 28px;
+			}
+		}
+
+		@media (max-width: 480px) {
+			.support-button {
+				padding: 5px;
+			}
+
+			.support-button svg {
+				width: 26px;
+				height: 26px;
+			}
+		}
+
+		/* Support modal specific styles */
+		.support-content {
+			text-align: center;
+		}
+
+		.donate-section {
+			margin: 20px 0;
+			padding: 20px;
+			background: rgba(229, 160, 13, 0.1);
+			border-radius: 12px;
+			border: 1px solid var(--accent-primary);
+		}
+
+		.reset-button {
+			display: inline-flex;
+			align-items: center;
+			gap: 8px;
+			padding: 12px;
+			border-radius: 8px;
+			cursor: pointer;
+			font-weight: 600;
+			transition: all 0.2s;
+			text-decoration: none;
+			border: none;
+			height: 44px;
+			box-sizing: border-box;
+			background: #8B0000;
+			color: var(--text-primary);
+			border: 1px solid #a83232;
+		}
+
+		.reset-button:hover {
+			background: #a31c1c;
+			transform: translateY(-2px);
+			box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+			border-color: #c73e3e;
+		}
+
+		@media (max-width: 768px) {
+			.reset-button {
+				height: 40px;
+				padding: 10px;
+			}
+		}
+
+		@media (max-width: 480px) {
+			.reset-button {
+				height: 38px;
+				padding: 8px;
+			}
+		}
 	</style>
 	<script>
 		// This small snippet of CSS will prevent the button flash
@@ -3046,8 +3243,51 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 						<span class="site-title"><?php echo htmlspecialchars($site_title); ?></span>
 					</h1>
 				</a>
-				<?php if (isLoggedIn()): ?>
+
 				<div class="auth-actions">
+
+					<div>
+						<button id="showSupportModal" class="support-button tooltip-trigger"
+							data-tooltip="Support Development">
+							<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#e74c3c" width="24"
+								height="24">
+								<path
+									d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z">
+								</path>
+							</svg>
+						</button>
+					</div>
+					<div>
+						<a href="./poster-wall" class="poster-wall-button tooltip-trigger" data-tooltip="Poster Wall"
+							target="_blank">
+							<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+								fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+								stroke-linejoin="round">
+								<rect x="3" y="3" width="7" height="9"></rect>
+								<rect x="14" y="3" width="7" height="5"></rect>
+								<rect x="14" y="12" width="7" height="9"></rect>
+								<rect x="3" y="16" width="7" height="5"></rect>
+							</svg>
+						</a>
+					</div>
+					<div>
+						<button id="sortByDateButton" class="sort-by-date-button tooltip-trigger"
+							data-tooltip="Toggle Sort by Date">
+							<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52"
+								enable-background="new 0 0 52 52" xml:space="preserve">
+								<path
+									d="M43.6,6.8h-4V5.2c0-1.8-1.4-3.2-3.2-3.2c-1.8,0-3.2,1.4-3.2,3.2v1.6H18.8V5.2c0-1.8-1.4-3.2-3.2-3.2 s-3.2,1.4-3.2,3.2v1.6h-4c-2.6,0-4.8,2.2-4.8,4.8v1.6c0,0.9,0.7,1.6,1.6,1.6h41.6c0.9,0,1.6-0.7,1.6-1.6v-1.6 C48.4,9,46.2,6.8,43.6,6.8z">
+								</path>
+								<path
+									d="M46.8,19.6H5.2c-0.9,0-1.6,0.7-1.6,1.6v24c0,2.6,2.2,4.8,4.8,4.8h35.2c2.6,0,4.8-2.2,4.8-4.8v-24 C48.4,20.3,47.7,19.6,46.8,19.6z M26,46.7c-6.6,0-11.9-5.4-11.9-11.9c0-6.6,5.4-11.9,11.9-11.9s11.9,5.4,11.9,11.9 C37.9,41.4,32.6,46.7,26,46.7z">
+								</path>
+								<path
+									d="M27.2,34.3v-5.1c0-0.4-0.4-0.8-0.8-0.8h-0.8c-0.4,0-0.8,0.4-0.8,0.8v5.6c0,0.3,0.1,0.6,0.4,0.8l3.8,3.8 c0.3,0.3,0.8,0.3,1.1,0l0.6-0.6c0.3-0.3,0.3-0.8,0-1.1L27.2,34.3z">
+								</path>
+							</svg>
+						</button>
+					</div>
+					<?php if (isLoggedIn()): ?>
 					<?php if ((!empty($plex_config['token']) && !empty($plex_config['server_url']))): ?>
 					<div>
 						<button class="upload-trigger-button" id="showPlexImportModal" title="Import Posters from Plex">
@@ -3086,6 +3326,19 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 						</button>
 					</div>
 					<?php endif; ?>
+					<?php endif; ?>
+
+					<?php if (count($allImages) > 0): ?>
+					<div>
+						<button id="showResetModal" class="reset-button tooltip-trigger" data-tooltip="Reset Posteria">
+							<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
+								fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+								stroke-linejoin="round">
+								<path d="M3 2v6h6"></path>
+								<path d="M3 13a9 9 0 1 0 3-7.7L3 8"></path>
+							</svg>
+						</button>
+					</div>
 					<?php endif; ?>
 					<a href="?action=logout" class="logout-button" title="Logout">
 						<svg class="logout-icon" xmlns="http://www.w3.org/2000/svg" viewBox="-2 -2 28 28" fill="none"
@@ -8406,115 +8659,10 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 	<!-- Add support button to header -->
 	<script>
 		document.addEventListener('DOMContentLoaded', function () {
-			// Create the support button
-			const supportButton = document.createElement('button');
-			supportButton.id = 'showSupportModal';
-			supportButton.className = 'support-button';
-			supportButton.setAttribute('title', 'Support Development');
-			supportButton.innerHTML = `
-			<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#e74c3c" width="24" height="24">
-				<path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-			</svg>
-		`;
 
-			// Create style for the support button
-			const style = document.createElement('style');
-			style.textContent = `
-			.support-button {
-				background: transparent;
-				border: none;
-				cursor: pointer;
-				padding: 8px;
-				margin-right: -10px;
-				display: flex;
-				align-items: center;
-				justify-content: center;
-				border-radius: 50%;
-				transition: all 0.2s ease;
-			}
-			
-			.support-button:hover {
-				background-color: rgba(231, 76, 60, 0.1);
-				transform: scale(1.1);
-			}
-			
-			.support-button svg {
-				width: 30px;
-				height: 30px;
-				filter: drop-shadow(0 1px 3px rgba(0,0,0,0.3));
-			}
-			
-			@media (max-width: 768px) {
-				.support-button {
-					padding: 6px;
-				}
-				
-				.support-button svg {
-					width: 28px;
-					height: 28px;
-				}
-			}
-			
-			@media (max-width: 480px) {
-				.support-button {
-					padding: 5px;
-				}
-				
-				.support-button svg {
-					width: 26px;
-					height: 26px;
-				}
-			}
-			
-			/* Support modal specific styles */
-			.support-content {
-				text-align: center;
-			}
-			
-			.donate-section {
-				margin: 20px 0;
-				padding: 20px;
-				background: rgba(229, 160, 13, 0.1);
-				border-radius: 12px;
-				border: 1px solid var(--accent-primary);
-			}
-		`;
-			document.head.appendChild(style);
-
-			// First check if user is logged in by looking for logout button
-			const isLoggedIn = document.querySelector('.logout-button') !== null;
-
-			if (isLoggedIn) {
-				// For logged in users, add to auth-actions div
-				const authActions = document.querySelector('.auth-actions');
-				if (authActions) {
-					// Insert as first element of auth-actions
-					authActions.insertBefore(supportButton, authActions.firstChild);
-				}
-			} else {
-				// For non-logged in users, find the login button
-				const loginButton = document.getElementById('showLoginModal');
-				if (loginButton) {
-					// Create a container for both buttons that will go in the original position of the login button
-					const buttonContainer = document.createElement('div');
-					buttonContainer.className = 'header-buttons';
-					buttonContainer.style.display = 'flex';
-					buttonContainer.style.alignItems = 'center';
-					buttonContainer.style.gap = '8px';
-
-					// Add the support button first, then the login button
-					buttonContainer.appendChild(supportButton);
-
-					// Replace the login button with our container
-					const parent = loginButton.parentNode;
-					parent.replaceChild(buttonContainer, loginButton);
-
-					// Now add the login button to our container
-					buttonContainer.appendChild(loginButton);
-				}
-			}
 
 			// Add event listeners for the modal
+			const supportButton = document.getElementById('showSupportModal');
 			const supportModal = document.getElementById('supportModal');
 			const closeSupportButton = supportModal?.querySelector('.modal-close-btn');
 
@@ -8875,78 +9023,6 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 
 	<script>
 		document.addEventListener('DOMContentLoaded', function () {
-			// Create the reset button
-			const resetButton = document.createElement('button');
-			resetButton.id = 'showResetModal';
-			resetButton.className = 'reset-button';
-			resetButton.setAttribute('title', 'Reset Posteria');
-			resetButton.innerHTML = `
-		<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-			<path d="M3 2v6h6"></path>
-			<path d="M3 13a9 9 0 1 0 3-7.7L3 8"></path>
-		</svg>
-	`;
-
-			// Create style for the reset button
-			const style = document.createElement('style');
-			style.textContent = `
-		.reset-button {
-			display: inline-flex;
-			align-items: center;
-			gap: 8px;
-			padding: 12px;
-			border-radius: 8px;
-			cursor: pointer;
-			font-weight: 600;
-			transition: all 0.2s;
-			text-decoration: none;
-			border: none;
-			height: 44px;
-			box-sizing: border-box;
-			background: #8B0000;
-			color: var(--text-primary);
-			border: 1px solid #a83232;
-		}
-		
-		.reset-button:hover {
-			background: #a31c1c;
-			transform: translateY(-2px);
-			box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-			border-color: #c73e3e;
-		}
-		
-		@media (max-width: 768px) {
-			.reset-button {
-				height: 40px;
-				padding: 10px;
-			}
-		}
-		
-		@media (max-width: 480px) {
-			.reset-button {
-				height: 38px;
-				padding: 8px;
-			}
-		}
-	`;
-			document.head.appendChild(style);
-
-			// Check if user is logged in by looking for logout button
-			const isLoggedIn = document.querySelector('.logout-button') !== null;
-
-
-			if (isLoggedIn) {
-				// Add the reset button before the logout button
-				const authActions = document.querySelector('.auth-actions');
-				if (authActions) {
-					// Get the logout button
-					const logoutButton = document.querySelector('.logout-button');
-					if (logoutButton) {
-						// Insert the reset button before the logout button
-						authActions.insertBefore(resetButton, logoutButton);
-					}
-				}
-			}
 
 			// Get the modal elements
 			const resetModal = document.getElementById('resetModal');
@@ -9451,108 +9527,6 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 	</script>
 
 	<script>
-		document.addEventListener('DOMContentLoaded', function () {
-			// Create the Poster Wall button
-			const posterWallButton = document.createElement('button');
-			posterWallButton.id = 'posterWallButton';
-			posterWallButton.className = 'poster-wall-button';
-			posterWallButton.setAttribute('title', 'Poster Wall');
-			posterWallButton.innerHTML = `
-		<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-			<rect x="3" y="3" width="7" height="9"></rect>
-			<rect x="14" y="3" width="7" height="5"></rect>
-			<rect x="14" y="12" width="7" height="9"></rect>
-			<rect x="3" y="16" width="7" height="5"></rect>
-		</svg>
-	`;
-
-			// Add CSS for the Poster Wall button
-			const style = document.createElement('style');
-			style.textContent = `
-		.poster-wall-button {
-			background: transparent;
-			border: none;
-			cursor: pointer;
-			padding: 8px;
-			margin-right: -11px;
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			border-radius: 50%;
-			transition: all 0.2s ease;
-		}
-		
-		.poster-wall-button:hover {
-			background-color: rgba(229, 160, 13, 0.1);
-			transform: scale(1.1);
-		}
-		
-		.poster-wall-button svg {
-			width: 30px;
-			height: 30px;
-			fill: none;
-			stroke: var(--accent-primary);
-			filter: drop-shadow(0 1px 3px rgba(0,0,0,0.3));
-		}
-		
-		@media (max-width: 768px) {
-			.poster-wall-button {
-				padding: 6px;
-			}
-			
-			.poster-wall-button svg {
-				width: 28px;
-				height: 28px;
-			}
-		}
-		
-		@media (max-width: 480px) {
-			.poster-wall-button {
-				padding: 5px;
-			}
-			
-			.poster-wall-button svg {
-				width: 26px;
-				height: 26px;
-			}
-		}
-	`;
-			document.head.appendChild(style);
-
-			// Check if user is logged in by looking for the logout button
-			const isLoggedIn = document.querySelector('.logout-button') !== null;
-
-			// Find the support button to position our new button next to it
-			setTimeout(() => {
-				// For logged in users - look for support button in auth-actions
-				if (isLoggedIn) {
-					const supportButton = document.querySelector('.support-button');
-					if (supportButton) {
-						// Insert after support button
-						supportButton.insertAdjacentElement('afterend', posterWallButton);
-					} else {
-						// Fallback - add to auth-actions if support button not found
-						const authActions = document.querySelector('.auth-actions');
-						if (authActions) {
-							authActions.insertBefore(posterWallButton, authActions.firstChild);
-						}
-					}
-				} else {
-					// For non-logged in users - add to the button container that has login button
-					const supportButton = document.querySelector('.support-button');
-					if (supportButton && supportButton.parentNode) {
-						supportButton.parentNode.insertBefore(posterWallButton, supportButton.nextSibling);
-					}
-				}
-
-				// Add click handler to open poster wall in new tab
-				posterWallButton.addEventListener('click', function () {
-					window.open('./poster-wall', '_blank');
-				});
-			}, 300); // Short delay to ensure support button is created first
-		});
-	</script>
-	<script>
 		document.addEventListener("DOMContentLoaded", function () {
 			const lazyImages = document.querySelectorAll("img.lazy");
 
@@ -9576,11 +9550,6 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 	</script>
 	<script>
 		document.addEventListener('DOMContentLoaded', function () {
-			// Create the Sort by Date button
-			const sortByDateButton = document.createElement('button');
-			sortByDateButton.id = 'sortByDateButton';
-			sortByDateButton.className = 'sort-by-date-button';
-			sortByDateButton.setAttribute('title', 'Toggle Sort by Date');
 
 			// Check current sorting state
 			const urlParams = new URLSearchParams(window.location.search);
@@ -9593,105 +9562,24 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				isSortByDate = urlParams.get('sort_by_date') === 'true';
 			} else {
 				isSortByDate = phpSortByDateAdded;
-			}
-
-			// Set icon with new calendar icon
-			sortByDateButton.innerHTML = `
-		<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" enable-background="new 0 0 52 52" xml:space="preserve">
-			<path d="M43.6,6.8h-4V5.2c0-1.8-1.4-3.2-3.2-3.2c-1.8,0-3.2,1.4-3.2,3.2v1.6H18.8V5.2c0-1.8-1.4-3.2-3.2-3.2 s-3.2,1.4-3.2,3.2v1.6h-4c-2.6,0-4.8,2.2-4.8,4.8v1.6c0,0.9,0.7,1.6,1.6,1.6h41.6c0.9,0,1.6-0.7,1.6-1.6v-1.6 C48.4,9,46.2,6.8,43.6,6.8z"></path>
-			<path d="M46.8,19.6H5.2c-0.9,0-1.6,0.7-1.6,1.6v24c0,2.6,2.2,4.8,4.8,4.8h35.2c2.6,0,4.8-2.2,4.8-4.8v-24 C48.4,20.3,47.7,19.6,46.8,19.6z M26,46.7c-6.6,0-11.9-5.4-11.9-11.9c0-6.6,5.4-11.9,11.9-11.9s11.9,5.4,11.9,11.9 C37.9,41.4,32.6,46.7,26,46.7z"></path>
-			<path d="M27.2,34.3v-5.1c0-0.4-0.4-0.8-0.8-0.8h-0.8c-0.4,0-0.8,0.4-0.8,0.8v5.6c0,0.3,0.1,0.6,0.4,0.8l3.8,3.8 c0.3,0.3,0.8,0.3,1.1,0l0.6-0.6c0.3-0.3,0.3-0.8,0-1.1L27.2,34.3z"></path>
-		</svg>
-	`;
+			};
 
 			// Add active class if sorting by date
 			if (isSortByDate) {
 				sortByDateButton.classList.add('active');
-			}
+			};
 
-			// Add CSS for the Sort by Date button
-			const style = document.createElement('style');
-			style.textContent = `
-		.sort-by-date-button {
-			background: transparent;
-			border: none;
-			cursor: pointer;
-			padding: 8px;
-			margin-right: 8px;
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			border-radius: 50%;
-			transition: all 0.2s ease;
-		}
-		
-		.sort-by-date-button:hover {
-			background-color: rgba(229, 160, 13, 0.1);
-			transform: scale(1.1);
-		}
-		
-		.sort-by-date-button svg {
-			width: 30px;
-			height: 30px;
-			fill: var(--text-secondary);
-			filter: drop-shadow(0 1px 3px rgba(0,0,0,0.3));
-		}
-		
-		.sort-by-date-button.active svg {
-			fill: var(--accent-primary);
-		}
-		
-		@media (max-width: 768px) {
-			.sort-by-date-button {
-				padding: 6px;
-			}
-			
-			.sort-by-date-button svg {
-				width: 28px;
-				height: 28px;
-			}
-		}
-		
-		@media (max-width: 480px) {
-			.sort-by-date-button {
-				padding: 5px;
-			}
-			
-			.sort-by-date-button svg {
-				width: 26px;
-				height: 26px;
-			}
-		}
-	`;
-			document.head.appendChild(style);
+			sortByDateButton.addEventListener('click', function () {
+				const url = new URL(window.location.href);
+				const params = new URLSearchParams(url.search);
 
-			// Find the poster wall button after a short delay to ensure it exists
-			setTimeout(() => {
-				const posterWallButton = document.getElementById('posterWallButton');
-				if (posterWallButton) {
-					// Insert after poster wall button
-					posterWallButton.insertAdjacentElement('afterend', sortByDateButton);
-				} else {
-					// Fallback - add to auth-actions if poster wall button not found
-					const authActions = document.querySelector('.auth-actions');
-					if (authActions) {
-						authActions.insertBefore(sortByDateButton, authActions.firstChild);
-					}
-				}
+				// Toggle the parameter to the opposite of current state
+				params.set('sort_by_date', (!isSortByDate).toString());
 
-				// Add click handler to toggle sort_by_date parameter
-				sortByDateButton.addEventListener('click', function () {
-					const url = new URL(window.location.href);
-					const params = new URLSearchParams(url.search);
-
-					// Toggle the parameter to the opposite of current state
-					params.set('sort_by_date', (!isSortByDate).toString());
-
-					// Update URL and reload page
-					url.search = params.toString();
-					window.location.href = url.toString();
-				});
-			}, 400); // Slightly longer delay than poster wall button to ensure correct order
+				// Update URL and reload page
+				url.search = params.toString();
+				window.location.href = url.toString();
+			});
 		});
 	</script>
 </body>
