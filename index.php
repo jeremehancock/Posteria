@@ -3033,7 +3033,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 						<input type="hidden" name="action" value="reset_all">
 						<div class="modal-actions">
 							<button type="button" class="modal-button cancel" id="cancelReset">Cancel</button>
-							<button type="submit" class="modal-button delete">Reset All</button>
+							<button type="submit" class="modal-button delete">Reset</button>
 						</div>
 					</form>
 				</div>
