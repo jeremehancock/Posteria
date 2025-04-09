@@ -3052,7 +3052,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 					data-filename="" data-dirname=""></p>
 
 				<div class="plex-info"
-					style="margin: 0 24px 10px; padding: 10px; background: rgba(46, 213, 115, 0.1); border: 1px solid var(--accent-primary); border-radius: 6px;">
+					style="margin: 0 24px 10px; padding: 10px; background: rgba(46, 213, 115, 0.1); border: 1px solid var(--accent-primary); border-radius: 6px; text-align: center;">
 					<span>Poster will be automatically updated in Plex</span>
 				</div>
 
@@ -3506,7 +3506,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 							</div>
 						</div>
 						<div
-							style="margin: 20px 0; padding: 15px; background: rgba(255, 159, 67, 0.1); border: 1px solid var(--accent-primary); border-radius: 6px;">
+							style="margin: 20px 0; padding: 15px; background: rgba(255, 159, 67, 0.1); border: 1px solid var(--accent-primary); border-radius: 6px; text-align: center;">
 							<p style="margin: 0;">This will replace all posters in your selection with the ones from
 								Plex.</p>
 						</div>
