@@ -275,3 +275,16 @@
 ### Fixed
 
 - Enhanced randomization of poster wall
+
+## [1.4.8]
+
+### Added
+
+- Explicit poster locking to help prevent Plex from changing posters that have been updated via Posteria
+- Added Toggle Sort by Date Added button
+
+### Fixed
+
+- Mobile layout issues
+- Flickering of buttons on URL changes
+- Updated lazy loading so changes in Posteria refresh the cache
