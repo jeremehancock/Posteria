@@ -294,3 +294,9 @@
 ### Fixed
 
 - Fixed persmissions issues in the Auto Import
+
+## [1.5.0]
+
+### Added
+
+- Full Screen button for posters
