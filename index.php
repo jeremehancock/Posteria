@@ -6874,554 +6874,606 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 
 	<script>
 		/**
-		 * Enhanced TMDB & Fanart.tv Integration for Posteria
-		 * 
-		 * This script adds support for fetching posters from TMDB for:
-		 * - Movies
-		 * - TV Shows
-		 * - TV Seasons (with automatic season detection)
-		 * - Collections (with multi-poster selection)
-		 * 
-		 * All media types now support multi-poster selection when multiple options are available.
-		 */
+	 * Enhanced TMDB & Fanart.tv Integration for Posteria
+	 * 
+	 * This script adds support for fetching posters from TMDB for:
+	 * - Movies
+	 * - TV Shows
+	 * - TV Seasons (with automatic season detection)
+	 * - Collections (with multi-poster selection)
+	 * 
+	 * All media types now support multi-poster selection when multiple options are available.
+	 */
 
 		document.addEventListener('DOMContentLoaded', function () {
 			// Add our CSS styles
 			const style = document.createElement('style');
 			style.textContent = `
-		.tmdb-search-btn {
-			background: var(--bg-tertiary);
-			border: 1px solid var(--border-color);
-			color: var(--text-primary);
-			cursor: pointer;
-			padding: 12px 16px;
-			border-radius: 8px;
-			transition: all 0.2s;
-			font-weight: 500;
-			display: flex;
-			align-items: center;
-			gap: 8px;
-			margin-top: 15px;
-			width: auto;
-			height: 44px;
-		}
+.tmdb-search-btn {
+	background: var(--bg-tertiary);
+	border: 1px solid var(--border-color);
+	color: var(--text-primary);
+	cursor: pointer;
+	padding: 12px 16px;
+	border-radius: 8px;
+	transition: all 0.2s;
+	font-weight: 500;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 15px;
+	width: auto;
+	height: 44px;
+}
 
-		.tmdb-search-btn:hover {
-			background: #333;
-			transform: translateY(-2px);
-		}
-		
-		.tmdb-search-btn svg {
-			width: 22px;
-			height: 22px;
-		}
-		
-		/* Attribution styling */
-		.tmdb-attribution {
-			margin-top: 10px;
-			font-size: 12px;
-			color: var(--text-secondary);
-		}
-		
-		.tmdb-attribution a {
-			color: var(--accent-primary);
-			text-decoration: none;
-			transition: color 0.2s;
-		}
-		
-		.tmdb-attribution a:hover {
-			color: var(--accent-hover);
-			text-decoration: underline;
-		}
-		
-		/* Form layout with flex */
-		.url-input-container {
-			display: flex;
-			gap: 20px;
-			margin-bottom: 15px;
-		}
-		
-		.url-input-container .upload-input-group {
-			flex: 1;
-		}
-		
-		.url-input-container .login-input {
-			width: 100%;
-		}
-		
-		.tmdb-poster-preview {
-			width: 100px;
-			height: 150px; /* Fixed height based on typical poster ratio */
-			border: 2px solid #E5A00D;
-			border-radius: 8px;
-			overflow: hidden;
-			box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-			flex-shrink: 0;
-			background-color: var(--bg-secondary);
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			margin-bottom: 9px;
-			cursor: pointer; /* Show it's clickable */
-			position: relative; /* For the zoom icon overlay */
-		}
-		
-		.tmdb-poster-preview:after {
-			content: '';
-			position: absolute;
-			top: 0;
-			left: 0;
-			right: 0;
-			bottom: 0;
-			background: rgba(0,0,0,0.6);
-			opacity: 0;
-			transition: opacity 0.2s;
-			display: flex;
-			align-items: center;
-			justify-content: center;
-		}
-		
-		.tmdb-poster-preview:before {
-			content: '';
-			position: absolute;
-			top: 50%;
-			left: 50%;
-			transform: translate(-50%, -50%);
-			z-index: 2;
-			opacity: 0;
-			transition: all 0.2s;
-			background: rgba(229, 160, 13, 0.9);
-			width: 40px;
-			height: 40px;
-			border-radius: 50%;
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			box-shadow: 0 2px 8px rgba(0,0,0,0.5);
-		}
-		
-		/* Add SVG magnifying glass icon */
-		.tmdb-poster-preview:after {
-			content: '';
-			position: absolute;
-			top: 0;
-			left: 0;
-			right: 0;
-			bottom: 0;
-			background: rgba(0,0,0,0.6);
-			opacity: 0;
-			transition: opacity 0.2s;
-		}
-		
-		/* Icon inside the circle */
-		.tmdb-poster-icon {
-			position: absolute;
-			top: 50%;
-			left: 50%;
-			transform: translate(-50%, -50%);
-			width: 24px;
-			height: 24px;
-			z-index: 3;
-			opacity: 0;
-			transition: all 0.2s;
-		}
-		
-		.tmdb-poster-preview:hover:after,
-		.tmdb-poster-preview:hover:before,
-		.tmdb-poster-preview:hover .tmdb-poster-icon {
-			opacity: 1;
-		}
-		
-		.tmdb-poster-preview img {
-			width: 100%;
-			height: 100%;
-			object-fit: cover;
-			display: block;
-		}
-		
-		.tmdb-loading {
-			width: 100px;
-			height: 150px; /* Match the poster height */
-			display: flex;
-			flex-direction: column;
-			align-items: center;
-			justify-content: center;
-			background-color: var(--bg-secondary);
-			border-radius: 8px;
-			border: 1px solid var(--border-color);
-			flex-shrink: 0;
-		}
-		
-		.tmdb-spinner {
-			width: 40px;
-			height: 40px;
-			border: 4px solid rgba(255, 255, 255, 0.1);
-			border-radius: 50%;
-			border-top-color: var(--accent-primary);
-			animation: spin 1s infinite linear;
-			margin-bottom: 15px;
-		}
-		
-		/* Preview Modal */
-		.image-preview-modal {
-			display: none;
-			position: fixed;
-			top: 0;
-			left: 0;
-			width: 100%;
-			height: 100%;
-			background: rgba(0, 0, 0, 0.85);
-			z-index: 1100; /* Higher than other modals */
-			opacity: 0;
-			transition: opacity 0.3s ease;
-			justify-content: center;
-			align-items: center;
-		}
-		
-		.image-preview-modal.show {
-			opacity: 1;
-		}
-		
-		.image-preview-content {
-			position: relative;
-			max-width: 80%;
-			max-height: 80%;
-			border-radius: 8px;
-			overflow: hidden;
-			box-shadow: 0 8px 16px rgba(0,0,0,0.5);
-		}
-		
-		.image-preview-content img {
-			display: block;
-			max-width: 100%;
-			max-height: 80vh;
-			margin: 0 auto;
-		}
-		
-		.image-preview-close {
-			position: absolute;
-			top: 20px;
-			right: 20px;
-			background: var(--bg-secondary);
-			color: var(--text-primary);
-			width: 40px;
-			height: 40px;
-			border-radius: 50%;
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			cursor: pointer;
-			border: none;
-			font-size: 24px;
-			box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-			transition: all 0.2s;
-		}
-		
-		.image-preview-close:hover {
-			background: var(--bg-tertiary);
-			transform: scale(1.1);
-		}
-		
-		
-		/* Multi Poster Modal */
-		.multi-poster-modal {
-			display: none;
-			position: fixed;
-			top: 0;
-			left: 0;
-			width: 100%;
-			height: 100%;
-			background: rgba(0, 0, 0, 0.85);
-			z-index: 2000;
-			opacity: 0;
-			transition: opacity 0.3s ease;
-		}
-		
-		.multi-poster-modal.show {
-			opacity: 1;
-			display: flex;
-			justify-content: center;
-			align-items: center;
-		}
-		
-		.multi-poster-content {
-			background: var(--bg-secondary);
-			border-radius: 12px;
-			width: 90%;
-			max-width: 800px;
-			max-height: 90vh;
-			display: flex;
-			flex-direction: column;
-			box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-			border: 1px solid var(--border-color);
-			overflow: hidden;
-		}
-		
-		.multi-poster-header {
-			display: flex;
-			justify-content: space-between;
-			align-items: center;
-			padding: 16px 24px;
-			border-bottom: 1px solid var(--border-color);
-		}
-		
-		.multi-poster-header h3 {
-			margin: 0;
-			color: var(--text-primary);
-			font-size: 1.25rem;
-		}
-		
-		.multi-poster-close-btn {
-			background: none;
-			border: none;
-			color: var(--text-secondary);
-			font-size: 28px;
-			cursor: pointer;
-			padding: 0;
-			line-height: 1;
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			width: 32px;
-			height: 32px;
-			transition: all 0.2s;
-		}
-		
-		.multi-poster-close-btn:hover {
-			color: var(--text-primary);
-			transform: scale(1.1);
-		}
-		
-		.multi-poster-search-bar {
-			padding: 16px 24px;
-			display: flex;
-			justify-content: space-between;
-			align-items: center;
-			flex-wrap: wrap;
-			gap: 12px;
-			border-bottom: 1px solid var(--border-color);
-		}
-		
-		#posterSearchInput {
-			flex: 1;
-			min-width: 200px;
-			padding: 10px 16px;
-			border-radius: 6px;
-			border: 1px solid var(--border-color);
-			background: var(--bg-tertiary);
-			color: var(--text-primary);
-			font-size: 14px;
-		}
-		
-		#posterSearchInput:focus {
-			outline: none;
-			border-color: var(--accent-primary);
-		}
-		
-		.poster-count {
-			color: var(--text-secondary);
-			font-size: 14px;
-		}
-		
-		.poster-count span {
-			font-weight: bold;
-			color: var(--accent-primary);
-		}
-		
-		.multi-poster-grid {
-			flex: 1;
-			overflow-y: auto;
-			padding: 24px;
-			display: grid;
-			grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-			gap: 20px;
-			align-content: start;
-			max-height: 60vh;
-			scrollbar-width: thin;
-			scrollbar-color: var(--bg-tertiary) var(--bg-secondary);
-		}
-		
-		.multi-poster-grid::-webkit-scrollbar {
-			width: 8px;
-		}
-		
-		.multi-poster-grid::-webkit-scrollbar-track {
-			background: var(--bg-secondary);
-		}
-		
-		.multi-poster-grid::-webkit-scrollbar-thumb {
-			background-color: var(--bg-tertiary);
-			border-radius: 8px;
-			border: 2px solid var(--bg-secondary);
-		}
-		
-		.multi-poster-grid::-webkit-scrollbar-thumb:hover {
-			background-color: var(--accent-primary);
-		}
-		
-		.poster-item {
-			position: relative;
-			aspect-ratio: 2/3;
-			border-radius: 8px;
-			overflow: hidden;
-			cursor: pointer;
-			transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
-			border: 2px solid transparent;
-			background: var(--bg-tertiary);
-		}
-		
-		.poster-item:hover {
-			transform: translateY(-5px);
-			border-color: var(--accent-primary);
-			box-shadow: 0 8px 16px rgba(0,0,0,0.3);
-		}
-		
-		.poster-item img {
-			width: 100%;
-			height: 100%;
-			object-fit: cover;
-			transition: opacity 0.2s;
-		}
-		
-		.poster-item.loading img {
-			opacity: 0;
-		}
-		
-		.poster-loading {
-			position: absolute;
-			top: 0;
-			left: 0;
-			width: 100%;
-			height: 100%;
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			background: var(--bg-tertiary);
-			z-index: 1;
-		}
-		
-		.poster-spinner {
-			width: 30px;
-			height: 30px;
-			border: 3px solid rgba(229, 160, 13, 0.2);
-			border-top-color: var(--accent-primary);
-			border-radius: 50%;
-			animation: spin 1s infinite linear;
-		}
+.tmdb-search-btn:hover {
+	background: #333;
+	transform: translateY(-2px);
+}
 
-		.no-posters-found {
-			grid-column: 1 / -1;
-			text-align: center;
-			padding: 40px;
-			color: var(--text-secondary);
-		}
-		
-		/* Error states */
-		.tmdb-error-container {
-			width: 100px;
-			height: 150px;
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			border: 2px solid #FF4757;
-			background-color: rgba(33, 33, 33, 0.95);
-			border-radius: 8px;
-			box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
-			flex-shrink: 0;
-			overflow: hidden;
-			position: relative;
-			margin-bottom: 9px;
-		}
-		
-		/* Remove all hover effects */
-		.tmdb-error-container::before,
-		.tmdb-error-container::after,
-		.tmdb-error-container:hover::before,
-		.tmdb-error-container:hover::after {
-			display: none !important;
-		}
-		
-		.error-content {
-			display: flex;
-			flex-direction: column;
-			align-items: center;
-			justify-content: center;
-			text-align: center;
-			color: #FF6B81;
-			height: 100%;
-			width: 100%;
-			padding: 8px;
-		}
-		
-		.error-text {
-			font-weight: bold;
-			margin-top: 8px;
-			font-size: 14px;
-			text-shadow: 0 1px 3px rgba(0,0,0,0.5);
-			color: #FF6B81;
-		}
-		
-		.error-subtext {
-			font-size: 12px;
-			margin-top: 4px;
-			color: #FFC3C3;
-			text-shadow: 0 1px 2px rgba(0,0,0,0.4);
-		}
-		
-		/* Specifically ensure no hover states */
-		.tmdb-error-container .tmdb-poster-icon,
-		.tmdb-error-container:hover .tmdb-poster-icon {
-			display: none !important;
-		}
-		
-		/* Mobile responsiveness */
-		@media (max-width: 768px) {
-			.url-input-container {
-				gap: 10px;
-			}
-			
-			.url-input-container .upload-input-group {
-				flex: 0 1 auto;
-				width: 100%;
-			}
-			
-			.tmdb-poster-preview, .tmdb-loading {
-				flex-shrink: 0;
-			}
-			
-			/* Make the input text smaller on mobile */
-			.url-input-container .login-input {
-				font-size: 14px;
-				padding: 10px;
-			}
-			
-			.image-preview-content {
-				max-width: 90%;
-			}
-		}
-		
-		@media (max-width: 640px) {
-			.multi-poster-grid {
-				grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-				gap: 15px;
-				padding: 15px;
-			}
-			
-			.multi-poster-header,
-			.multi-poster-search-bar {
-				padding: 12px 16px;
-			}
-			
-			.multi-poster-header h3 {
-				font-size: 1.125rem;
-			}
-		}
-		
-		@keyframes spin {
-			0% { transform: rotate(0deg); }
-			100% { transform: rotate(360deg); }
-		}
-	`;
+.tmdb-search-btn svg {
+	width: 22px;
+	height: 22px;
+}
+
+/* Attribution styling */
+.tmdb-attribution {
+	margin-top: 10px;
+	font-size: 12px;
+	color: var(--text-secondary);
+}
+
+.tmdb-attribution a {
+	color: var(--accent-primary);
+	text-decoration: none;
+	transition: color 0.2s;
+}
+
+.tmdb-attribution a:hover {
+	color: var(--accent-hover);
+	text-decoration: underline;
+}
+
+/* Form layout with flex */
+.url-input-container {
+	display: flex;
+	gap: 20px;
+	margin-bottom: 15px;
+}
+
+.url-input-container .upload-input-group {
+	flex: 1;
+}
+
+.url-input-container .login-input {
+	width: 100%;
+}
+
+.tmdb-poster-preview {
+	width: 100px;
+	height: 150px; /* Fixed height based on typical poster ratio */
+	border: 2px solid #E5A00D;
+	border-radius: 8px;
+	overflow: hidden;
+	box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+	flex-shrink: 0;
+	background-color: var(--bg-secondary);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	margin-bottom: 9px;
+	cursor: pointer; /* Show it's clickable */
+	position: relative; /* For the zoom icon overlay */
+}
+
+.tmdb-poster-preview:after {
+	content: '';
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background: rgba(0,0,0,0.6);
+	opacity: 0;
+	transition: opacity 0.2s;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.tmdb-poster-preview:before {
+	content: '';
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+	z-index: 2;
+	opacity: 0;
+	transition: all 0.2s;
+	background: rgba(229, 160, 13, 0.9);
+	width: 40px;
+	height: 40px;
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+}
+
+/* Add SVG magnifying glass icon */
+.tmdb-poster-preview:after {
+	content: '';
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background: rgba(0,0,0,0.6);
+	opacity: 0;
+	transition: opacity 0.2s;
+}
+
+/* Icon inside the circle */
+.tmdb-poster-icon {
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+	width: 24px;
+	height: 24px;
+	z-index: 3;
+	opacity: 0;
+	transition: all 0.2s;
+}
+
+.tmdb-poster-preview:hover:after,
+.tmdb-poster-preview:hover:before,
+.tmdb-poster-preview:hover .tmdb-poster-icon {
+	opacity: 1;
+}
+
+.tmdb-poster-preview img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	display: block;
+}
+
+.tmdb-loading {
+	width: 100px;
+	height: 150px; /* Match the poster height */
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	background-color: var(--bg-secondary);
+	border-radius: 8px;
+	border: 1px solid var(--border-color);
+	flex-shrink: 0;
+}
+
+.tmdb-spinner {
+	width: 40px;
+	height: 40px;
+	border: 4px solid rgba(255, 255, 255, 0.1);
+	border-radius: 50%;
+	border-top-color: var(--accent-primary);
+	animation: spin 1s infinite linear;
+	margin-bottom: 15px;
+}
+
+/* Preview Modal */
+.image-preview-modal {
+	display: none;
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	background: rgba(0, 0, 0, 0.85);
+	z-index: 3000; /* Higher than multi-poster-modal */
+	opacity: 0;
+	transition: opacity 0.3s ease;
+	justify-content: center;
+	align-items: center;
+}
+
+.image-preview-modal.show {
+	opacity: 1;
+}
+
+.image-preview-content {
+	position: relative;
+	max-width: 80%;
+	max-height: 80%;
+	border-radius: 8px;
+	overflow: hidden;
+	box-shadow: 0 8px 16px rgba(0,0,0,0.5);
+}
+
+.image-preview-content img {
+	display: block;
+	max-width: 100%;
+	max-height: 80vh;
+	margin: 0 auto;
+}
+
+.image-preview-close {
+	position: absolute;
+	top: 20px;
+	right: 20px;
+	background: var(--bg-secondary);
+	color: var(--text-primary);
+	width: 40px;
+	height: 40px;
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	border: none;
+	font-size: 24px;
+	box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+	transition: all 0.2s;
+}
+
+.image-preview-close:hover {
+	background: var(--bg-tertiary);
+	transform: scale(1.1);
+}
+
+
+/* Multi Poster Modal */
+.multi-poster-modal {
+	display: none;
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	background: rgba(0, 0, 0, 0.85);
+	z-index: 2000;
+	opacity: 0;
+	transition: opacity 0.3s ease;
+}
+
+.multi-poster-modal.show {
+	opacity: 1;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+}
+
+.multi-poster-content {
+	background: var(--bg-secondary);
+	border-radius: 12px;
+	width: 90%;
+	max-width: 800px;
+	max-height: 90vh;
+	display: flex;
+	flex-direction: column;
+	box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+	border: 1px solid var(--border-color);
+	overflow: hidden;
+}
+
+.multi-poster-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 16px 24px;
+	border-bottom: 1px solid var(--border-color);
+}
+
+.multi-poster-header h3 {
+	margin: 0;
+	color: var(--text-primary);
+	font-size: 1.25rem;
+}
+
+.multi-poster-close-btn {
+	background: none;
+	border: none;
+	color: var(--text-secondary);
+	font-size: 28px;
+	cursor: pointer;
+	padding: 0;
+	line-height: 1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	transition: all 0.2s;
+}
+
+.multi-poster-close-btn:hover {
+	color: var(--text-primary);
+	transform: scale(1.1);
+}
+
+.multi-poster-search-bar {
+	padding: 16px 24px;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 12px;
+	border-bottom: 1px solid var(--border-color);
+}
+
+#posterSearchInput {
+	flex: 1;
+	min-width: 200px;
+	padding: 10px 16px;
+	border-radius: 6px;
+	border: 1px solid var(--border-color);
+	background: var(--bg-tertiary);
+	color: var(--text-primary);
+	font-size: 14px;
+}
+
+#posterSearchInput:focus {
+	outline: none;
+	border-color: var(--accent-primary);
+}
+
+.poster-count {
+	color: var(--text-secondary);
+	font-size: 14px;
+}
+
+.poster-count span {
+	font-weight: bold;
+	color: var(--accent-primary);
+}
+
+.multi-poster-grid {
+	flex: 1;
+	overflow-y: auto;
+	padding: 24px;
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+	gap: 20px;
+	align-content: start;
+	max-height: 60vh;
+	scrollbar-width: thin;
+	scrollbar-color: var(--bg-tertiary) var(--bg-secondary);
+}
+
+.multi-poster-grid::-webkit-scrollbar {
+	width: 8px;
+}
+
+.multi-poster-grid::-webkit-scrollbar-track {
+	background: var(--bg-secondary);
+}
+
+.multi-poster-grid::-webkit-scrollbar-thumb {
+	background-color: var(--bg-tertiary);
+	border-radius: 8px;
+	border: 2px solid var(--bg-secondary);
+}
+
+.multi-poster-grid::-webkit-scrollbar-thumb:hover {
+	background-color: var(--accent-primary);
+}
+
+.poster-item {
+	position: relative;
+	aspect-ratio: 2/3;
+	border-radius: 8px;
+	overflow: hidden;
+	cursor: pointer;
+	transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+	border: 2px solid transparent;
+	background: var(--bg-tertiary);
+}
+
+.poster-item:hover {
+	transform: translateY(-5px);
+	border-color: var(--accent-primary);
+	box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+}
+
+.poster-item img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	transition: opacity 0.2s;
+}
+
+.poster-item.loading img {
+	opacity: 0;
+}
+
+.poster-loading {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: var(--bg-tertiary);
+	z-index: 1;
+}
+
+.poster-spinner {
+	width: 30px;
+	height: 30px;
+	border: 3px solid rgba(229, 160, 13, 0.2);
+	border-top-color: var(--accent-primary);
+	border-radius: 50%;
+	animation: spin 1s infinite linear;
+}
+
+.no-posters-found {
+	grid-column: 1 / -1;
+	text-align: center;
+	padding: 40px;
+	color: var(--text-secondary);
+}
+
+/* Error states */
+.tmdb-error-container {
+	width: 100px;
+	height: 150px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border: 2px solid #FF4757;
+	background-color: rgba(33, 33, 33, 0.95);
+	border-radius: 8px;
+	box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+	flex-shrink: 0;
+	overflow: hidden;
+	position: relative;
+	margin-bottom: 9px;
+}
+
+/* Remove all hover effects */
+.tmdb-error-container::before,
+.tmdb-error-container::after,
+.tmdb-error-container:hover::before,
+.tmdb-error-container:hover::after {
+	display: none !important;
+}
+
+.error-content {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	text-align: center;
+	color: #FF6B81;
+	height: 100%;
+	width: 100%;
+	padding: 8px;
+}
+
+.error-text {
+	font-weight: bold;
+	margin-top: 8px;
+	font-size: 14px;
+	text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+	color: #FF6B81;
+}
+
+.error-subtext {
+	font-size: 12px;
+	margin-top: 4px;
+	color: #FFC3C3;
+	text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+}
+
+/* Specifically ensure no hover states */
+.tmdb-error-container .tmdb-poster-icon,
+.tmdb-error-container:hover .tmdb-poster-icon {
+	display: none !important;
+}
+
+/* Poster Overlay Buttons */
+.poster-overlay {
+	position: absolute;
+	bottom: 0;
+	left: 0;
+	width: 100%;
+	padding: 8px;
+	background: rgba(0, 0, 0, 0.7);
+	display: flex;
+	justify-content: space-between;
+	opacity: 0;
+	transition: opacity 0.3s ease;
+	z-index: 2;
+}
+
+.poster-item:hover .poster-overlay {
+	opacity: 1;
+}
+
+.poster-btn {
+	border: none;
+	background: var(--accent-primary);
+	color: #000;
+	font-weight: 700;
+	font-size: 12px;
+	padding: 5px 10px;
+	border-radius: 4px;
+	cursor: pointer;
+	transition: all 0.2s;
+	flex: 1;
+	text-align: center;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.poster-btn:first-child {
+	margin-right: 4px;
+}
+
+.poster-btn:hover {
+	background: var(--accent-hover);
+	transform: translateY(-2px);
+}
+
+.poster-btn svg {
+	width: 14px;
+	height: 14px;
+	margin-right: 4px;
+	stroke-width: 2.5;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+	.url-input-container {
+		gap: 10px;
+	}
+	
+	.url-input-container .upload-input-group {
+		flex: 0 1 auto;
+		width: 100%;
+	}
+	
+	.tmdb-poster-preview, .tmdb-loading {
+		flex-shrink: 0;
+	}
+	
+	/* Make the input text smaller on mobile */
+	.url-input-container .login-input {
+		font-size: 14px;
+		padding: 10px;
+	}
+	
+	.image-preview-content {
+		max-width: 90%;
+	}
+}
+
+@media (max-width: 640px) {
+	.multi-poster-grid {
+		grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+		gap: 15px;
+		padding: 15px;
+	}
+	
+	.multi-poster-header,
+	.multi-poster-search-bar {
+		padding: 12px 16px;
+	}
+	
+	.multi-poster-header h3 {
+		font-size: 1.125rem;
+	}
+}
+
+@keyframes spin {
+	0% { transform: rotate(0deg); }
+	100% { transform: rotate(360deg); }
+}
+`;
 			document.head.appendChild(style);
 
 			// Handle manual URL input
@@ -7571,12 +7623,12 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				searchButton.type = 'button'; // Prevent form submission
 				searchButton.className = 'tmdb-search-btn';
 				searchButton.innerHTML = `
-			<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-				<circle cx="11" cy="11" r="8"></circle>
-				<line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-			</svg>
-			Find Posters
-		`;
+	<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+		<circle cx="11" cy="11" r="8"></circle>
+		<line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+	</svg>
+	Find Posters
+`;
 
 				// Store the season number as data attribute for TV seasons
 				let seasonNumber = null;
@@ -7589,13 +7641,13 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				const attributionDiv = document.createElement('div');
 				attributionDiv.className = 'tmdb-attribution';
 				attributionDiv.innerHTML = `
-			<span>Powered by: 
-				<a href="https://www.themoviedb.org/" target="_blank" rel="noopener noreferrer">TMDB</a>,
-				<a href="https://www.thetvdb.com/" target="_blank" rel="noopener noreferrer">TVDB</a>,
-				<a href="https://fanart.tv/" target="_blank" rel="noopener noreferrer">Fanart.tv</a> &
-				<a href="https://mediux.pro/" target="_blank" rel="noopener noreferrer">MediUX</a>
-			</span>
-		`;
+	<span>Powered by: 
+		<a href="https://www.themoviedb.org/" target="_blank" rel="noopener noreferrer">TMDB</a>,
+		<a href="https://www.thetvdb.com/" target="_blank" rel="noopener noreferrer">TVDB</a>,
+		<a href="https://fanart.tv/" target="_blank" rel="noopener noreferrer">Fanart.tv</a> &
+		<a href="https://mediux.pro/" target="_blank" rel="noopener noreferrer">MediUX</a>
+	</span>
+`;
 
 				// Add the button after the URL input container
 				const container = urlForm.querySelector('.url-input-container');
@@ -7659,9 +7711,9 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				const icon = document.createElement('div');
 				icon.className = 'tmdb-poster-icon';
 				icon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-			<circle cx="11" cy="11" r="8"></circle>
-			<line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-		</svg>`;
+	<circle cx="11" cy="11" r="8"></circle>
+	<line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+</svg>`;
 
 				// Add image and icon to preview
 				preview.appendChild(img);
@@ -7700,31 +7752,38 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				modal.id = 'imagePreviewModal';
 				modal.className = 'image-preview-modal';
 				modal.innerHTML = `
-			<div class="image-preview-content">
-				<img id="imagePreviewImg" src="" alt="Preview">
-			</div>
-			<button class="image-preview-close">×</button>
-		`;
+	<div class="image-preview-content">
+		<img id="imagePreviewImg" src="" alt="Preview">
+	</div>
+	<button class="image-preview-close">×</button>
+`;
 
 				document.body.appendChild(modal);
 
 				// Close button handler
 				const closeBtn = modal.querySelector('.image-preview-close');
-				closeBtn.addEventListener('click', function () {
+				closeBtn.addEventListener('click', function (e) {
+					e.stopPropagation(); // Prevent event bubbling
 					hideImagePreviewModal();
 				});
 
-				// Click outside to close
+				// Click outside to close but only this modal
 				modal.addEventListener('click', function (e) {
 					if (e.target === modal) {
+						e.stopPropagation(); // Prevent event bubbling to other modals
 						hideImagePreviewModal();
 					}
 				});
 
-				// Escape key to close
+				// Escape key to close only the top-most modal
 				document.addEventListener('keydown', function (e) {
-					if (e.key === 'Escape' && modal.classList.contains('show')) {
-						hideImagePreviewModal();
+					if (e.key === 'Escape') {
+						// Check if image preview is visible
+						const imagePreviewModal = document.getElementById('imagePreviewModal');
+						if (imagePreviewModal && imagePreviewModal.classList.contains('show')) {
+							e.preventDefault(); // Prevent other modals from closing
+							hideImagePreviewModal();
+						}
 					}
 				});
 			}
@@ -7747,7 +7806,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				modal.classList.add('show');
 			}
 
-			// Hide the image preview modal
+			// Hide the image preview modal without affecting the multi-poster modal
 			function hideImagePreviewModal() {
 				const modal = document.getElementById('imagePreviewModal');
 				if (!modal) return;
@@ -7767,20 +7826,20 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 
 				// Create modal HTML
 				const modalHTML = `
-		<div id="multiPosterModal" class="multi-poster-modal">
-			<div class="multi-poster-content">
-				<div class="multi-poster-header">
-					<h3>Select a Poster</h3>
-					<button type="button" class="multi-poster-close-btn">×</button>
-				</div>
-				<div class="multi-poster-search-bar">
-					<input type="text" id="posterSearchInput" placeholder="Filter posters..." style="visibility: hidden;">
-					<div class="poster-count"><span id="posterCount">0</span> posters found</div>
-				</div>
-				<div class="multi-poster-grid" id="posterGrid"></div>
-			</div>
+<div id="multiPosterModal" class="multi-poster-modal">
+	<div class="multi-poster-content">
+		<div class="multi-poster-header">
+			<h3>Select a Poster</h3>
+			<button type="button" class="multi-poster-close-btn">×</button>
 		</div>
-		`;
+		<div class="multi-poster-search-bar">
+			<input type="text" id="posterSearchInput" placeholder="Filter posters..." style="visibility: hidden;">
+			<div class="poster-count"><span id="posterCount">0</span> posters found</div>
+		</div>
+		<div class="multi-poster-grid" id="posterGrid"></div>
+	</div>
+</div>
+`;
 
 				// Add modal to document
 				document.body.insertAdjacentHTML('beforeend', modalHTML);
@@ -7890,8 +7949,42 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 						imgElement.alt = poster.name || 'Poster';
 						posterElement.appendChild(imgElement);
 
-						// Add click event to select poster
-						posterElement.addEventListener('click', function () {
+						// Create the button overlay
+						const overlayElement = document.createElement('div');
+						overlayElement.className = 'poster-overlay';
+
+						// Create the View button
+						const viewButton = document.createElement('button');
+						viewButton.className = 'poster-btn';
+						viewButton.innerHTML = `
+					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+						<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+						<circle cx="12" cy="12" r="3"></circle>
+					</svg>
+					View
+				`;
+
+						// Create the Select button
+						const selectButton = document.createElement('button');
+						selectButton.className = 'poster-btn';
+						selectButton.innerHTML = `
+					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+						<polyline points="20 6 9 17 4 12"></polyline>
+					</svg>
+					Select
+				`;
+
+						// Add buttons to overlay in new order - View first, then Select
+						overlayElement.appendChild(viewButton);
+						overlayElement.appendChild(selectButton);
+
+						// Add overlay to poster element
+						posterElement.appendChild(overlayElement);
+
+						// Add click events for the buttons
+						selectButton.addEventListener('click', function (e) {
+							e.stopPropagation(); // Prevent the poster click event
+
 							// Immediately hide the modal
 							modal.classList.remove('show');
 							modal.style.display = 'none';
@@ -7902,7 +7995,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 								const urlInput = urlForm.querySelector('input[name="image_url"]');
 								if (urlInput) {
 									// Get the poster URL from the dataset
-									const posterUrl = this.dataset.url;
+									const posterUrl = posterElement.dataset.url;
 
 									// Update the input value
 									urlInput.value = posterUrl;
@@ -7922,11 +8015,16 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 									if (container) {
 										// Use the existing function for preview
 										handleManualUrlInput(posterUrl);
-
-										// We no longer add season badges to the preview per request
 									}
 								}
 							}
+						});
+
+						viewButton.addEventListener('click', function (e) {
+							e.stopPropagation(); // Prevent the poster click event
+
+							// Show the image in full screen without closing the multi-poster modal
+							showImagePreviewModal(posterElement.dataset.url);
 						});
 
 						// Set the image source last to ensure the loading spinner shows first
@@ -7938,21 +8036,21 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 						imgElement.onerror = () => {
 							// Show error state if image fails to load
 							loadingElement.innerHTML = `
-						<div style="display: flex; height: 100%; align-items: center; justify-content: center; 
-									color: var(--text-secondary); flex-direction: column; text-align: center; padding: 10px;">
-							<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" 
-								 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-								<circle cx="12" cy="12" r="10"></circle>
-								<line x1="14.31" y1="8" x2="20.05" y2="17.94"></line>
-								<line x1="9.69" y1="8" x2="21.17" y2="8"></line>
-								<line x1="7.38" y1="12" x2="13.12" y2="2.06"></line>
-								<line x1="9.69" y1="16" x2="3.95" y2="6.06"></line>
-								<line x1="14.31" y1="16" x2="2.83" y2="16"></line>
-								<line x1="16.62" y1="12" x2="10.88" y2="21.94"></line>
-							</svg>
-							<small style="margin-top: 8px;">Failed to load</small>
-						</div>
-					`;
+				<div style="display: flex; height: 100%; align-items: center; justify-content: center; 
+							color: var(--text-secondary); flex-direction: column; text-align: center; padding: 10px;">
+					<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" 
+						 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+						<circle cx="12" cy="12" r="10"></circle>
+						<line x1="14.31" y1="8" x2="20.05" y2="17.94"></line>
+						<line x1="9.69" y1="8" x2="21.17" y2="8"></line>
+						<line x1="7.38" y1="12" x2="13.12" y2="2.06"></line>
+						<line x1="9.69" y1="16" x2="3.95" y2="6.06"></line>
+						<line x1="14.31" y1="16" x2="2.83" y2="16"></line>
+						<line x1="16.62" y1="12" x2="10.88" y2="21.94"></line>
+					</svg>
+					<small style="margin-top: 8px;">Failed to load</small>
+				</div>
+			`;
 						};
 
 						// Set image source after setting up handlers
@@ -8039,9 +8137,9 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				const loading = document.createElement('div');
 				loading.className = 'tmdb-loading';
 				loading.innerHTML = `
-				<div class="tmdb-spinner"></div>
-				<div>Searching...</div>
-			`;
+		<div class="tmdb-spinner"></div>
+		<div>Searching...</div>
+	`;
 
 				container.appendChild(loading);
 
@@ -8145,18 +8243,18 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 
 				// Add the error icon SVG with improved styling
 				errorMsg.innerHTML = `
-				<div class="error-content">
-					<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-						<circle cx="12" cy="12" r="10"></circle>
-						<line x1="12" y1="8" x2="12" y2="12"></line>
-						<line x1="12" y1="16" x2="12.01" y2="16"></line>
-					</svg>
-					<div class="error-text">No poster found</div>
-					<div class="error-subtext">${mediaType === 'collection' ? 'Collection' :
+		<div class="error-content">
+			<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+				<circle cx="12" cy="12" r="10"></circle>
+				<line x1="12" y1="8" x2="12" y2="12"></line>
+				<line x1="12" y1="16" x2="12.01" y2="16"></line>
+			</svg>
+			<div class="error-text">No poster found</div>
+			<div class="error-subtext">${mediaType === 'collection' ? 'Collection' :
 						mediaType === 'season' ? 'Season' :
 							mediaType === 'tv' ? 'TV Show' : 'Movie'} not found</div>
-				</div>
-			`;
+		</div>
+	`;
 
 				container.appendChild(errorMsg);
 			}
@@ -8172,16 +8270,16 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				const errorMsg = document.createElement('div');
 				errorMsg.className = 'tmdb-error-container';
 				errorMsg.innerHTML = `
-				<div class="error-content">
-					<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-						<polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon>
-						<line x1="12" y1="8" x2="12" y2="12"></line>
-						<line x1="12" y1="16" x2="12.01" y2="16"></line>
-					</svg>
-					<div class="error-text">Search failed</div>
-					<div class="error-subtext">Connection error</div>
-				</div>
-			`;
+		<div class="error-content">
+			<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+				<polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon>
+				<line x1="12" y1="8" x2="12" y2="12"></line>
+				<line x1="12" y1="16" x2="12.01" y2="16"></line>
+			</svg>
+			<div class="error-text">Search failed</div>
+			<div class="error-subtext">Connection error</div>
+		</div>
+	`;
 				container.appendChild(errorMsg);
 			}
 
