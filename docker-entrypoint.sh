@@ -35,6 +35,14 @@ env | grep -E '^(PLEX_|AUTO_IMPORT_)' >> /var/www/html/data/auto-import-cron.log
 
 # Run the PHP script
 /usr/local/bin/php include/auto-import.php >> /var/www/html/data/auto-import-cron.log 2>&1
+
+# Set ownership of posters directory to www-data recursively
+if [ -d /var/www/html/posters ]; then
+  echo "$(date) - Setting ownership of posters directory to www-data:www-data" >> /var/www/html/data/auto-import-cron.log
+  chown -R www-data:www-data /var/www/html/posters
+else
+  echo "$(date) - WARNING: Posters directory not found!" >> /var/www/html/data/auto-import-cron.log
+fi
 EOL
 
 # Make script executable
