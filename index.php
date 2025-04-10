@@ -1759,6 +1759,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			opacity: 0;
 			transition: opacity 0.3s ease;
 			flex-direction: column;
+			padding-top: 10px;
 		}
 
 		/* Desktop hover behavior */
@@ -7590,9 +7591,9 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				attributionDiv.innerHTML = `
 			<span>Powered by: 
 				<a href="https://www.themoviedb.org/" target="_blank" rel="noopener noreferrer">TMDB</a>,
-				<a href="https://www.thetvdb.com/" target="_blank" rel="noopener noreferrer">TVDB</a>,
-				<a href="https://fanart.tv/" target="_blank" rel="noopener noreferrer">Fanart.tv</a> &
-				<a href="https://mediux.pro/" target="_blank" rel="noopener noreferrer">MediUX</a>
+				<a href="https://www.thetvdb.com/" target="_blank" rel="noopener noreferrer">TVDB</a> &
+				<a href="https://fanart.tv/" target="_blank" rel="noopener noreferrer">Fanart.tv</a>
+				<!-- <a href="https://mediux.pro/" target="_blank" rel="noopener noreferrer">MediUX</a> -->
 			</span>
 		`;
 
@@ -9589,6 +9590,284 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				// Update URL and reload page
 				url.search = params.toString();
 				window.location.href = url.toString();
+			});
+		});
+	</script>
+
+	<script>
+		document.addEventListener('DOMContentLoaded', function () {
+			// Create the full-screen modal for viewing posters if it doesn't exist yet
+			function createFullScreenModal() {
+				if (document.getElementById('fullScreenModal')) return;
+
+				const modal = document.createElement('div');
+				modal.id = 'fullScreenModal';
+				modal.className = 'fullscreen-modal';
+				modal.innerHTML = `
+			<div class="fullscreen-content">
+				<img id="fullScreenImage" src="" alt="Full Screen Poster">
+			</div>
+			<button class="fullscreen-close">×</button>
+		`;
+
+				// Add CSS for the full-screen modal to match the URL preview style
+				const style = document.createElement('style');
+				style.textContent = `
+			.fullscreen-modal {
+				display: none;
+				position: fixed;
+				top: 0;
+				left: 0;
+				width: 100%;
+				height: 100%;
+				background: rgba(0, 0, 0, 0.85);
+				z-index: 2000;
+				opacity: 0;
+				transition: opacity 0.3s ease;
+				justify-content: center;
+				align-items: center;
+			}
+			
+			.fullscreen-modal.show {
+				opacity: 1;
+			}
+			
+			.fullscreen-content {
+				position: relative;
+				max-width: 80%;
+				max-height: 80%;
+				border-radius: 8px;
+				overflow: hidden;
+				box-shadow: 0 8px 16px rgba(0, 0, 0, 0.5);
+			}
+			
+			#fullScreenImage {
+				display: block;
+				max-width: 100%;
+				max-height: 80vh;
+				margin: 0 auto;
+			}
+			
+			.fullscreen-close {
+				position: absolute;
+				top: 20px;
+				right: 20px;
+				background: var(--bg-secondary);
+				color: var(--text-primary);
+				width: 40px;
+				height: 40px;
+				border-radius: 50%;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				cursor: pointer;
+				border: none;
+				font-size: 24px;
+				box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+				transition: all 0.2s;
+				z-index: 2001;
+			}
+			
+			.fullscreen-close:hover {
+				background: var(--bg-tertiary);
+				transform: scale(1.1);
+			}
+			
+			/* Animation for loading image */
+			@keyframes spin {
+				0% { transform: rotate(0deg); }
+				100% { transform: rotate(360deg); }
+			}
+			
+			/* Loading spinner */
+			.fullscreen-loading {
+				position: absolute;
+				top: 50%;
+				left: 50%;
+				transform: translate(-50%, -50%);
+				width: 50px;
+				height: 50px;
+				border: 4px solid rgba(255, 255, 255, 0.1);
+				border-radius: 50%;
+				border-top-color: var(--accent-primary);
+				animation: spin 1s infinite linear;
+			}
+			
+			/* Responsive adjustments */
+			@media (max-width: 768px) {
+				.fullscreen-content {
+					max-width: 90%;
+				}
+				
+				.fullscreen-close {
+					top: 15px;
+					right: 15px;
+					width: 36px;
+					height: 36px;
+					font-size: 22px;
+				}
+			}
+		`;
+
+				document.head.appendChild(style);
+				document.body.appendChild(modal);
+
+				// Add event listeners for the modal
+				const closeBtn = modal.querySelector('.fullscreen-close');
+				closeBtn.addEventListener('click', hideFullScreenModal);
+
+				// Close on background click
+				modal.addEventListener('click', function (e) {
+					if (e.target === modal) {
+						hideFullScreenModal();
+					}
+				});
+
+				// Close on ESC key press
+				document.addEventListener('keydown', function (e) {
+					if (e.key === 'Escape' && modal.classList.contains('show')) {
+						hideFullScreenModal();
+					}
+				});
+			}
+
+			// Function to show the full-screen modal
+			function showFullScreenModal(imageSrc) {
+				const modal = document.getElementById('fullScreenModal');
+				const img = document.getElementById('fullScreenImage');
+
+				if (!modal || !img) {
+					createFullScreenModal();
+				}
+
+				// Create loading indicator
+				let loadingSpinner = modal.querySelector('.fullscreen-loading');
+				if (!loadingSpinner) {
+					loadingSpinner = document.createElement('div');
+					loadingSpinner.className = 'fullscreen-loading';
+					modal.querySelector('.fullscreen-content').appendChild(loadingSpinner);
+				}
+
+				// Make loading spinner visible
+				loadingSpinner.style.display = 'block';
+
+				// Hide the image until it's loaded
+				img.style.opacity = '0';
+
+				// Set the image source
+				img.src = imageSrc;
+
+				// When image is loaded, show it and hide the spinner
+				img.onload = function () {
+					img.style.opacity = '1';
+					loadingSpinner.style.display = 'none';
+				};
+
+				// Display the modal
+				modal.style.display = 'flex';
+				modal.offsetHeight; // Force reflow
+				modal.classList.add('show');
+			}
+
+			// Function to hide the full-screen modal
+			function hideFullScreenModal() {
+				const modal = document.getElementById('fullScreenModal');
+				if (!modal) return;
+
+				modal.classList.remove('show');
+				setTimeout(() => {
+					modal.style.display = 'none';
+				}, 300); // Match transition duration
+			}
+
+			// Add the full-screen button to all gallery items
+			function addFullScreenButtons() {
+				// Create the full-screen modal
+				createFullScreenModal();
+
+				// Find all gallery items
+				const galleryItems = document.querySelectorAll('.gallery-item');
+
+				galleryItems.forEach(item => {
+					const overlayActions = item.querySelector('.image-overlay-actions');
+					const imageElement = item.querySelector('.gallery-image');
+
+					if (!overlayActions || !imageElement) return;
+
+					// Check if button already exists to avoid duplicates
+					if (overlayActions.querySelector('.fullscreen-view-btn')) return;
+
+					// Get the image source
+					const imageSrc = imageElement.getAttribute('data-src');
+					if (!imageSrc) return;
+
+					// Create the full-screen button
+					const fullScreenBtn = document.createElement('button');
+					fullScreenBtn.className = 'overlay-action-button fullscreen-view-btn';
+					fullScreenBtn.innerHTML = `
+				<svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+				</svg>
+				Full Screen
+			`;
+
+					// Add click event to open full-screen view
+					fullScreenBtn.addEventListener('click', function (e) {
+						e.preventDefault();
+						e.stopPropagation();
+
+						// Clean the URL to ensure proper loading
+						const cleanImageUrl = imageSrc.split('?')[0] + '?v=' + new Date().getTime();
+						showFullScreenModal(cleanImageUrl);
+					});
+
+					// Insert the button ABOVE the "Copy URL" button
+					const copyUrlBtn = overlayActions.querySelector('.copy-url-btn');
+					if (copyUrlBtn) {
+						copyUrlBtn.parentNode.insertBefore(fullScreenBtn, copyUrlBtn);
+					} else {
+						// Fallback: add to the beginning
+						overlayActions.prepend(fullScreenBtn);
+					}
+				});
+			}
+
+			// Initialize
+			addFullScreenButtons();
+
+			// Re-add buttons after AJAX updates or dynamic content changes
+			// Set up a mutation observer to detect when new gallery items are added
+			const observer = new MutationObserver(function (mutations) {
+				let shouldAddButtons = false;
+
+				mutations.forEach(function (mutation) {
+					if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+						for (let i = 0; i < mutation.addedNodes.length; i++) {
+							const node = mutation.addedNodes[i];
+							// Check if it's a gallery item or contains gallery items
+							if (node.classList && node.classList.contains('gallery-item') ||
+								(node.querySelectorAll && node.querySelectorAll('.gallery-item').length > 0)) {
+								shouldAddButtons = true;
+								break;
+							}
+						}
+					}
+				});
+
+				if (shouldAddButtons) {
+					setTimeout(addFullScreenButtons, 100);
+				}
+			});
+
+			// Start observing the document body
+			observer.observe(document.body, {
+				childList: true,
+				subtree: true
+			});
+
+			// Also call when images finish loading to ensure all buttons are added
+			window.addEventListener('load', function () {
+				setTimeout(addFullScreenButtons, 500);
 			});
 		});
 	</script>
