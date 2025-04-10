@@ -300,3 +300,9 @@
 ### Added
 
 - Full Screen button for posters
+
+## [1.5.1]
+
+### Added
+
+- Full Screen view for the Find Posters option so you can preview them before selecting final poster
