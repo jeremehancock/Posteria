@@ -306,3 +306,9 @@
 ### Added
 
 - Full Screen view for the Find Posters option so you can preview them before selecting final poster
+
+## [1.5.2]
+
+### Fixed
+
+- Issue with buttons in overlay of Find Posters modal
