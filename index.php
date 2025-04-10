@@ -6872,7 +6872,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		});
 	</script>
 
-	<script>
+<script>
 		/**
 	 * Enhanced TMDB & Fanart.tv Integration for Posteria
 	 * 
@@ -7389,6 +7389,11 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 	z-index: 2;
 }
 
+/* Mobile touch detection class */
+.poster-item.touched .poster-overlay {
+	opacity: 1;
+}
+
 .poster-item:hover .poster-overlay {
 	opacity: 1;
 }
@@ -7811,6 +7816,18 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				const modal = document.getElementById('imagePreviewModal');
 				if (!modal) return;
 
+				// Reset all poster touch states when closing the image preview
+				document.querySelectorAll('.poster-item.touched').forEach(item => {
+					item.classList.remove('touched');
+					const overlay = item.querySelector('.poster-overlay');
+					if (overlay) {
+						overlay.style.pointerEvents = 'none';
+						overlay.querySelectorAll('.poster-btn').forEach(btn => {
+							btn.style.pointerEvents = 'none';
+						});
+					}
+				});
+
 				modal.classList.remove('show');
 				setTimeout(() => {
 					modal.style.display = 'none';
@@ -7952,10 +7969,12 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 						// Create the button overlay
 						const overlayElement = document.createElement('div');
 						overlayElement.className = 'poster-overlay';
+						overlayElement.style.pointerEvents = 'none'; // Initially disable pointer events on overlay
 
 						// Create the View button
 						const viewButton = document.createElement('button');
 						viewButton.className = 'poster-btn';
+						viewButton.style.pointerEvents = 'none'; // Initially disable pointer events
 						viewButton.innerHTML = `
 					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
 						<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
@@ -7967,6 +7986,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 						// Create the Select button
 						const selectButton = document.createElement('button');
 						selectButton.className = 'poster-btn';
+						selectButton.style.pointerEvents = 'none'; // Initially disable pointer events
 						selectButton.innerHTML = `
 					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
 						<polyline points="20 6 9 17 4 12"></polyline>
@@ -7980,6 +8000,46 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 
 						// Add overlay to poster element
 						posterElement.appendChild(overlayElement);
+
+						// Add touch interaction handling
+						posterElement.addEventListener('click', function(e) {
+							// First tap anywhere on poster should just show the overlay
+							if (!this.classList.contains('touched')) {
+								e.preventDefault();
+								e.stopPropagation();
+								
+								// Remove 'touched' class from all other posters
+								document.querySelectorAll('.poster-item.touched').forEach(item => {
+									if (item !== this) {
+										item.classList.remove('touched');
+										// Disable pointer events on all other overlays and their buttons
+										const otherOverlay = item.querySelector('.poster-overlay');
+										if (otherOverlay) {
+											otherOverlay.style.pointerEvents = 'none';
+											otherOverlay.querySelectorAll('.poster-btn').forEach(btn => {
+												btn.style.pointerEvents = 'none';
+											});
+										}
+									}
+								});
+								
+								// Add 'touched' class to this poster
+								this.classList.add('touched');
+								
+								// Enable pointer events on this overlay and its buttons after a short delay
+								setTimeout(() => {
+									const overlay = this.querySelector('.poster-overlay');
+									if (overlay) {
+										overlay.style.pointerEvents = 'auto';
+										overlay.querySelectorAll('.poster-btn').forEach(btn => {
+											btn.style.pointerEvents = 'auto';
+										});
+									}
+								}, 50);
+								
+								return false;
+							}
+						});
 
 						// Add click events for the buttons
 						selectButton.addEventListener('click', function (e) {
@@ -8063,6 +8123,17 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				// Add all posters to the grid at once for better performance
 				grid.appendChild(fragment);
 
+				// Add click handler to clear touch state when clicking outside posters
+				document.addEventListener('click', function(e) {
+					// If clicking outside a poster item
+					if (!e.target.closest('.poster-item')) {
+						// Remove touched class from all posters
+						document.querySelectorAll('.poster-item.touched').forEach(item => {
+							item.classList.remove('touched');
+						});
+					}
+				}, { capture: true });
+
 				// Show modal
 				modal.style.display = 'flex';
 				// Force a reflow
@@ -8074,6 +8145,18 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			function hideMultiPosterModal() {
 				const modal = document.getElementById('multiPosterModal');
 				if (modal) {
+					// Remove touched state from all posters before hiding and disable pointer events
+					document.querySelectorAll('.poster-item.touched').forEach(item => {
+						item.classList.remove('touched');
+						const overlay = item.querySelector('.poster-overlay');
+						if (overlay) {
+							overlay.style.pointerEvents = 'none';
+							overlay.querySelectorAll('.poster-btn').forEach(btn => {
+								btn.style.pointerEvents = 'none';
+							});
+						}
+					});
+					
 					modal.classList.remove('show');
 					setTimeout(() => {
 						modal.style.display = 'none';
@@ -8401,6 +8484,26 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 					});
 					observer._isObserving = true;
 				}
+
+				// Add global click handler to remove touched state when clicking outside
+				document.addEventListener('click', function(e) {
+					// Don't process if clicking inside a poster item
+					if (e.target.closest('.poster-item')) {
+						return;
+					}
+					
+					// Remove touched class from all posters and disable pointer events on overlays
+					document.querySelectorAll('.poster-item.touched').forEach(item => {
+						item.classList.remove('touched');
+						const overlay = item.querySelector('.poster-overlay');
+						if (overlay) {
+							overlay.style.pointerEvents = 'none';
+							overlay.querySelectorAll('.poster-btn').forEach(btn => {
+								btn.style.pointerEvents = 'none';
+							});
+						}
+					});
+				});
 			}
 
 			// Initialize on DOM ready
