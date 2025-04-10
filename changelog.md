@@ -288,3 +288,9 @@
 - Mobile layout issues
 - Flickering of buttons on URL changes
 - Updated lazy loading so changes in Posteria refresh the cache
+
+## [1.4.9]
+
+### Fixed
+
+- Fixed persmissions issues in the Auto Import
