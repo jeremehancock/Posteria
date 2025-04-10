@@ -222,7 +222,7 @@ if ($type === 'collection') {
 // Store the original search title before sending to API
 $originalSearchTitle = $query;
 
-$apiUrl = 'https://posteria.app/api/fetch/posters?';
+$apiUrl = 'https://posteria.app/api/fetch/posters/new.php?';
 if ($type === 'movie') {
     $apiUrl .= 'movie=' . urlencode($cleanQuery);
 } elseif ($type === 'tv') {
