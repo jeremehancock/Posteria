@@ -6872,7 +6872,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		});
 	</script>
 
-<script>
+	<script>
 		/**
 	 * Enhanced TMDB & Fanart.tv Integration for Posteria
 	 * 
@@ -6884,6 +6884,14 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 	 * 
 	 * All media types now support multi-poster selection when multiple options are available.
 	 */
+
+		// Detect if device supports touch events (mobile detection)
+		let isTouchDevice = false;
+		window.addEventListener('touchstart', function onFirstTouch() {
+			isTouchDevice = true;
+			// Remove event listener once detected
+			window.removeEventListener('touchstart', onFirstTouch);
+		}, { passive: true });
 
 		document.addEventListener('DOMContentLoaded', function () {
 			// Add our CSS styles
@@ -8001,13 +8009,41 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 						// Add overlay to poster element
 						posterElement.appendChild(overlayElement);
 
+						// Add hover detection for desktop devices only
+						posterElement.addEventListener('mouseenter', function () {
+							// Only enable hover behavior on non-touch devices
+							if (!isTouchDevice) {
+								const overlay = this.querySelector('.poster-overlay');
+								if (overlay) {
+									overlay.style.pointerEvents = 'auto';
+									overlay.querySelectorAll('.poster-btn').forEach(btn => {
+										btn.style.pointerEvents = 'auto';
+									});
+								}
+							}
+						});
+
+						// Reset on mouse leave for desktop devices
+						posterElement.addEventListener('mouseleave', function () {
+							// Only for desktop devices and if not in touched state
+							if (!isTouchDevice && !this.classList.contains('touched')) {
+								const overlay = this.querySelector('.poster-overlay');
+								if (overlay) {
+									overlay.style.pointerEvents = 'none';
+									overlay.querySelectorAll('.poster-btn').forEach(btn => {
+										btn.style.pointerEvents = 'none';
+									});
+								}
+							}
+						});
+
 						// Add touch interaction handling
-						posterElement.addEventListener('click', function(e) {
+						posterElement.addEventListener('click', function (e) {
 							// First tap anywhere on poster should just show the overlay
 							if (!this.classList.contains('touched')) {
 								e.preventDefault();
 								e.stopPropagation();
-								
+
 								// Remove 'touched' class from all other posters
 								document.querySelectorAll('.poster-item.touched').forEach(item => {
 									if (item !== this) {
@@ -8022,10 +8058,10 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 										}
 									}
 								});
-								
+
 								// Add 'touched' class to this poster
 								this.classList.add('touched');
-								
+
 								// Enable pointer events on this overlay and its buttons after a short delay
 								setTimeout(() => {
 									const overlay = this.querySelector('.poster-overlay');
@@ -8036,7 +8072,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 										});
 									}
 								}, 50);
-								
+
 								return false;
 							}
 						});
@@ -8083,6 +8119,21 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 						viewButton.addEventListener('click', function (e) {
 							e.stopPropagation(); // Prevent the poster click event
 
+							// Force remove touched state from the parent poster before opening preview
+							const posterItem = this.closest('.poster-item');
+							if (posterItem) {
+								posterItem.classList.remove('touched');
+
+								// Disable pointer events for buttons and overlay to force reset for next tap
+								const overlay = posterItem.querySelector('.poster-overlay');
+								if (overlay) {
+									overlay.style.pointerEvents = 'none';
+									overlay.querySelectorAll('.poster-btn').forEach(btn => {
+										btn.style.pointerEvents = 'none';
+									});
+								}
+							}
+
 							// Show the image in full screen without closing the multi-poster modal
 							showImagePreviewModal(posterElement.dataset.url);
 						});
@@ -8124,7 +8175,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				grid.appendChild(fragment);
 
 				// Add click handler to clear touch state when clicking outside posters
-				document.addEventListener('click', function(e) {
+				document.addEventListener('click', function (e) {
 					// If clicking outside a poster item
 					if (!e.target.closest('.poster-item')) {
 						// Remove touched class from all posters
@@ -8156,7 +8207,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 							});
 						}
 					});
-					
+
 					modal.classList.remove('show');
 					setTimeout(() => {
 						modal.style.display = 'none';
@@ -8486,12 +8537,12 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				}
 
 				// Add global click handler to remove touched state when clicking outside
-				document.addEventListener('click', function(e) {
+				document.addEventListener('click', function (e) {
 					// Don't process if clicking inside a poster item
 					if (e.target.closest('.poster-item')) {
 						return;
 					}
-					
+
 					// Remove touched class from all posters and disable pointer events on overlays
 					document.querySelectorAll('.poster-item.touched').forEach(item => {
 						item.classList.remove('touched');
