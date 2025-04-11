@@ -32,7 +32,7 @@
 
 // Set the current version here (to be updated with each release)
 
-define('POSTERIA_VERSION', '1.5.2');
+define('POSTERIA_VERSION', '1.5.3');
 
 /**
  * Checks if an update is available by comparing version strings

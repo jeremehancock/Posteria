@@ -312,3 +312,9 @@
 ### Fixed
 
 - Issue with buttons in overlay of Find Posters modal
+
+## [1.5.3]
+
+### Fixed
+
+- Issues with randomization in Poster Wall and cleaned up transitions
