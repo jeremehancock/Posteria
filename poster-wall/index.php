@@ -744,11 +744,47 @@ $proxy_url = "./proxy.php";
                             // If changing from multiple to single stream
                             if (hadMultipleStreams && !hasMultipleStreams) {
                                 debug('Switching from multiple streams to single stream');
-                                state.items = activeStreams;
-                                state.hasMultipleStreams = false;
-                                stopDisplayTimer();
-                                state.currentIndex = 0;
-                                updateDisplay();
+
+                                // First make sure there is at least one stream
+                                if (activeStreams.length === 0) {
+                                    debug('No streams left, switching to random posters');
+                                    state.isStreaming = false;
+                                    state.hasMultipleStreams = false;
+                                    state.items = randomItems.length > 0 ? randomItems : [];
+                                    state.currentIndex = 0;
+                                    updateDisplay();
+                                    return;
+                                }
+
+                                // Get current stream for transition
+                                const currentStream = state.items[state.currentIndex];
+
+                                // Preload the remaining stream
+                                preloadStreamImages(activeStreams[0]);
+
+                                // Create transition array with current and remaining stream
+                                const transitionItems = [currentStream, activeStreams[0]];
+
+                                debug(`Transitioning from "${currentStream.title}" to remaining stream "${activeStreams[0].title}"`);
+
+                                // Prevent state changes during transition
+                                state.ignoreStateChanges = true;
+
+                                // Perform transition with callback
+                                transition(0, 1, transitionItems, () => {
+                                    // After transition, update state
+                                    state.items = activeStreams;
+                                    state.hasMultipleStreams = false;
+                                    state.currentIndex = 0;
+
+                                    // Allow state changes
+                                    state.ignoreStateChanges = false;
+
+                                    // Stop timer for single stream
+                                    stopDisplayTimer();
+
+                                    debug('Transition to single stream complete');
+                                });
                             }
                             // If changing from single to multiple streams
                             else if (!hadMultipleStreams && hasMultipleStreams) {
