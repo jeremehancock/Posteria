@@ -477,6 +477,7 @@ $proxy_url = "./proxy.php";
             displayDuration: 10000, // 10 seconds between transitions
             transitionDuration: 3000, // 3 seconds for transition animation
             streamCheckInterval: 10000, // Check for streams every 10 seconds
+            streamCheckDebounce: 1000, // Debounce stream checks by 1 second
             batchSize: 10, // Number of posters to load at once
             preloadThreshold: 8, // Load new posters when reaching this index
             debug: true // Enable debug logs
@@ -491,12 +492,17 @@ $proxy_url = "./proxy.php";
             transitioning: false,
             displayTimer: null,
             streamCheckTimer: null,
+            streamCheckScheduled: false,
             loadingNewBatch: false,
             pendingBatch: null,
             lastTransitionTime: 0,
-            ignoreStateChanges: false,
+            transitionLock: false,
             preloadedImages: {},
-            currentTransitionTimeout: null
+            currentTransitionTimeout: null,
+            lastStreamCheck: 0, // Timestamp of last stream check
+            streamCheckQueue: [], // Queue of stream checks
+            previousStreams: [], // Keep track of previous stream sets
+            uniqueId: 1  // Used for generating unique IDs for tracking streams
         };
 
         // URLs
@@ -526,6 +532,11 @@ $proxy_url = "./proxy.php";
                 showError('No content available. Please check your server connection and refresh the page.');
                 return;
             }
+
+            // Add unique IDs to each item for better tracking
+            state.items = state.items.map(item => {
+                return { ...item, _id: state.uniqueId++ };
+            });
 
             // Preload current poster's images
             if (state.items[state.currentIndex]) {
@@ -590,7 +601,7 @@ $proxy_url = "./proxy.php";
         // Start stream checking
         function startStreamChecking() {
             // Check immediately on start
-            checkForStreams();
+            scheduleStreamCheck(0);
 
             // Clear existing timer
             if (state.streamCheckTimer) {
@@ -598,16 +609,48 @@ $proxy_url = "./proxy.php";
             }
 
             // Start new timer
-            state.streamCheckTimer = setInterval(checkForStreams, config.streamCheckInterval);
+            state.streamCheckTimer = setInterval(() => {
+                scheduleStreamCheck();
+            }, config.streamCheckInterval);
+        }
+
+        // Schedule a stream check with debouncing
+        function scheduleStreamCheck(delay = config.streamCheckDebounce) {
+            // Don't schedule if we already have a scheduled check
+            if (state.streamCheckScheduled) {
+                return;
+            }
+
+            state.streamCheckScheduled = true;
+
+            setTimeout(() => {
+                checkForStreams();
+                state.streamCheckScheduled = false;
+            }, delay);
+        }
+
+        // Generate a unique key for a stream
+        function getStreamKey(stream) {
+            return `${stream.title}_${stream.user}`;
         }
 
         // Check for streams
         function checkForStreams() {
+            const now = Date.now();
+
+            // Ensure we don't check too frequently (debounce)
+            if (now - state.lastStreamCheck < config.streamCheckDebounce) {
+                debug('Skipping stream check - too soon since last check');
+                return;
+            }
+
+            state.lastStreamCheck = now;
+
             debug('Checking for active streams...');
 
-            // Skip if we're in the middle of a transition or ignoring state changes
-            if (state.transitioning || state.ignoreStateChanges) {
-                debug('Skipping stream check - in transition or ignoring state changes');
+            // Skip if we're in the middle of a transition or lock
+            if (state.transitioning || state.transitionLock) {
+                debug('Skipping stream check - in transition or locked');
                 return;
             }
 
@@ -619,306 +662,417 @@ $proxy_url = "./proxy.php";
                     return response.json();
                 })
                 .then(data => {
-                    const activeStreams = data.active_streams || [];
-                    const randomItems = data.random_items || [];
+                    // Apply transition lock to ensure nothing interrupts our state changes
+                    state.transitionLock = true;
 
-                    const wasStreaming = state.isStreaming;
-                    const hadMultipleStreams = state.hasMultipleStreams;
-
-                    // Check current state
-                    const isStreaming = activeStreams.length > 0;
-                    const hasMultipleStreams = activeStreams.length > 1;
-
-                    debug(`Stream check: was=${wasStreaming}(${hadMultipleStreams ? 'multiple' : 'single'}), now=${isStreaming}(${hasMultipleStreams ? 'multiple' : 'single'})`);
-
-                    // Handle transitions between different states
-
-                    // Case 1: Switching from no streams to streaming
-                    if (!wasStreaming && isStreaming) {
-                        debug(`Switching to streaming mode. Streams: ${activeStreams.length}`);
-
-                        // Get the current random poster for transition
-                        const currentRandomPoster = state.items[state.currentIndex];
-
-                        // Preload the stream images
-                        preloadStreamImages(activeStreams[0]);
-
-                        // Create transition items array with current random poster and first stream
-                        const transitionItems = [currentRandomPoster, activeStreams[0]];
-
-                        debug(`Transitioning from random "${currentRandomPoster.title}" to stream "${activeStreams[0].title}"`);
-
-                        // Prevent state changes during transition
-                        state.ignoreStateChanges = true;
-
-                        // Perform the transition with callback
-                        transition(0, 1, transitionItems, () => {
-                            // After transition completes, update full state
-                            state.isStreaming = true;
-                            state.hasMultipleStreams = hasMultipleStreams;
-                            state.items = activeStreams;
-                            state.currentIndex = 0;
-
-                            // Allow state changes again
-                            state.ignoreStateChanges = false;
-
-                            // Start or stop the display timer based on number of streams
-                            if (hasMultipleStreams) {
-                                startDisplayTimer();
-                            } else {
-                                stopDisplayTimer();
-                            }
-
-                            debug('Transition to streaming mode complete');
-                        });
-                    }
-                    // Case 2: Switching from streaming to no streams
-                    else if (wasStreaming && !isStreaming) {
-                        debug('Switching back to random posters');
-
-                        // Get the current stream for transition
-                        const currentStream = state.items[state.currentIndex];
-
-                        // Ensure we have random items to transition to
-                        if (randomItems.length === 0) {
-                            debug('No random items available for transition');
-                            state.isStreaming = false;
-                            state.hasMultipleStreams = false;
-                            state.items = [];
-                            state.currentIndex = 0;
-                            updateDisplay();
-                            return;
-                        }
-
-                        // Preload the random poster image
-                        preloadStreamImages(randomItems[0]);
-
-                        // Create transition items array with current stream and first random poster
-                        const transitionItems = [currentStream, randomItems[0]];
-
-                        debug(`Transitioning from stream "${currentStream.title}" to random "${randomItems[0].title}"`);
-
-                        // Prevent state changes during transition
-                        state.ignoreStateChanges = true;
-
-                        // Perform the transition with callback
-                        transition(0, 1, transitionItems, () => {
-                            // After transition completes, update full state
-                            state.isStreaming = false;
-                            state.hasMultipleStreams = false;
-                            state.items = randomItems;
-                            state.currentIndex = 0;
-
-                            // Allow state changes again
-                            state.ignoreStateChanges = false;
-
-                            // Always start transition timer for random posters
-                            startDisplayTimer();
-
-                            debug('Transition to random posters complete');
-                        });
-                    }
-                    // Case 3: Staying in streaming mode but stream count changed
-                    else if (wasStreaming && isStreaming) {
-                        debug(`Stream count: ${activeStreams.length}`);
-
-                        // Check if stream list has changed by comparing titles and users
-                        // More robust way to detect changes in stream list
-                        const currentStreams = new Set(state.items.map(s => `${s.title}_${s.user}`));
-                        const newStreams = new Set(activeStreams.map(s => `${s.title}_${s.user}`));
-
-                        // Check if sets are different sizes or have different members
-                        let streamsChanged = currentStreams.size !== newStreams.size;
-                        if (!streamsChanged) {
-                            for (const stream of currentStreams) {
-                                if (!newStreams.has(stream)) {
-                                    streamsChanged = true;
-                                    break;
-                                }
-                            }
-                        }
-
-                        if (streamsChanged) {
-                            debug('Stream list changed, updating');
-
-                            // If changing from multiple to single stream
-                            if (hadMultipleStreams && !hasMultipleStreams) {
-                                debug('Switching from multiple streams to single stream');
-
-                                // First make sure there is at least one stream
-                                if (activeStreams.length === 0) {
-                                    debug('No streams left, switching to random posters');
-                                    state.isStreaming = false;
-                                    state.hasMultipleStreams = false;
-                                    state.items = randomItems.length > 0 ? randomItems : [];
-                                    state.currentIndex = 0;
-                                    updateDisplay();
-                                    return;
-                                }
-
-                                // Get current stream for transition
-                                const currentStream = state.items[state.currentIndex];
-
-                                // Preload the remaining stream
-                                preloadStreamImages(activeStreams[0]);
-
-                                // Create transition array with current and remaining stream
-                                const transitionItems = [currentStream, activeStreams[0]];
-
-                                debug(`Transitioning from "${currentStream.title}" to remaining stream "${activeStreams[0].title}"`);
-
-                                // Prevent state changes during transition
-                                state.ignoreStateChanges = true;
-
-                                // Perform transition with callback
-                                transition(0, 1, transitionItems, () => {
-                                    // After transition, update state
-                                    state.items = activeStreams;
-                                    state.hasMultipleStreams = false;
-                                    state.currentIndex = 0;
-
-                                    // Allow state changes
-                                    state.ignoreStateChanges = false;
-
-                                    // Stop timer for single stream
-                                    stopDisplayTimer();
-
-                                    debug('Transition to single stream complete');
-                                });
-                            }
-                            // If changing from single to multiple streams
-                            else if (!hadMultipleStreams && hasMultipleStreams) {
-                                debug('Switching from single stream to multiple streams');
-
-                                // Here's our special case - handle with care
-                                // We need to make sure we're transitioning to a different stream
-
-                                // CRITICAL FIX: First, ensure we have at least 2 streams
-                                if (activeStreams.length < 2) {
-                                    debug('Somehow switching to multiple streams but only have one stream');
-                                    state.items = activeStreams;
-                                    state.currentIndex = 0;
-                                    updateDisplay();
-                                    return;
-                                }
-
-                                // Deep clone the current stream
-                                const currentStream = JSON.parse(JSON.stringify(state.items[0]));
-
-                                // Find the first stream in the new list that's DIFFERENT from our current one
-                                let targetStreamIndex = -1;
-
-                                for (let i = 0; i < activeStreams.length; i++) {
-                                    // Check if this stream is different from our current one
-                                    const newStream = activeStreams[i];
-                                    if (newStream.title !== currentStream.title ||
-                                        newStream.user !== currentStream.user) {
-                                        targetStreamIndex = i;
-                                        break;
-                                    }
-                                }
-
-                                // If we couldn't find a different stream (unlikely), use the second stream
-                                if (targetStreamIndex === -1) {
-                                    targetStreamIndex = 1;
-                                }
-
-                                // Preload the stream images
-                                preloadStreamImages(currentStream);
-                                preloadStreamImages(activeStreams[targetStreamIndex]);
-
-                                debug(`Will transition from "${currentStream.title}" to "${activeStreams[targetStreamIndex].title}"`);
-
-                                // Create a dedicated transition array with exactly 2 items
-                                const transitionItems = [currentStream, activeStreams[targetStreamIndex]];
-
-                                // Prevent any state changes during transition
-                                state.ignoreStateChanges = true;
-
-                                // Perform transition with full callback
-                                transition(0, 1, transitionItems, () => {
-                                    // After transition completes, update full state
-                                    state.items = activeStreams;
-                                    state.hasMultipleStreams = true;
-                                    state.currentIndex = targetStreamIndex; // IMPORTANT: Keep the current index at targetStreamIndex
-
-                                    // Allow state changes again
-                                    state.ignoreStateChanges = false;
-
-                                    // Start the timer for future transitions
-                                    startDisplayTimer();
-
-                                    debug('Stream transition complete');
-                                });
-                            }
-                            // If staying with multiple streams but the list changed
-                            else if (hasMultipleStreams) {
-                                // Save current index if possible
-                                const currentStreamKey = state.items[state.currentIndex] ?
-                                    `${state.items[state.currentIndex].title}_${state.items[state.currentIndex].user}` : null;
-
-                                // Update the state with new streams
-                                state.items = activeStreams;
-                                state.hasMultipleStreams = true;
-
-                                // Try to find the same stream in the new array
-                                if (currentStreamKey) {
-                                    const newIndex = activeStreams.findIndex(s =>
-                                        `${s.title}_${s.user}` === currentStreamKey);
-
-                                    if (newIndex !== -1) {
-                                        state.currentIndex = newIndex;
-                                    } else {
-                                        // If not found, reset to 0
-                                        state.currentIndex = 0;
-                                    }
-                                } else {
-                                    state.currentIndex = 0;
-                                }
-
-                                updateDisplay();
-                                startDisplayTimer(); // Restart timer to ensure transitions
-                            }
-                            // If staying with single stream but the stream changed
-                            else {
-                                state.items = activeStreams;
-                                state.currentIndex = 0;
-                                updateDisplay();
-                            }
-                        } else {
-                            // Same streams, just update progress if streaming
-                            if (isStreaming) {
-                                debug('Same streams, updating progress');
-
-                                // Update with new progress data while preserving current index
-                                const currentStreamKey = state.items[state.currentIndex] ?
-                                    `${state.items[state.currentIndex].title}_${state.items[state.currentIndex].user}` : null;
-
-                                state.items = activeStreams;
-
-                                // Find the same stream in the updated array
-                                if (currentStreamKey) {
-                                    const newIndex = activeStreams.findIndex(s =>
-                                        `${s.title}_${s.user}` === currentStreamKey);
-
-                                    if (newIndex !== -1) {
-                                        state.currentIndex = newIndex;
-                                    }
-                                }
-
-                                updateStreamInfo(state.items[state.currentIndex]);
-                            }
-                        }
-                    }
-                    // Case 4: Store random items for later use
-                    else if (!state.isStreaming && randomItems.length > 0 && state.pendingBatch === null) {
-                        // Store random items for next batch
-                        state.pendingBatch = randomItems;
+                    try {
+                        processStreamCheckResult(data);
+                    } finally {
+                        // Ensure lock gets removed even if there's an error
+                        setTimeout(() => {
+                            state.transitionLock = false;
+                        }, 500);
                     }
                 })
                 .catch(error => {
                     console.error('Error checking for streams:', error);
+                    state.transitionLock = false;
                 });
+        }
+
+        // Process the result of a stream check
+        function processStreamCheckResult(data) {
+            debug('Processing stream check result');
+
+            // Add unique IDs to all items
+            let activeStreams = (data.active_streams || []).map(item => {
+                return { ...item, _id: state.uniqueId++ };
+            });
+
+            let randomItems = (data.random_items || []).map(item => {
+                return { ...item, _id: state.uniqueId++ };
+            });
+
+            const wasStreaming = state.isStreaming;
+            const hadMultipleStreams = state.hasMultipleStreams;
+
+            // Check current state
+            const isStreaming = activeStreams.length > 0;
+            const hasMultipleStreams = activeStreams.length > 1;
+
+            debug(`Stream check: was=${wasStreaming}(${hadMultipleStreams ? 'multiple' : 'single'}), now=${isStreaming}(${hasMultipleStreams ? 'multiple' : 'single'})`);
+
+            // VERY IMPORTANT: Remember the current item being displayed
+            const currentDisplayedItem = state.items[state.currentIndex];
+            if (!currentDisplayedItem) {
+                debug('No current item found - this should not happen');
+            } else {
+                debug(`Current displayed item: ${currentDisplayedItem.title}`);
+            }
+
+            // Save current streams for tracking stream changes
+            if (state.isStreaming) {
+                state.previousStreams = [...state.items];
+            }
+
+            // Calculate new streaming state
+
+            // Case 1: Switching from no streams to streaming
+            if (!wasStreaming && isStreaming) {
+                debug(`Switching to streaming mode. Streams: ${activeStreams.length}`);
+                handleSwitchToStreaming(currentDisplayedItem, activeStreams, hasMultipleStreams);
+            }
+            // Case 2: Switching from streaming to no streams
+            else if (wasStreaming && !isStreaming) {
+                debug('Switching back to random posters');
+                handleSwitchToRandom(currentDisplayedItem, randomItems);
+            }
+            // Case 3: Staying in streaming mode but stream count changed
+            else if (wasStreaming && isStreaming) {
+                debug(`Stream count: ${activeStreams.length}`);
+                handleStreamChanges(currentDisplayedItem, activeStreams, hadMultipleStreams, hasMultipleStreams);
+            }
+            // Case 4: Store random items for later use
+            else if (!state.isStreaming && randomItems.length > 0 && state.pendingBatch === null) {
+                // Store random items for next batch
+                state.pendingBatch = randomItems;
+            }
+        }
+
+        // Handle switching from no streams to active streams
+        function handleSwitchToStreaming(currentDisplayedItem, activeStreams, hasMultipleStreams) {
+            // Get the current random poster for transition
+            const currentRandomPoster = currentDisplayedItem;
+
+            // Preload the stream images
+            preloadStreamImages(activeStreams[0]);
+
+            // Create transition items array with current random poster and first stream
+            const transitionItems = [currentRandomPoster, activeStreams[0]];
+
+            debug(`Transitioning from random "${currentRandomPoster.title}" to stream "${activeStreams[0].title}"`);
+
+            // Create transition with callback
+            performTransition(0, 1, transitionItems, () => {
+                // After transition completes, update full state
+                state.isStreaming = true;
+                state.hasMultipleStreams = hasMultipleStreams;
+                state.items = activeStreams;
+                state.currentIndex = 0;
+
+                // Start or stop the display timer based on number of streams
+                if (hasMultipleStreams) {
+                    startDisplayTimer();
+                } else {
+                    stopDisplayTimer();
+                }
+
+                debug('Transition to streaming mode complete');
+            });
+        }
+
+        // Handle switching from streams to random posters
+        function handleSwitchToRandom(currentDisplayedItem, randomItems) {
+            // Get the current stream for transition
+            const currentStream = currentDisplayedItem;
+
+            // Ensure we have random items to transition to
+            if (randomItems.length === 0) {
+                debug('No random items available for transition');
+                state.isStreaming = false;
+                state.hasMultipleStreams = false;
+                state.items = [];
+                state.currentIndex = 0;
+                updateDisplay();
+                return;
+            }
+
+            // Preload the random poster image
+            preloadStreamImages(randomItems[0]);
+
+            // Create transition items array with current stream and first random poster
+            const transitionItems = [currentStream, randomItems[0]];
+
+            debug(`Transitioning from stream "${currentStream.title}" to random "${randomItems[0].title}"`);
+
+            // Perform transition with callback
+            performTransition(0, 1, transitionItems, () => {
+                // After transition completes, update full state
+                state.isStreaming = false;
+                state.hasMultipleStreams = false;
+                state.items = randomItems;
+                state.currentIndex = 0;
+
+                // Always start transition timer for random posters
+                startDisplayTimer();
+
+                debug('Transition to random posters complete');
+            });
+        }
+
+        // Handle changes to the stream list
+        function handleStreamChanges(currentDisplayedItem, activeStreams, hadMultipleStreams, hasMultipleStreams) {
+            // Use keys to more accurately detect changes
+            const currentStreamsKeys = new Set(state.items.map(getStreamKey));
+            const newStreamsKeys = new Set(activeStreams.map(getStreamKey));
+
+            // Find streams that have been removed
+            const removedStreams = state.items.filter(stream =>
+                !newStreamsKeys.has(getStreamKey(stream))
+            );
+
+            // Find streams that have been added
+            const addedStreams = activeStreams.filter(stream =>
+                !currentStreamsKeys.has(getStreamKey(stream))
+            );
+
+            // Only consider it a change if streams were added or removed
+            const streamsChanged = removedStreams.length > 0 || addedStreams.length > 0;
+
+            debug(`Stream analysis: removed=${removedStreams.length}, added=${addedStreams.length}, changed=${streamsChanged}`);
+
+            if (streamsChanged) {
+                debug('Stream list changed, updating');
+
+                // If changing from multiple to single stream
+                if (hadMultipleStreams && !hasMultipleStreams) {
+                    debug('Switching from multiple streams to single stream');
+                    handleMultipleToSingleStream(currentDisplayedItem, activeStreams);
+                }
+                // If changing from single to multiple streams
+                else if (!hadMultipleStreams && hasMultipleStreams) {
+                    debug('Switching from single stream to multiple streams');
+                    handleSingleToMultipleStreams(currentDisplayedItem, activeStreams);
+                }
+                // If staying with multiple streams but the list changed
+                else if (hasMultipleStreams) {
+                    debug('Updating multiple streams list');
+                    handleMultipleStreamsUpdate(currentDisplayedItem, activeStreams, removedStreams);
+                }
+                // If staying with single stream but the stream changed
+                else {
+                    debug('Switching to different single stream');
+                    handleSingleStreamUpdate(currentDisplayedItem, activeStreams);
+                }
+            } else {
+                // Same streams, just update progress if streaming
+                if (state.isStreaming) {
+                    debug('Same streams, updating progress');
+
+                    // Update with new progress data while preserving current index
+                    const currentStreamKey = getStreamKey(currentDisplayedItem);
+
+                    state.items = activeStreams;
+
+                    // Find the same stream in the updated array
+                    const newIndex = activeStreams.findIndex(s =>
+                        getStreamKey(s) === currentStreamKey);
+
+                    if (newIndex !== -1) {
+                        state.currentIndex = newIndex;
+                    }
+
+                    updateStreamInfo(state.items[state.currentIndex]);
+                }
+            }
+        }
+
+        // Handle transition from multiple streams to a single stream
+        function handleMultipleToSingleStream(currentDisplayedItem, activeStreams) {
+            // First make sure there is at least one stream
+            if (activeStreams.length === 0) {
+                debug('No streams left, unusual state');
+                state.isStreaming = false;
+                state.hasMultipleStreams = false;
+                // We should have caught this in the main handler
+                return;
+            }
+
+            // We need to determine the right transition:
+            // 1. If current stream is gone, transition to the remaining stream
+            // 2. If current stream is the remaining stream, no transition needed
+
+            const currentStreamKey = getStreamKey(currentDisplayedItem);
+            const remainingStreamKey = getStreamKey(activeStreams[0]);
+
+            // Check if the current stream is still there
+            if (currentStreamKey === remainingStreamKey) {
+                debug('Current stream is the remaining stream, no transition needed');
+                state.items = activeStreams;
+                state.hasMultipleStreams = false;
+                state.currentIndex = 0;
+
+                // Stop timer for single stream
+                stopDisplayTimer();
+
+                // Just update info
+                updateStreamInfo(state.items[0]);
+            } else {
+                debug('Current stream is gone, transitioning to remaining stream');
+
+                // Get current stream for transition
+                const currentStream = currentDisplayedItem;
+
+                // Preload the remaining stream
+                preloadStreamImages(activeStreams[0]);
+
+                // Create transition array with current and remaining stream
+                const transitionItems = [currentStream, activeStreams[0]];
+
+                debug(`Transitioning from "${currentStream.title}" to remaining stream "${activeStreams[0].title}"`);
+
+                // Perform transition with callback
+                performTransition(0, 1, transitionItems, () => {
+                    // After transition, update state
+                    state.items = activeStreams;
+                    state.hasMultipleStreams = false;
+                    state.currentIndex = 0;
+
+                    // Stop timer for single stream
+                    stopDisplayTimer();
+
+                    debug('Transition to single stream complete');
+                });
+            }
+        }
+
+        // Handle transition from single stream to multiple streams
+        function handleSingleToMultipleStreams(currentDisplayedItem, activeStreams) {
+            // Ensure we have at least 2 streams
+            if (activeStreams.length < 2) {
+                debug('Somehow switching to multiple streams but only have one stream');
+                state.items = activeStreams;
+                state.currentIndex = 0;
+                updateDisplay();
+                return;
+            }
+
+            // Deep clone the current stream
+            const currentStream = JSON.parse(JSON.stringify(currentDisplayedItem));
+
+            // Find the first stream in the new list that's DIFFERENT from our current one
+            const currentStreamKey = getStreamKey(currentStream);
+            let targetStreamIndex = -1;
+
+            for (let i = 0; i < activeStreams.length; i++) {
+                // Check if this stream is different from our current one
+                if (getStreamKey(activeStreams[i]) !== currentStreamKey) {
+                    targetStreamIndex = i;
+                    break;
+                }
+            }
+
+            // If we couldn't find a different stream (unlikely), use the second stream
+            if (targetStreamIndex === -1) {
+                targetStreamIndex = 1; // Default to second stream
+            }
+
+            // Preload the stream images
+            preloadStreamImages(currentStream);
+            preloadStreamImages(activeStreams[targetStreamIndex]);
+
+            debug(`Will transition from "${currentStream.title}" to "${activeStreams[targetStreamIndex].title}"`);
+
+            // Create a dedicated transition array with exactly 2 items
+            const transitionItems = [currentStream, activeStreams[targetStreamIndex]];
+
+            // Perform transition with full callback
+            performTransition(0, 1, transitionItems, () => {
+                // After transition completes, update full state
+                state.items = activeStreams;
+                state.hasMultipleStreams = true;
+                state.currentIndex = targetStreamIndex; // IMPORTANT: Keep the current index at targetStreamIndex
+
+                // Start the timer for future transitions
+                startDisplayTimer();
+
+                debug('Stream transition complete');
+            });
+        }
+
+        // Handle updates to multiple streams list
+        function handleMultipleStreamsUpdate(currentDisplayedItem, activeStreams, removedStreams) {
+            const currentStreamKey = getStreamKey(currentDisplayedItem);
+
+            // Check if the current stream was removed
+            const currentStreamRemoved = removedStreams.some(s => getStreamKey(s) === currentStreamKey);
+
+            if (currentStreamRemoved) {
+                debug('Current stream was removed, transitioning to another stream');
+
+                // Find a suitable stream to transition to
+                let targetStreamIndex = 0; // Default to first stream
+
+                // Create a transition array
+                const transitionItems = [currentDisplayedItem, activeStreams[targetStreamIndex]];
+
+                // Preload images
+                preloadStreamImages(activeStreams[targetStreamIndex]);
+
+                debug(`Transitioning from removed "${currentDisplayedItem.title}" to "${activeStreams[targetStreamIndex].title}"`);
+
+                // Perform transition with callback
+                performTransition(0, 1, transitionItems, () => {
+                    // After transition, update state
+                    state.items = activeStreams;
+                    state.hasMultipleStreams = true;
+                    state.currentIndex = targetStreamIndex;
+
+                    // Restart timer for multiple streams
+                    startDisplayTimer();
+
+                    debug('Transition after stream removal complete');
+                });
+            } else {
+                // Current stream is still in the list
+                state.items = activeStreams;
+
+                // Find the current stream in the new list
+                const newIndex = activeStreams.findIndex(s => getStreamKey(s) === currentStreamKey);
+
+                if (newIndex !== -1) {
+                    state.currentIndex = newIndex;
+                } else {
+                    // This should not happen given our check above
+                    state.currentIndex = 0;
+                }
+
+                // Restart timer for multiple streams
+                startDisplayTimer();
+
+                // Just update the display
+                updateDisplay();
+            }
+        }
+
+        // Handle update to a single stream
+        function handleSingleStreamUpdate(currentDisplayedItem, activeStreams) {
+            // Check that we actually have a stream
+            if (activeStreams.length === 0) {
+                debug('No streams left, unusual state');
+                state.isStreaming = false;
+                state.hasMultipleStreams = false;
+                // We should have caught this in the main handler
+                return;
+            }
+
+            // Create transition to the new stream
+            const transitionItems = [currentDisplayedItem, activeStreams[0]];
+
+            debug(`Transitioning from "${currentDisplayedItem.title}" to new stream "${activeStreams[0].title}"`);
+
+            // Preload the new stream
+            preloadStreamImages(activeStreams[0]);
+
+            // Perform transition with callback
+            performTransition(0, 1, transitionItems, () => {
+                // After transition, update state
+                state.items = activeStreams;
+                state.hasMultipleStreams = false;
+                state.currentIndex = 0;
+
+                debug('Transition to new single stream complete');
+            });
         }
 
         // Preload stream images
@@ -971,8 +1125,14 @@ $proxy_url = "./proxy.php";
                     return response.json();
                 })
                 .then(data => {
-                    const randomItems = data.random_items || [];
-                    const activeStreams = data.active_streams || [];
+                    // Apply unique IDs to items
+                    const randomItems = (data.random_items || []).map(item => {
+                        return { ...item, _id: state.uniqueId++ };
+                    });
+
+                    const activeStreams = (data.active_streams || []).map(item => {
+                        return { ...item, _id: state.uniqueId++ };
+                    });
 
                     // If we suddenly have active streams, switch to them
                     if (activeStreams.length > 0 && !state.isStreaming) {
@@ -1025,17 +1185,11 @@ $proxy_url = "./proxy.php";
 
             debug(`Transitioning batch: From "${currentItem.title}" to "${newBatch[0].title}"`);
 
-            // Prevent state changes during transition
-            state.ignoreStateChanges = true;
-
             // Perform transition with callback
-            transition(0, 1, transitionItems, () => {
+            performTransition(0, 1, transitionItems, () => {
                 // Update the items array after transition completes
                 state.items = newBatch;
                 state.currentIndex = 0;
-
-                // Allow state changes again
-                state.ignoreStateChanges = false;
 
                 debug('New batch loaded and transition completed');
             });
@@ -1043,7 +1197,7 @@ $proxy_url = "./proxy.php";
 
         // Move to next poster
         function nextPoster() {
-            if (state.transitioning || state.loadingNewBatch || state.ignoreStateChanges) {
+            if (state.transitioning || state.loadingNewBatch || state.transitionLock) {
                 debug('Skip nextPoster - transition state prevents it');
                 return;
             }
@@ -1072,10 +1226,29 @@ $proxy_url = "./proxy.php";
             }
 
             // Transition to next poster
-            transition(state.currentIndex, nextIndex);
+            performTransition(state.currentIndex, nextIndex);
 
             // Update current index
             state.currentIndex = nextIndex;
+        }
+
+        // Perform a transition with safety mechanisms
+        function performTransition(fromIndex, toIndex, customItems, callback) {
+            // Apply transition lock
+            state.transitionLock = true;
+
+            // Perform the actual transition
+            transition(fromIndex, toIndex, customItems, (...args) => {
+                // Remove transition lock after a delay
+                setTimeout(() => {
+                    state.transitionLock = false;
+                }, 100);
+
+                // Call the original callback if provided
+                if (callback) {
+                    callback(...args);
+                }
+            });
         }
 
         // Update display with current item
@@ -1092,7 +1265,7 @@ $proxy_url = "./proxy.php";
                 return;
             }
 
-            debug(`Updating display to show: ${currentItem.title || 'Unknown'}`);
+            debug(`Updating display to show: ${currentItem.title || 'Unknown'} (ID: ${currentItem._id || 'none'})`);
 
             // Preload current item's images
             preloadStreamImages(currentItem);
@@ -1293,6 +1466,9 @@ $proxy_url = "./proxy.php";
             const totalTiles = tiles.length;
             const maxDelay = config.transitionDuration * 0.95;
 
+            // Track tiles that have been animated
+            let animatedTiles = 0;
+
             // Add event listener to track animation completions
             tiles.forEach((tile, index) => {
                 // Create a slight ease-out effect
@@ -1306,19 +1482,37 @@ $proxy_url = "./proxy.php";
                 // Start the tile animation
                 setTimeout(() => {
                     tile.style.transform = 'rotateY(180deg)';
+                    animatedTiles++;
+
+                    // For additional safety, if all tiles have animated, double-check the callback
+                    if (animatedTiles === totalTiles) {
+                        // Reset immediately to prevent any stray "transitioning" flags
+                        setTimeout(() => {
+                            // If we're still transitioning after all tiles have flipped plus a safety margin,
+                            // something might be wrong - clean up just in case
+                            if (state.transitioning) {
+                                debug('Safety check: All tiles animated but still transitioning');
+                                finishTransition();
+                            }
+                        }, 500); // Small safety margin
+                    }
                 }, delay);
             });
 
-            // Wait for transition to complete
-            const transitionTimeout = setTimeout(() => {
-                debug('Transition animation completed');
+            // Function to cleanly finish a transition
+            function finishTransition() {
+                debug('Finishing transition...');
 
                 // Reset transitioning flag
                 state.transitioning = false;
 
                 // Run callback if provided before updating display
                 if (callback) {
-                    callback();
+                    try {
+                        callback();
+                    } catch (e) {
+                        console.error('Error in transition callback:', e);
+                    }
                 }
 
                 // Update display with new poster
@@ -1331,7 +1525,10 @@ $proxy_url = "./proxy.php";
 
                 // Clear the transition timeout reference
                 state.currentTransitionTimeout = null;
-            }, config.transitionDuration + 100);
+            }
+
+            // Wait for transition to complete
+            const transitionTimeout = setTimeout(finishTransition, config.transitionDuration + 200);
 
             // Keep track of the timeout for cleanup
             state.currentTransitionTimeout = transitionTimeout;
@@ -1412,14 +1609,14 @@ $proxy_url = "./proxy.php";
                 }
             }
 
-            // Also reset ignoreStateChanges if it's been too long
-            if (state.ignoreStateChanges) {
+            // Also reset lock if it's been too long
+            if (state.transitionLock) {
                 const currentTime = Date.now();
                 const transitionDuration = currentTime - state.lastTransitionTime;
 
                 if (transitionDuration > config.transitionDuration * 3) {
-                    debug('State change lock seems stuck, resetting');
-                    state.ignoreStateChanges = false;
+                    debug('Transition lock seems stuck, resetting');
+                    state.transitionLock = false;
                 }
             }
         }, 5000);
