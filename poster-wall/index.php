@@ -495,7 +495,8 @@ $proxy_url = "./proxy.php";
             pendingBatch: null,
             lastTransitionTime: 0,
             ignoreStateChanges: false,
-            preloadedImages: {}
+            preloadedImages: {},
+            currentTransitionTimeout: null
         };
 
         // URLs
@@ -524,6 +525,11 @@ $proxy_url = "./proxy.php";
             if (!state.items || state.items.length === 0) {
                 showError('No content available. Please check your server connection and refresh the page.');
                 return;
+            }
+
+            // Preload current poster's images
+            if (state.items[state.currentIndex]) {
+                preloadStreamImages(state.items[state.currentIndex]);
             }
 
             // Set initial poster
@@ -631,36 +637,86 @@ $proxy_url = "./proxy.php";
                     if (!wasStreaming && isStreaming) {
                         debug(`Switching to streaming mode. Streams: ${activeStreams.length}`);
 
-                        // Update state
-                        state.isStreaming = true;
-                        state.hasMultipleStreams = hasMultipleStreams;
-                        state.items = activeStreams;
+                        // Get the current random poster for transition
+                        const currentRandomPoster = state.items[state.currentIndex];
 
-                        // For a single stream, just display it - no transition timer
-                        if (!hasMultipleStreams) {
+                        // Preload the stream images
+                        preloadStreamImages(activeStreams[0]);
+
+                        // Create transition items array with current random poster and first stream
+                        const transitionItems = [currentRandomPoster, activeStreams[0]];
+
+                        debug(`Transitioning from random "${currentRandomPoster.title}" to stream "${activeStreams[0].title}"`);
+
+                        // Prevent state changes during transition
+                        state.ignoreStateChanges = true;
+
+                        // Perform the transition with callback
+                        transition(0, 1, transitionItems, () => {
+                            // After transition completes, update full state
+                            state.isStreaming = true;
+                            state.hasMultipleStreams = hasMultipleStreams;
+                            state.items = activeStreams;
                             state.currentIndex = 0;
-                            stopDisplayTimer();
-                            updateDisplay();
-                        } else {
-                            // For multiple streams, transition between them
-                            state.currentIndex = 0;
-                            startDisplayTimer();
-                            updateDisplay();
-                        }
+
+                            // Allow state changes again
+                            state.ignoreStateChanges = false;
+
+                            // Start or stop the display timer based on number of streams
+                            if (hasMultipleStreams) {
+                                startDisplayTimer();
+                            } else {
+                                stopDisplayTimer();
+                            }
+
+                            debug('Transition to streaming mode complete');
+                        });
                     }
                     // Case 2: Switching from streaming to no streams
                     else if (wasStreaming && !isStreaming) {
                         debug('Switching back to random posters');
 
-                        // Update state
-                        state.isStreaming = false;
-                        state.hasMultipleStreams = false;
-                        state.items = randomItems.length > 0 ? randomItems : [];
-                        state.currentIndex = 0;
+                        // Get the current stream for transition
+                        const currentStream = state.items[state.currentIndex];
 
-                        // Always transition with random posters
-                        startDisplayTimer();
-                        updateDisplay();
+                        // Ensure we have random items to transition to
+                        if (randomItems.length === 0) {
+                            debug('No random items available for transition');
+                            state.isStreaming = false;
+                            state.hasMultipleStreams = false;
+                            state.items = [];
+                            state.currentIndex = 0;
+                            updateDisplay();
+                            return;
+                        }
+
+                        // Preload the random poster image
+                        preloadStreamImages(randomItems[0]);
+
+                        // Create transition items array with current stream and first random poster
+                        const transitionItems = [currentStream, randomItems[0]];
+
+                        debug(`Transitioning from stream "${currentStream.title}" to random "${randomItems[0].title}"`);
+
+                        // Prevent state changes during transition
+                        state.ignoreStateChanges = true;
+
+                        // Perform the transition with callback
+                        transition(0, 1, transitionItems, () => {
+                            // After transition completes, update full state
+                            state.isStreaming = false;
+                            state.hasMultipleStreams = false;
+                            state.items = randomItems;
+                            state.currentIndex = 0;
+
+                            // Allow state changes again
+                            state.ignoreStateChanges = false;
+
+                            // Always start transition timer for random posters
+                            startDisplayTimer();
+
+                            debug('Transition to random posters complete');
+                        });
                     }
                     // Case 3: Staying in streaming mode but stream count changed
                     else if (wasStreaming && isStreaming) {
@@ -738,13 +794,13 @@ $proxy_url = "./proxy.php";
                                 debug(`Will transition from "${currentStream.title}" to "${activeStreams[targetStreamIndex].title}"`);
 
                                 // Create a dedicated transition array with exactly 2 items
-                                const transitionArray = [currentStream, activeStreams[targetStreamIndex]];
+                                const transitionItems = [currentStream, activeStreams[targetStreamIndex]];
 
                                 // Prevent any state changes during transition
                                 state.ignoreStateChanges = true;
 
                                 // Perform transition with full callback
-                                transition(0, 1, transitionArray, () => {
+                                transition(0, 1, transitionItems, () => {
                                     // After transition completes, update full state
                                     state.items = activeStreams;
                                     state.hasMultipleStreams = true;
@@ -1097,6 +1153,12 @@ $proxy_url = "./proxy.php";
             state.transitioning = true;
             state.lastTransitionTime = Date.now();
 
+            // Clear any existing transition timeout
+            if (state.currentTransitionTimeout) {
+                clearTimeout(state.currentTransitionTimeout);
+                state.currentTransitionTimeout = null;
+            }
+
             // Use custom items array if provided, otherwise use state.items
             const items = customItems || state.items;
 
@@ -1177,7 +1239,7 @@ $proxy_url = "./proxy.php";
             }
 
             // Add streaming elements if in streaming mode
-            if (state.isStreaming) {
+            if (state.isStreaming || (customItems && fromItem.user)) {
                 // Add streaming badge
                 const badge = document.createElement('div');
                 badge.className = 'streaming-badge';
@@ -1230,6 +1292,9 @@ $proxy_url = "./proxy.php";
                 if (!state.isStreaming || (state.isStreaming && state.hasMultipleStreams)) {
                     startDisplayTimer();
                 }
+
+                // Clear the transition timeout reference
+                state.currentTransitionTimeout = null;
             }, config.transitionDuration + 100);
 
             // Keep track of the timeout for cleanup
@@ -1302,6 +1367,12 @@ $proxy_url = "./proxy.php";
                 if (transitionDuration > config.transitionDuration * 2) {
                     debug('Transition seems stuck, resetting transition state');
                     state.transitioning = false;
+
+                    // Also clear any lingering transition timeout
+                    if (state.currentTransitionTimeout) {
+                        clearTimeout(state.currentTransitionTimeout);
+                        state.currentTransitionTimeout = null;
+                    }
                 }
             }
 
