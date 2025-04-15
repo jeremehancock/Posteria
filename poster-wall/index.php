@@ -1,4 +1,5 @@
 <?php
+
 # Posteria: A Media Poster Collection App
 # Save all your favorite custom media server posters in one convenient place
 #
@@ -48,6 +49,7 @@ $config = [
 $site_title = getEnvWithFallback('SITE_TITLE', 'Posteria') . ' Poster Wall';
 
 // Function to get active streams
+// Replace the getActiveStreams function in the first file (paste.txt) with this updated version
 function getActiveStreams($server_url, $token)
 {
     $sessions_url = "{$server_url}/status/sessions?X-Plex-Token={$token}";
@@ -60,6 +62,7 @@ function getActiveStreams($server_url, $token)
         CURLOPT_TIMEOUT => 30,
         CURLOPT_SSL_VERIFYPEER => false,
         CURLOPT_SSL_VERIFYHOST => false,
+        CURLOPT_HTTPHEADER => ['Accept: application/json'] // Request JSON response
     ]);
     $response = curl_exec($ch);
 
@@ -74,6 +77,69 @@ function getActiveStreams($server_url, $token)
         return [];
     }
 
+    // Try to parse JSON
+    $data = json_decode($response, true);
+    if (json_last_error() !== JSON_ERROR_NONE) {
+        // Fallback to XML parsing
+        return parseXMLStreams($response);
+    }
+
+    return parseJSONStreams($data);
+}
+
+// Add these helper functions to the file
+// Parse JSON formatted response
+function parseJSONStreams($data)
+{
+    $streams = [];
+
+    if (isset($data['MediaContainer']['Metadata'])) {
+        foreach ($data['MediaContainer']['Metadata'] as $video) {
+            // Skip live TV streams
+            if (isset($video['live']) && $video['live'] == 1) {
+                continue;
+            }
+
+            // Additional check for LiveTV type
+            if (isset($video['type']) && (strtolower($video['type']) == 'livetv' || strtolower($video['type']) == 'live')) {
+                continue;
+            }
+
+            // Skip music tracks
+            if (isset($video['type']) && $video['type'] == 'track') {
+                continue;
+            }
+
+            $stream = [
+                'title' => $video['title'] ?? '',
+                'type' => $video['type'] ?? '',
+                'thumb' => $video['thumb'] ?? '',
+                'art' => $video['art'] ?? '',
+                'year' => $video['year'] ?? '',
+                'summary' => $video['summary'] ?? '',
+                'duration' => $video['duration'] ?? 0,
+                'viewOffset' => $video['viewOffset'] ?? 0,
+                'user' => isset($video['User']['title']) ? $video['User']['title'] : 'Unknown User'
+            ];
+
+            // Add TV show specific information
+            if ($stream['type'] == 'episode') {
+                $stream['show_title'] = $video['grandparentTitle'] ?? '';
+                $stream['season'] = $video['parentIndex'] ?? '';
+                $stream['episode'] = $video['index'] ?? '';
+                $stream['show_thumb'] = $video['grandparentThumb'] ?? '';
+            }
+
+            $streams[] = $stream;
+        }
+    }
+
+    return $streams;
+}
+
+// Parse XML formatted response (fallback method)
+function parseXMLStreams($response)
+{
     // Try to parse the XML
     libxml_use_internal_errors(true);
     $xml = simplexml_load_string($response);
@@ -86,6 +152,21 @@ function getActiveStreams($server_url, $token)
     $streams = [];
     if ($xml && isset($xml->Video)) {
         foreach ($xml->Video as $video) {
+            // Skip live TV streams
+            if (isset($video['live']) && (string) $video['live'] == '1') {
+                continue;
+            }
+
+            // Additional check for LiveTV type
+            if (isset($video['type']) && (strtolower((string) $video['type']) == 'livetv' || strtolower((string) $video['type']) == 'live')) {
+                continue;
+            }
+
+            // Skip music tracks
+            if (isset($video['type']) && (string) $video['type'] == 'track') {
+                continue;
+            }
+
             $stream = [
                 'title' => (string) $video['title'],
                 'type' => (string) $video['type'],
