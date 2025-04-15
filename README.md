@@ -96,8 +96,8 @@ docker-compose up -d
 | SITE_TITLE                | Website title                        | Posteria                                                                                              |
 | AUTH_USERNAME             | Admin username                       | admin                                                                                                 |
 | AUTH_PASSWORD             | Admin password                       | changeme                                                                                              |
-| AUTH_BYPASS               | Bypass Authentication                | false                                                                                                 |
 | SESSION_DURATION          | Login session duration in seconds    | 3600 (1 Hour)                                                                                         |
+| AUTH_BYPASS               | Bypass Authentication                | false                                                                                                 |
 | IMAGES_PER_PAGE           | Number of posters displayed per page | 24                                                                                                    |
 | MAX_FILE_SIZE             | Maximum upload file size in bytes    | 5242880 (5MB)                                                                                         |
 | PLEX_SERVER_URL           | URL for your Plex Server             | ex: http://your-server:32400                                                                          |
