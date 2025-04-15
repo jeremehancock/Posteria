@@ -54,6 +54,8 @@ services:
       - AUTH_USERNAME=admin # Change this!
       - AUTH_PASSWORD=changeme # Change this!
       - SESSION_DURATION=3600 # In seconds
+      - AUTH_BYPASS=false # DO NOT USE if you expose Posteria outside your local network
+
       - IMAGES_PER_PAGE=24
       - MAX_FILE_SIZE=5242880 # In bytes
 
@@ -94,6 +96,7 @@ docker-compose up -d
 | SITE_TITLE                | Website title                        | Posteria                                                                                              |
 | AUTH_USERNAME             | Admin username                       | admin                                                                                                 |
 | AUTH_PASSWORD             | Admin password                       | changeme                                                                                              |
+| AUTH_BYPASS               | Bypass Authentication                | false                                                                                                 |
 | SESSION_DURATION          | Login session duration in seconds    | 3600 (1 Hour)                                                                                         |
 | IMAGES_PER_PAGE           | Number of posters displayed per page | 24                                                                                                    |
 | MAX_FILE_SIZE             | Maximum upload file size in bytes    | 5242880 (5MB)                                                                                         |

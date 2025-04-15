@@ -318,3 +318,13 @@
 ### Fixed
 
 - Issues with randomization in Poster Wall and cleaned up transitions
+
+## [1.5.4]
+
+### Added
+
+- Option to bypass authentication
+
+### Fixed
+
+- Poster Wall showing Live TV active streams on initial load
