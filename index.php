@@ -574,6 +574,12 @@ function generatePaginationLinks($currentPage, $totalPages, $searchQuery, $curre
  * Authentication Handlers
  */
 
+if (isset($auth_config['auth_bypass']) && $auth_config['auth_bypass'] === true) {
+	$_SESSION['logged_in'] = true;
+	$_SESSION['auth_bypass'] = true;
+	$_SESSION['login_time'] = time();
+}
+
 // Handle AJAX login
 if (
 	$_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'login' &&
@@ -3351,6 +3357,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 						</button>
 					</div>
 					<?php endif; ?>
+					<?php if (($_SESSION['auth_bypass'] !== true)): ?>
 					<a href="?action=logout" class="logout-button" title="Logout">
 						<svg class="logout-icon" xmlns="http://www.w3.org/2000/svg" viewBox="-2 -2 28 28" fill="none"
 							stroke="currentColor" stroke-width="2" style="margin-left: 5px;">
@@ -3361,6 +3368,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 							<line x1="19" y1="12" x2="7" y2="12" stroke-linecap="round"></line>
 						</svg>
 					</a>
+					<?php endif; ?>
 				</div>
 				<?php else: ?>
 				<button id="showLoginModal" class="login-trigger-button">

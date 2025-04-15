@@ -61,6 +61,7 @@ if (!function_exists('getIntEnvWithFallback')) {
 $auth_config = [
     'username' => getEnvWithFallback('AUTH_USERNAME', 'admin'),
     'password' => getEnvWithFallback('AUTH_PASSWORD', 'changeme'),
+    'auth_bypass' => getBoolEnvWithFallback('AUTH_BYPASS', false),
     'session_duration' => getIntEnvWithFallback('SESSION_DURATION', 3600) // 1 hour default
 ];
 
