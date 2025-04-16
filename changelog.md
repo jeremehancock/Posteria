@@ -328,3 +328,9 @@
 ### Fixed
 
 - Poster Wall showing Live TV active streams on initial load
+
+## [1.5.5]
+
+### Fixed
+
+- Poster Wall background transitions
