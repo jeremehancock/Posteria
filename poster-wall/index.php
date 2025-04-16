@@ -49,7 +49,6 @@ $config = [
 $site_title = getEnvWithFallback('SITE_TITLE', 'Posteria') . ' Poster Wall';
 
 // Function to get active streams
-// Replace the getActiveStreams function in the first file (paste.txt) with this updated version
 function getActiveStreams($server_url, $token)
 {
     $sessions_url = "{$server_url}/status/sessions?X-Plex-Token={$token}";
@@ -87,7 +86,6 @@ function getActiveStreams($server_url, $token)
     return parseJSONStreams($data);
 }
 
-// Add these helper functions to the file
 // Parse JSON formatted response
 function parseJSONStreams($data)
 {
@@ -411,6 +409,20 @@ $proxy_url = "./proxy.php";
             z-index: 1;
         }
 
+        #background-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-size: cover;
+            background-position: center;
+            filter: blur(30px);
+            opacity: 0;
+            transition: opacity 1.5s ease;
+            z-index: 1;
+        }
+
         #poster-container {
             position: absolute;
             top: 50%;
@@ -418,8 +430,14 @@ $proxy_url = "./proxy.php";
             transform: translate(-50%, -50%);
             height: 90vh;
             z-index: 2;
-            transition: width 0.5s ease, height 0.5s ease;
             perspective: 1000px;
+            overflow: hidden;
+        }
+
+        .poster-wrapper {
+            position: relative;
+            width: 100%;
+            height: 100%;
             overflow: hidden;
         }
 
@@ -548,6 +566,7 @@ $proxy_url = "./proxy.php";
 
 <body>
     <div id="background"></div>
+    <div id="background-overlay"></div>
     <div id="poster-container"></div>
 
     <script>
@@ -583,7 +602,8 @@ $proxy_url = "./proxy.php";
             lastStreamCheck: 0, // Timestamp of last stream check
             streamCheckQueue: [], // Queue of stream checks
             previousStreams: [], // Keep track of previous stream sets
-            uniqueId: 1  // Used for generating unique IDs for tracking streams
+            uniqueId: 1,  // Used for generating unique IDs for tracking streams
+            lockedDimensions: null // Store locked dimensions during transitions
         };
 
         // URLs
@@ -594,6 +614,7 @@ $proxy_url = "./proxy.php";
 
         // DOM elements
         const background = document.getElementById('background');
+        const backgroundOverlay = document.getElementById('background-overlay');
         const posterContainer = document.getElementById('poster-container');
 
         // Debug logger
@@ -639,6 +660,27 @@ $proxy_url = "./proxy.php";
             // Handle window resize
             window.addEventListener('resize', adjustPosterSize);
             adjustPosterSize();
+
+            // Set up resize observer for poster container
+            if (window.ResizeObserver) {
+                const resizeObserver = new ResizeObserver(entries => {
+                    for (let entry of entries) {
+                        if (entry.target === posterContainer && !state.transitioning) {
+                            const width = entry.contentRect.width;
+                            const height = entry.contentRect.height;
+
+                            // Maintain 2:3 aspect ratio (width:height)
+                            const targetHeight = width * (3 / 2);
+
+                            if (Math.abs(height - targetHeight) > 1) {
+                                posterContainer.style.height = `${targetHeight}px`;
+                            }
+                        }
+                    }
+                });
+
+                resizeObserver.observe(posterContainer);
+            }
         }
 
         // Show error message
@@ -1354,6 +1396,15 @@ $proxy_url = "./proxy.php";
             // Clear existing content
             posterContainer.innerHTML = '';
 
+            // Create a fixed-size wrapper
+            const posterWrapper = document.createElement('div');
+            posterWrapper.className = 'poster-wrapper';
+            posterWrapper.style.width = '100%';
+            posterWrapper.style.height = '100%';
+            posterWrapper.style.position = 'relative';
+            posterWrapper.style.overflow = 'hidden';
+            posterContainer.appendChild(posterWrapper);
+
             // Update background
             const artUrl = currentItem.art || currentItem.thumb ?
                 getProxyUrl(currentItem.art || currentItem.thumb) : '';
@@ -1369,10 +1420,13 @@ $proxy_url = "./proxy.php";
                 poster.style.width = '100%';
                 poster.style.height = '100%';
                 poster.style.backgroundImage = `url(${posterUrl})`;
-                poster.style.backgroundSize = 'cover';
+                poster.style.backgroundSize = 'cover'; // Fill the container completely
                 poster.style.backgroundPosition = 'center';
                 poster.style.position = 'absolute';
-                posterContainer.appendChild(poster);
+                poster.style.top = '0';
+                poster.style.left = '0';
+                poster.style.overflow = 'hidden'; // Prevent content from exceeding bounds
+                posterWrapper.appendChild(poster);
             }
 
             // Add streaming elements if in streaming mode
@@ -1381,10 +1435,10 @@ $proxy_url = "./proxy.php";
                 const badge = document.createElement('div');
                 badge.className = 'streaming-badge';
                 badge.textContent = 'Currently Streaming';
-                posterContainer.appendChild(badge);
+                posterWrapper.appendChild(badge);
 
                 // Add stream info
-                addStreamInfo(currentItem);
+                addStreamInfo(currentItem, posterWrapper);
             }
         }
 
@@ -1392,19 +1446,23 @@ $proxy_url = "./proxy.php";
         function updateStreamInfo(stream) {
             if (!stream) return;
 
+            // Find existing wrapper
+            const posterWrapper = posterContainer.querySelector('.poster-wrapper');
+            if (!posterWrapper) return;
+
             // Find existing stream info element
-            const existingInfo = posterContainer.querySelector('.stream-info');
+            const existingInfo = posterWrapper.querySelector('.stream-info');
             if (existingInfo) {
                 existingInfo.remove();
             }
 
-            // Add updated stream info
-            addStreamInfo(stream);
+            // Add updated stream info to the wrapper
+            addStreamInfo(stream, posterWrapper);
         }
 
         // Add streaming information
-        function addStreamInfo(stream) {
-            if (!stream) return;
+        function addStreamInfo(stream, container) {
+            if (!stream || !container) return;
 
             const infoDiv = document.createElement('div');
             infoDiv.className = 'stream-info';
@@ -1430,7 +1488,7 @@ $proxy_url = "./proxy.php";
                 </div>
             `;
 
-            posterContainer.appendChild(infoDiv);
+            container.appendChild(infoDiv);
         }
 
         // Handle transition between posters
@@ -1439,6 +1497,26 @@ $proxy_url = "./proxy.php";
                 debug('Skip transition - already transitioning');
                 return;
             }
+
+            // Lock the poster container's dimensions
+            const lockedWidth = posterContainer.offsetWidth;
+            const lockedHeight = posterContainer.offsetHeight;
+
+            // Store original dimensions
+            const originalWidth = posterContainer.style.width;
+            const originalHeight = posterContainer.style.height;
+
+            // Apply fixed dimensions to prevent size shifts
+            posterContainer.style.width = `${lockedWidth}px`;
+            posterContainer.style.height = `${lockedHeight}px`;
+
+            // Store locked dimensions in state for possible restoration
+            state.lockedDimensions = {
+                originalWidth,
+                originalHeight,
+                lockedWidth,
+                lockedHeight
+            };
 
             state.transitioning = true;
             state.lastTransitionTime = Date.now();
@@ -1483,44 +1561,64 @@ $proxy_url = "./proxy.php";
                 return;
             }
 
-            // Update background for destination item
+            // Update background for destination item - SMOOTH TRANSITION
             const artUrl = toItem.art || toItem.thumb ?
                 getProxyUrl(toItem.art || toItem.thumb) : '';
+
             if (artUrl) {
-                background.style.backgroundImage = `url(${artUrl})`;
+                // Set the new background image on the overlay
+                backgroundOverlay.style.backgroundImage = `url(${artUrl})`;
+
+                // Fade in the overlay with the new background
+                setTimeout(() => {
+                    backgroundOverlay.style.opacity = '0.4';
+                }, 100);
+
+                // After transition completes, update the main background and reset the overlay
+                setTimeout(() => {
+                    background.style.backgroundImage = `url(${artUrl})`;
+                    backgroundOverlay.style.opacity = '0';
+                }, config.transitionDuration + 500);
             }
 
             // Clear existing content
             posterContainer.innerHTML = '';
 
-            const containerWidth = posterContainer.offsetWidth;
-            const containerHeight = posterContainer.offsetHeight;
-
-            const tileWidth = containerWidth / config.tileCols;
-            const tileHeight = containerHeight / config.tileRows;
+            // Use precise calculations with Math.floor to avoid rounding issues
+            const tileWidth = Math.floor(lockedWidth / config.tileCols);
+            const tileHeight = Math.floor(lockedHeight / config.tileRows);
 
             // Create tile grid for transition
             const tiles = [];
             for (let row = 0; row < config.tileRows; row++) {
                 for (let col = 0; col < config.tileCols; col++) {
+                    // Special handling for last column and row to avoid gaps
+                    const isLastCol = col === config.tileCols - 1;
+                    const isLastRow = row === config.tileRows - 1;
+
+                    const tileWidthActual = isLastCol ?
+                        lockedWidth - (col * tileWidth) : tileWidth;
+                    const tileHeightActual = isLastRow ?
+                        lockedHeight - (row * tileHeight) : tileHeight;
+
                     const tile = document.createElement('div');
                     tile.className = 'tile';
-                    tile.style.width = tileWidth + 'px';
-                    tile.style.height = tileHeight + 'px';
-                    tile.style.top = (row * tileHeight) + 'px';
-                    tile.style.left = (col * tileWidth) + 'px';
+                    tile.style.width = `${tileWidthActual}px`;
+                    tile.style.height = `${tileHeightActual}px`;
+                    tile.style.top = `${row * tileHeight}px`;
+                    tile.style.left = `${col * tileWidth}px`;
 
-                    // From poster image
+                    // From poster image - using consistent styling
                     tile.style.backgroundImage = `url(${fromPosterUrl})`;
                     tile.style.backgroundPosition = `-${col * tileWidth}px -${row * tileHeight}px`;
-                    tile.style.backgroundSize = `${containerWidth}px ${containerHeight}px`;
+                    tile.style.backgroundSize = `${lockedWidth}px ${lockedHeight}px`;
 
-                    // Add back face
+                    // Add back face with consistent styling
                     const tileBack = document.createElement('div');
                     tileBack.className = 'tile-back';
                     tileBack.style.backgroundImage = `url(${toPosterUrl})`;
                     tileBack.style.backgroundPosition = `-${col * tileWidth}px -${row * tileHeight}px`;
-                    tileBack.style.backgroundSize = `${containerWidth}px ${containerHeight}px`;
+                    tileBack.style.backgroundSize = `${lockedWidth}px ${lockedHeight}px`;
 
                     tile.appendChild(tileBack);
                     posterContainer.appendChild(tile);
@@ -1530,14 +1628,25 @@ $proxy_url = "./proxy.php";
 
             // Add streaming elements if in streaming mode
             if (state.isStreaming || (customItems && fromItem.user)) {
-                // Add streaming badge
+                // Add streaming badge in a fixed position over the tiles
                 const badge = document.createElement('div');
                 badge.className = 'streaming-badge';
                 badge.textContent = 'Currently Streaming';
+                badge.style.position = 'absolute';
+                badge.style.zIndex = '10';
                 posterContainer.appendChild(badge);
 
-                // Add stream info
-                addStreamInfo(fromItem);
+                // Add stream info in a fixed position
+                const infoContainer = document.createElement('div');
+                infoContainer.style.position = 'absolute';
+                infoContainer.style.bottom = '0';
+                infoContainer.style.left = '0';
+                infoContainer.style.width = '100%';
+                infoContainer.style.zIndex = '10';
+                posterContainer.appendChild(infoContainer);
+
+                // Add stream info to this container
+                addStreamInfo(fromItem, infoContainer);
             }
 
             // Shuffle tiles for random flip effect
@@ -1587,6 +1696,17 @@ $proxy_url = "./proxy.php";
                 // Reset transitioning flag
                 state.transitioning = false;
 
+                // Restore dynamic width/height if needed for responsive behavior
+                if (state.lockedDimensions) {
+                    if (state.lockedDimensions.originalWidth) {
+                        posterContainer.style.width = state.lockedDimensions.originalWidth;
+                    }
+                    if (state.lockedDimensions.originalHeight) {
+                        posterContainer.style.height = state.lockedDimensions.originalHeight;
+                    }
+                    state.lockedDimensions = null;
+                }
+
                 // Run callback if provided before updating display
                 if (callback) {
                     try {
@@ -1617,6 +1737,11 @@ $proxy_url = "./proxy.php";
 
         // Adjust poster size
         function adjustPosterSize() {
+            // Skip adjustment during transitions
+            if (state.transitioning) {
+                return;
+            }
+
             const viewportWidth = window.innerWidth;
             const viewportHeight = window.innerHeight;
 
@@ -1652,9 +1777,9 @@ $proxy_url = "./proxy.php";
                 }
             }
 
-            // Apply the calculated dimensions
-            posterContainer.style.width = posterWidth + 'px';
-            posterContainer.style.height = posterHeight + 'px';
+            // Apply the calculated dimensions with fixed pixel values
+            posterContainer.style.width = `${Math.floor(posterWidth)}px`;
+            posterContainer.style.height = `${Math.floor(posterHeight)}px`;
 
             // Update display if not in transition
             if (!state.transitioning) {
@@ -1687,6 +1812,20 @@ $proxy_url = "./proxy.php";
                         clearTimeout(state.currentTransitionTimeout);
                         state.currentTransitionTimeout = null;
                     }
+
+                    // Restore original dimensions if needed
+                    if (state.lockedDimensions) {
+                        if (state.lockedDimensions.originalWidth) {
+                            posterContainer.style.width = state.lockedDimensions.originalWidth;
+                        }
+                        if (state.lockedDimensions.originalHeight) {
+                            posterContainer.style.height = state.lockedDimensions.originalHeight;
+                        }
+                        state.lockedDimensions = null;
+                    }
+
+                    // Update display
+                    updateDisplay();
                 }
             }
 
