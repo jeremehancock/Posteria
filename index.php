@@ -10682,7 +10682,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 				});
 			}
 
-			// Fix mobile touch interactions for the overlay buttons
+			// Replace your current fixTouchInteractions function with this one
 			function fixTouchInteractions() {
 				// Only initialize event delegation once
 				if (!document.touchHandlersInitialized) {
@@ -11076,11 +11076,6 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 			.overlay-action-button:active {
 				transform: scale(0.95) !important;
 				background: var(--accent-hover) !important;
-			}
-			
-			/* FIXED: Make orphan buttons display properly on mobile */
-			.orphan-button.delete-btn {
-				display: flex !important;
 			}
 			
 			/* Style for the active state of delete orphan button */
