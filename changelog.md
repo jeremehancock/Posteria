@@ -334,3 +334,9 @@
 ### Fixed
 
 - Poster Wall background transitions
+
+## [1.5.6]
+
+### Fixed
+
+- Issue with Lazy Loading and posters with # in the filename
