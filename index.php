@@ -9977,37 +9977,8 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 	</script>
 
 	<script>
-		/**
-		 * Fixed Infinite Scroll Implementation for Posteria - Mobile Delete Orphan Button Fix
-		 */
 		document.addEventListener('DOMContentLoaded', function () {
-			// Configuration
-			const config = {
-				loadingThreshold: 200, // Distance from bottom (in px) to trigger loading
-				batchSize: 24,         // Number of items to load per request
-				loadingDelay: 300,     // Delay in ms to prevent multiple simultaneous requests
-				debug: false           // Set to true to enable console logging
-			};
-
-			// State variables
-			let isLoading = false;     // Flag to prevent multiple simultaneous requests
-			let allLoaded = false;     // Flag to indicate all items have been loaded
-			let currentPage = 1;       // Current page number (starts at 1 since first page is already loaded)
-			let loadingTimer = null;   // Timer for loading delay
-			let isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-
-			// Elements
-			const galleryContainer = document.querySelector('.gallery');
-			const paginationContainer = document.querySelector('.pagination');
-			let loadingIndicator = null;
-
-			// Only initialize if gallery exists
-			if (!galleryContainer) return;
-
-			// Create the fullscreen modal first
-			createFullScreenModal();
-
-			// Ensure fullscreen modal exists
+			// Create the full-screen modal for viewing posters if it doesn't exist yet
 			function createFullScreenModal() {
 				if (document.getElementById('fullScreenModal')) return;
 
@@ -10021,7 +9992,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 			<button class="fullscreen-close">×</button>
 		`;
 
-				// Add CSS for the full-screen modal
+				// Add CSS for the full-screen modal to match the URL preview style
 				const style = document.createElement('style');
 				style.textContent = `
 			.fullscreen-modal {
@@ -10142,17 +10113,16 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 				});
 			}
 
-			// Show fullscreen modal function - make this available globally
-			window.showFullScreenModal = function (imageSrc) {
+			// Function to show the full-screen modal
+			function showFullScreenModal(imageSrc) {
 				const modal = document.getElementById('fullScreenModal');
 				const img = document.getElementById('fullScreenImage');
 
 				if (!modal || !img) {
 					createFullScreenModal();
-					return window.showFullScreenModal(imageSrc);
 				}
 
-				// Create loading indicator if needed
+				// Create loading indicator
 				let loadingSpinner = modal.querySelector('.fullscreen-loading');
 				if (!loadingSpinner) {
 					loadingSpinner = document.createElement('div');
@@ -10160,29 +10130,28 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 					modal.querySelector('.fullscreen-content').appendChild(loadingSpinner);
 				}
 
-				// Show spinner
+				// Make loading spinner visible
 				loadingSpinner.style.display = 'block';
 
-				// Hide image until loaded
+				// Hide the image until it's loaded
 				img.style.opacity = '0';
 
-				// Set image source
+				// Set the image source
 				img.src = imageSrc;
 
-				// When image loads, hide spinner and show image
+				// When image is loaded, show it and hide the spinner
 				img.onload = function () {
 					img.style.opacity = '1';
 					loadingSpinner.style.display = 'none';
 				};
 
-				// Show modal
+				// Display the modal
 				modal.style.display = 'flex';
-				// Force reflow
-				modal.offsetHeight;
+				modal.offsetHeight; // Force reflow
 				modal.classList.add('show');
-			};
+			}
 
-			// Hide fullscreen modal function
+			// Function to hide the full-screen modal
 			function hideFullScreenModal() {
 				const modal = document.getElementById('fullScreenModal');
 				if (!modal) return;
@@ -10193,18 +10162,136 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 				}, 300); // Match transition duration
 			}
 
-			// Make this available globally too
-			window.hideFullScreenModal = hideFullScreenModal;
+			// Add the full-screen button to all gallery items
+			function addFullScreenButtons() {
+				// Create the full-screen modal
+				createFullScreenModal();
 
-			// Detect touch-capable devices
-			function detectTouchDevice() {
-				return 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+				// Find all gallery items
+				const galleryItems = document.querySelectorAll('.gallery-item');
+
+				galleryItems.forEach(item => {
+					const overlayActions = item.querySelector('.image-overlay-actions');
+					const imageElement = item.querySelector('.gallery-image');
+
+					if (!overlayActions || !imageElement) return;
+
+					// Check if button already exists to avoid duplicates
+					if (overlayActions.querySelector('.fullscreen-view-btn')) return;
+
+					// Get the image source
+					const imageSrc = imageElement.getAttribute('data-src');
+					if (!imageSrc) return;
+
+					// Create the full-screen button
+					const fullScreenBtn = document.createElement('button');
+					fullScreenBtn.className = 'overlay-action-button fullscreen-view-btn';
+					fullScreenBtn.innerHTML = `
+				<svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+				</svg>
+				Full Screen
+			`;
+
+					// Add click event to open full-screen view
+					fullScreenBtn.addEventListener('click', function (e) {
+						e.preventDefault();
+						e.stopPropagation();
+
+						// Clean the URL to ensure proper loading
+						const cleanImageUrl = imageSrc.split('?')[0] + '?v=' + new Date().getTime();
+						showFullScreenModal(cleanImageUrl);
+					});
+
+					// Insert the button ABOVE the "Copy URL" button
+					const copyUrlBtn = overlayActions.querySelector('.copy-url-btn');
+					if (copyUrlBtn) {
+						copyUrlBtn.parentNode.insertBefore(fullScreenBtn, copyUrlBtn);
+					} else {
+						// Fallback: add to the beginning
+						overlayActions.prepend(fullScreenBtn);
+					}
+				});
 			}
 
-			// FIXED: Properly handle Delete Orphan buttons - MOBILE FIX
+			// Initialize
+			addFullScreenButtons();
+
+			// Re-add buttons after AJAX updates or dynamic content changes
+			// Set up a mutation observer to detect when new gallery items are added
+			const observer = new MutationObserver(function (mutations) {
+				let shouldAddButtons = false;
+
+				mutations.forEach(function (mutation) {
+					if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+						for (let i = 0; i < mutation.addedNodes.length; i++) {
+							const node = mutation.addedNodes[i];
+							// Check if it's a gallery item or contains gallery items
+							if (node.classList && node.classList.contains('gallery-item') ||
+								(node.querySelectorAll && node.querySelectorAll('.gallery-item').length > 0)) {
+								shouldAddButtons = true;
+								break;
+							}
+						}
+					}
+				});
+
+				if (shouldAddButtons) {
+					setTimeout(addFullScreenButtons, 100);
+				}
+			});
+
+			// Start observing the document body
+			observer.observe(document.body, {
+				childList: true,
+				subtree: true
+			});
+
+			// Also call when images finish loading to ensure all buttons are added
+			window.addEventListener('load', function () {
+				setTimeout(addFullScreenButtons, 500);
+			});
+		});
+	</script>
+	<script>
+		/**
+	 * Complete Fixed Infinite Scroll Implementation for Posteria
+	 *
+	 * This version fixes:
+	 * - Function definition order (hideNonOrphanedDeleteButtons defined before it's used)
+	 * - Orphaned button visibility
+	 * - All previous issues with posters, Plex buttons, etc.
+	 */
+
+		document.addEventListener('DOMContentLoaded', function () {
+			// Configuration
+			const config = {
+				loadingThreshold: 200, // Distance from bottom (in px) to trigger loading
+				batchSize: 24,         // Number of items to load per request
+				loadingDelay: 300,     // Delay in ms to prevent multiple simultaneous requests
+				debug: false           // Set to true to enable console logging
+			};
+
+			// State variables
+			let isLoading = false;     // Flag to prevent multiple simultaneous requests
+			let allLoaded = false;     // Flag to indicate all items have been loaded
+			let currentPage = 1;       // Current page number (starts at 1 since first page is already loaded)
+			let loadingTimer = null;   // Timer for loading delay
+
+			// Elements
+			const galleryContainer = document.querySelector('.gallery');
+			const paginationContainer = document.querySelector('.pagination');
+			let loadingIndicator = null;
+
+			// Only initialize if gallery exists
+			if (!galleryContainer) return;
+
+			// Helper function definitions (defined BEFORE they're used)
+
+			// Simplified version of hideNonOrphanedDeleteButtons for new content
 			function hideNonOrphanedDeleteButtons() {
 				// Target only newly added delete buttons that haven't been processed yet
-				document.querySelectorAll('.orphan-button.delete-btn:not(.orphaned-initialized)').forEach(button => {
+				document.querySelectorAll('.delete-btn:not(.orphaned-initialized)').forEach(button => {
 					const isOrphaned = button.getAttribute('data-orphaned') === 'true';
 					// Add initialized class to all buttons
 					button.classList.add('orphaned-initialized');
@@ -10214,118 +10301,8 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 					} else {
 						// Make sure orphaned buttons are visible
 						button.style.display = 'flex';
-
-						// Add click event handler for desktop
-						button.addEventListener('click', handleDeleteOrphanClick);
-
-						// Add touch event handlers for mobile
-						if (isTouchDevice) {
-							// Remove any existing handlers first to avoid duplicates
-							button.removeEventListener('touchstart', handleDeleteOrphanTouchStart);
-							button.removeEventListener('touchend', handleDeleteOrphanTouchEnd);
-
-							// Add new touch handlers
-							button.addEventListener('touchstart', handleDeleteOrphanTouchStart, { passive: false });
-							button.addEventListener('touchend', handleDeleteOrphanTouchEnd, { passive: false });
-						}
 					}
 				});
-			}
-
-			// Touchstart variables for tracking touch position
-			let touchStartX = 0;
-			let touchStartY = 0;
-			let touchElement = null;
-
-			// Touch handlers for Delete Orphan buttons
-			function handleDeleteOrphanTouchStart(e) {
-				// Store the touch position for later comparison
-				touchStartX = e.touches[0].clientX;
-				touchStartY = e.touches[0].clientY;
-				touchElement = this;
-
-				// Add active state for visual feedback
-				this.classList.add('orphan-touch-active');
-
-				// Prevent default to avoid any weird behavior
-				e.preventDefault();
-				e.stopPropagation();
-			}
-
-			function handleDeleteOrphanTouchEnd(e) {
-				// Only process if this is the same element
-				if (this !== touchElement) return;
-
-				// Check if it was a tap (not a scroll)
-				const touchEndX = e.changedTouches[0].clientX;
-				const touchEndY = e.changedTouches[0].clientY;
-				const dx = Math.abs(touchEndX - touchStartX);
-				const dy = Math.abs(touchEndY - touchStartY);
-
-				// Remove active state regardless
-				this.classList.remove('orphan-touch-active');
-
-				// If it was a tap (minimal movement)
-				if (dx < 10 && dy < 10) {
-					// Get the data attributes
-					const filename = this.getAttribute('data-filename');
-					const dirname = this.getAttribute('data-dirname');
-
-					// Set the values in the delete modal
-					const deleteFilenameInput = document.getElementById('deleteFilename');
-					const deleteDirectoryInput = document.getElementById('deleteDirectory');
-
-					if (deleteFilenameInput && deleteDirectoryInput) {
-						deleteFilenameInput.value = filename;
-						deleteDirectoryInput.value = dirname;
-
-						// Show the delete modal
-						const deleteModal = document.getElementById('deleteModal');
-						if (deleteModal) {
-							deleteModal.style.display = 'block';
-							setTimeout(() => {
-								deleteModal.classList.add('show');
-							}, 10);
-						}
-					}
-
-					// Prevent default behavior
-					e.preventDefault();
-					e.stopPropagation();
-				}
-
-				// Reset touch tracking
-				touchElement = null;
-			}
-
-			// Click handler for Delete Orphan button (desktop)
-			function handleDeleteOrphanClick(e) {
-				// Skip if this is a touch device (we'll use touch events instead)
-				if (isTouchDevice) return;
-
-				e.preventDefault();
-				e.stopPropagation();
-
-				const filename = this.getAttribute('data-filename');
-				const dirname = this.getAttribute('data-dirname');
-
-				// Set values in delete modal
-				const deleteFilenameInput = document.getElementById('deleteFilename');
-				const deleteDirectoryInput = document.getElementById('deleteDirectory');
-
-				if (deleteFilenameInput && deleteDirectoryInput) {
-					deleteFilenameInput.value = filename;
-					deleteDirectoryInput.value = dirname;
-
-					// Show delete modal
-					const deleteModal = document.getElementById('deleteModal');
-					if (deleteModal) {
-						deleteModal.style.display = 'block';
-						setTimeout(() => {
-							deleteModal.classList.add('show');
-						}, 10);
-					}
-				}
 			}
 
 			// Simplified version of showOrphanedBadge for new content
@@ -10426,8 +10403,8 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 					});
 				});
 
-				// Regular delete buttons 
-				document.querySelectorAll('.delete-btn:not(.orphan-button):not(.initialized)').forEach(button => {
+				// Delete buttons
+				document.querySelectorAll('.delete-btn:not(.initialized)').forEach(button => {
 					button.classList.add('initialized');
 					button.addEventListener('click', function (e) {
 						e.preventDefault();
@@ -10461,7 +10438,6 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 					button.classList.add('initialized');
 					button.addEventListener('click', function (e) {
 						e.preventDefault();
-						e.stopPropagation(); // Stop event propagation
 						const filename = this.getAttribute('data-filename');
 						const directory = this.getAttribute('data-dirname');
 
@@ -10488,7 +10464,6 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 					button.classList.add('initialized');
 					button.addEventListener('click', function (e) {
 						e.preventDefault();
-						e.stopPropagation(); // Stop event propagation
 						const filename = this.getAttribute('data-filename');
 						const directory = this.getAttribute('data-dirname');
 
@@ -10508,57 +10483,6 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 							}, 10);
 						}
 					});
-				});
-			}
-
-			// Initialize Full Screen buttons for new items
-			function addFullScreenButtons() {
-				// Find all gallery items without full screen buttons
-				const galleryItems = document.querySelectorAll('.gallery-item:not(.fullscreen-added)');
-
-				galleryItems.forEach(item => {
-					item.classList.add('fullscreen-added');
-
-					const overlayActions = item.querySelector('.image-overlay-actions');
-					const imageElement = item.querySelector('.gallery-image');
-
-					if (!overlayActions || !imageElement) return;
-
-					// Skip if button already exists
-					if (overlayActions.querySelector('.fullscreen-view-btn')) return;
-
-					// Get the image source
-					const imageSrc = imageElement.getAttribute('data-src');
-					if (!imageSrc) return;
-
-					// Create the full-screen button
-					const fullScreenBtn = document.createElement('button');
-					fullScreenBtn.className = 'overlay-action-button fullscreen-view-btn';
-					fullScreenBtn.innerHTML = `
-				<svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-					<path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
-				</svg>
-				Full Screen
-			`;
-
-					// Add click event to open full-screen view
-					fullScreenBtn.addEventListener('click', function (e) {
-						e.preventDefault();
-						e.stopPropagation(); // Critical: Stop event propagation
-
-						// Clean the URL to ensure proper loading (add timestamp to avoid caching)
-						const cleanImageUrl = imageSrc.split('?')[0] + '?v=' + new Date().getTime();
-
-						// Use the global function we defined
-						window.showFullScreenModal(cleanImageUrl);
-					});
-
-					// IMPORTANT: Insert the button at the TOP of the overlay actions
-					if (overlayActions.firstChild) {
-						overlayActions.insertBefore(fullScreenBtn, overlayActions.firstChild);
-					} else {
-						overlayActions.appendChild(fullScreenBtn);
-					}
 				});
 			}
 
@@ -10606,7 +10530,6 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 									// Add click event listener
 									changePosterButton.addEventListener('click', function (e) {
 										e.preventDefault();
-										e.stopPropagation(); // Stop event propagation
 
 										// Get the change poster modal
 										const changePosterModal = document.getElementById('changePosterModal');
@@ -10682,136 +10605,299 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 				});
 			}
 
-			// Replace your current fixTouchInteractions function with this one
 			function fixTouchInteractions() {
-				// Only initialize event delegation once
-				if (!document.touchHandlersInitialized) {
-					document.touchHandlersInitialized = true;
-					isTouchDevice = detectTouchDevice();
+				// Find all gallery items not already processed
+				const galleryItems = document.querySelectorAll('.gallery-item:not(.touch-fixed)');
 
-					if (isTouchDevice) {
-						// On touch devices, use event delegation for all touch interactions
-						document.addEventListener('touchstart', function (e) {
-							// Find the closest gallery item if any
-							const galleryItem = e.target.closest('.gallery-item');
-							if (!galleryItem) return;
-
-							// Don't do anything if touching an action button directly
-							if (e.target.closest('.overlay-action-button') ||
-								e.target.closest('.orphan-button')) return;
-
-							// Store touch start position 
-							galleryItem.touchStartX = e.touches[0].clientX;
-							galleryItem.touchStartY = e.touches[0].clientY;
-							galleryItem.touchTimeStart = Date.now();
-							galleryItem.isTouchScrolling = false;
-
-							// Mark this touch as in progress
-							galleryItem.dataset.touchInProgress = 'true';
-						}, { passive: true });
-
-						document.addEventListener('touchmove', function (e) {
-							// Find the closest gallery item 
-							const galleryItem = e.target.closest('.gallery-item');
-							if (!galleryItem) return;
-
-							// Check if this is a scroll rather than a tap
-							if (galleryItem.dataset.touchInProgress === 'true') {
-								const touchX = e.touches[0].clientX;
-								const touchY = e.touches[0].clientY;
-
-								const moveX = Math.abs(touchX - galleryItem.touchStartX);
-								const moveY = Math.abs(touchY - galleryItem.touchStartY);
-
-								// If moved more than threshold, mark as scrolling
-								if (moveX > 10 || moveY > 10) {
-									galleryItem.isTouchScrolling = true;
-									// Remove active class if scrolling
-									galleryItem.classList.remove('touch-active');
-								}
-							}
-						}, { passive: true });
-
-						document.addEventListener('touchend', function (e) {
-							// Don't handle if touching a Delete Orphan button
-							if (e.target.closest('.orphan-button')) return;
-
-							// Close all other open items first
-							const activeItems = document.querySelectorAll('.gallery-item.touch-active');
-							const target = e.target;
-
-							// If touching outside all gallery items, close all
-							if (!target.closest('.gallery-item')) {
-								activeItems.forEach(item => {
-									item.classList.remove('touch-active');
-								});
-								return;
-							}
-
-							// Don't do anything if touching an overlay action button
-							if (target.closest('.overlay-action-button')) {
-								// Don't close the overlay
-								return;
-							}
-
-							// Get the gallery item we're interacting with
-							const galleryItem = target.closest('.gallery-item');
-							if (!galleryItem) return;
-
-							// Clean up touch state
-							if (galleryItem.isTouchScrolling) {
-								galleryItem.dataset.touchInProgress = 'false';
-								return; // Skip tap handling if scrolling
-							}
-
-							// This was a tap - toggle the overlay
-							// Close all other items except this one
-							activeItems.forEach(item => {
-								if (item !== galleryItem) {
-									item.classList.remove('touch-active');
-								}
-							});
-
-							// Toggle this item's active state
-							if (galleryItem.classList.contains('touch-active')) {
-								galleryItem.classList.remove('touch-active');
-							} else {
-								galleryItem.classList.add('touch-active');
-							}
-
-							// Clean up
-							galleryItem.dataset.touchInProgress = 'false';
-						});
-					}
-				}
-
-				// Apply specific display properties to newly added items
-				document.querySelectorAll('.gallery-item:not(.touch-fixed)').forEach(item => {
+				galleryItems.forEach(item => {
 					item.classList.add('touch-fixed');
 
-					// On touch devices, ensure buttons aren't clickable until after first tap
-					if (isTouchDevice) {
-						// Make sure overlay actions container has pointer-events none
-						const overlay = item.querySelector('.image-overlay-actions');
-						if (overlay) {
-							overlay.style.pointerEvents = 'none';
-							overlay.querySelectorAll('.overlay-action-button').forEach(btn => {
-								btn.style.pointerEvents = 'none';
+					let touchStartY = 0;
+					let touchStartX = 0;
+					let touchTimeStart = 0;
+					let isTouchScrolling = false;
+
+					// Handle touch start
+					item.addEventListener('touchstart', function (e) {
+						touchStartY = e.touches[0].clientY;
+						touchStartX = e.touches[0].clientX;
+						touchTimeStart = Date.now();
+						isTouchScrolling = false;
+					}, { passive: true });
+
+					// Handle touch move to detect scrolling
+					item.addEventListener('touchmove', function (e) {
+						const touchY = e.touches[0].clientY;
+						const touchX = e.touches[0].clientX;
+
+						// If moved more than 10px, consider it a scroll
+						if (Math.abs(touchY - touchStartY) > 10 || Math.abs(touchX - touchStartX) > 10) {
+							isTouchScrolling = true;
+							// Remove active class if scrolling
+							this.classList.remove('touch-active');
+						}
+					}, { passive: true });
+
+					// Handle touch end
+					item.addEventListener('touchend', function (e) {
+						if (isTouchScrolling) return;
+
+						const touchEndY = e.changedTouches[0].clientY;
+						const touchEndX = e.changedTouches[0].clientX;
+						const touchTime = Date.now() - touchTimeStart;
+
+						const dy = Math.abs(touchEndY - touchStartY);
+						const dx = Math.abs(touchEndX - touchStartX);
+
+						// If it was a tap (short duration, minimal movement)
+						if (touchTime < 300 && dy < 10 && dx < 10) {
+							// Check if we tapped directly on a button
+							const tappedButton = e.target.closest('.overlay-action-button');
+
+							// If we're tapping on a button and the overlay is already active, let event proceed
+							if (tappedButton && this.classList.contains('touch-active')) {
+								return; // Don't prevent default, allow button tap to work
+							}
+
+							// Otherwise handle the poster tap
+							e.preventDefault();
+
+							// Remove active class from all other items
+							document.querySelectorAll('.gallery-item').forEach(otherItem => {
+								if (otherItem !== this) {
+									otherItem.classList.remove('touch-active');
+								}
+							});
+
+							// Toggle active class on this item
+							this.classList.toggle('touch-active');
+						}
+					});
+
+					// Directly add click handlers to all buttons in the overlay
+					const buttons = item.querySelectorAll('.overlay-action-button');
+					buttons.forEach(button => {
+						// First, remove any existing click listeners to avoid duplicates
+						const newButton = button.cloneNode(true);
+						button.parentNode.replaceChild(newButton, button);
+
+						// Add appropriate event handlers based on button type
+						if (newButton.classList.contains('copy-url-btn')) {
+							newButton.addEventListener('click', function (e) {
+								e.stopPropagation(); // Prevent gallery item event
+
+								// Get the URL
+								const url = this.getAttribute('data-url');
+								if (!url) return;
+
+								const encodedUrl = encodeURI(url).replace(/#/g, '%23');
+
+								// Copy to clipboard
+								navigator.clipboard.writeText(encodedUrl).then(() => {
+									// Show notification
+									const notification = document.getElementById('copyNotification');
+									if (notification) {
+										notification.style.display = 'block';
+										notification.classList.add('show');
+										setTimeout(() => {
+											notification.classList.remove('show');
+											setTimeout(() => {
+												notification.style.display = 'none';
+											}, 300);
+										}, 2000);
+									}
+								}).catch(err => {
+									// Fallback for browsers without clipboard API
+									const textarea = document.createElement('textarea');
+									textarea.value = encodedUrl;
+									textarea.style.position = 'fixed';
+									document.body.appendChild(textarea);
+									textarea.select();
+
+									try {
+										document.execCommand('copy');
+										// Show notification
+										const notification = document.getElementById('copyNotification');
+										if (notification) {
+											notification.style.display = 'block';
+											notification.classList.add('show');
+											setTimeout(() => {
+												notification.classList.remove('show');
+												setTimeout(() => {
+													notification.style.display = 'none';
+												}, 300);
+											}, 2000);
+										}
+									} catch (e) {
+										console.error('Copy failed:', e);
+									}
+
+									document.body.removeChild(textarea);
+								});
+							});
+						} else if (newButton.classList.contains('delete-btn')) {
+							newButton.addEventListener('click', function (e) {
+								e.stopPropagation(); // Prevent gallery item event
+
+								const filename = this.getAttribute('data-filename');
+								const dirname = this.getAttribute('data-dirname');
+
+								// Set values in delete modal
+								const deleteFilenameInput = document.getElementById('deleteFilename');
+								const deleteDirectoryInput = document.getElementById('deleteDirectory');
+
+								if (deleteFilenameInput && deleteDirectoryInput) {
+									deleteFilenameInput.value = filename;
+									deleteDirectoryInput.value = dirname;
+
+									// Show delete modal
+									const deleteModal = document.getElementById('deleteModal');
+									if (deleteModal) {
+										deleteModal.style.display = 'block';
+										setTimeout(() => {
+											deleteModal.classList.add('show');
+										}, 10);
+									}
+								}
+							});
+						} else if (newButton.classList.contains('send-to-plex-btn')) {
+							newButton.addEventListener('click', function (e) {
+								e.stopPropagation(); // Prevent gallery item event
+
+								const filename = this.getAttribute('data-filename');
+								const directory = this.getAttribute('data-dirname');
+
+								// Set data in Plex modal
+								const modal = document.getElementById('plexConfirmModal');
+								const filenameElement = document.getElementById('plexConfirmFilename');
+
+								if (modal && filenameElement) {
+									filenameElement.textContent = filename;
+									filenameElement.setAttribute('data-filename', filename);
+									filenameElement.setAttribute('data-dirname', directory);
+
+									// Show the modal
+									modal.style.display = 'block';
+									setTimeout(() => {
+										modal.classList.add('show');
+									}, 10);
+								}
+							});
+						} else if (newButton.classList.contains('import-from-plex-btn')) {
+							newButton.addEventListener('click', function (e) {
+								e.stopPropagation(); // Prevent gallery item event
+
+								const filename = this.getAttribute('data-filename');
+								const directory = this.getAttribute('data-dirname');
+
+								// Set data in import from Plex modal
+								const modal = document.getElementById('importFromPlexModal');
+								const filenameElement = document.getElementById('importFromPlexFilename');
+
+								if (modal && filenameElement) {
+									filenameElement.textContent = filename;
+									filenameElement.setAttribute('data-filename', filename);
+									filenameElement.setAttribute('data-dirname', directory);
+
+									// Show the modal
+									modal.style.display = 'block';
+									setTimeout(() => {
+										modal.classList.add('show');
+									}, 10);
+								}
+							});
+						} else if (newButton.classList.contains('change-poster-btn')) {
+							newButton.addEventListener('click', function (e) {
+								e.stopPropagation(); // Prevent gallery item event
+
+								const filename = this.getAttribute('data-filename');
+								const dirname = this.getAttribute('data-dirname');
+
+								// Get the change poster modal
+								const changePosterModal = document.getElementById('changePosterModal');
+								if (changePosterModal) {
+									// Set filename in modal
+									const modalFilename = document.getElementById('changePosterFilename');
+									if (modalFilename) {
+										// Clean the filename for display
+										const cleanedFilename = filename
+											.replace(/\.jpg$/i, '')
+											.replace(/\-\-Plex\-\-|\-\-Orphaned\-\-/g, '')
+											.replace(/\[\[.*?\]\]|\[.*?\]/gs, '')
+											.replace(/\s*\(A\d{8,12}\)\s*/g, ' ')
+											.replace(/\s+/g, ' ')
+											.trim();
+
+										modalFilename.textContent = `Changing poster: ${cleanedFilename}`;
+									}
+
+									// Set form values
+									document.getElementById('fileChangePosterOriginalFilename').value = filename;
+									document.getElementById('fileChangePosterDirectory').value = dirname;
+									document.getElementById('urlChangePosterOriginalFilename').value = filename;
+									document.getElementById('urlChangePosterDirectory').value = dirname;
+
+									// Reset file input
+									const fileInput = document.getElementById('fileChangePosterInput');
+									if (fileInput) {
+										fileInput.value = '';
+										const fileNameElement = fileInput.parentElement.querySelector('.file-name');
+										if (fileNameElement) {
+											fileNameElement.textContent = '';
+										}
+									}
+
+									// Reset URL input
+									const urlInput = document.querySelector('#urlChangePosterForm input[name="image_url"]');
+									if (urlInput) {
+										urlInput.value = '';
+									}
+
+									// Disable submit button until a file is selected
+									const fileSubmitButton = document.querySelector('#fileChangePosterForm button[type="submit"]');
+									if (fileSubmitButton) {
+										fileSubmitButton.disabled = true;
+									}
+
+									// Reset to file tab
+									const fileTabs = changePosterModal.querySelectorAll('.upload-tab-btn');
+									fileTabs.forEach(tab => {
+										if (tab.getAttribute('data-tab') === 'file') {
+											tab.classList.add('active');
+										} else {
+											tab.classList.remove('active');
+										}
+									});
+
+									// Show file form, hide URL form
+									document.getElementById('fileChangePosterForm').classList.add('active');
+									document.getElementById('urlChangePosterForm').classList.remove('active');
+
+									// Show the modal
+									changePosterModal.style.display = 'block';
+									setTimeout(() => {
+										changePosterModal.classList.add('show');
+									}, 10);
+								}
+							});
+						} else if (newButton.classList.contains('fullscreen-view-btn') || newButton.classList.contains('download-btn')) {
+							// These buttons are links or have their own handlers
+							// Just stop propagation to prevent overlay toggle
+							newButton.addEventListener('click', function (e) {
+								e.stopPropagation();
 							});
 						}
-					}
+					});
 				});
 
-				// Special handling for the overlay-action-buttons to make them receive clicks on touch
-				if (isTouchDevice) {
-					document.querySelectorAll('.gallery-item.touch-active .overlay-action-button').forEach(btn => {
-						btn.style.pointerEvents = 'auto';
-					});
-
-					document.querySelectorAll('.gallery-item.touch-active .image-overlay-actions').forEach(overlay => {
-						overlay.style.pointerEvents = 'auto';
-					});
-				}
+				// Close active overlay when touching outside
+				document.addEventListener('touchstart', function (e) {
+					if (!e.target.closest('.gallery-item') && !e.target.closest('.overlay-action-button')) {
+						document.querySelectorAll('.gallery-item.touch-active').forEach(item => {
+							item.classList.remove('touch-active');
+						});
+					}
+				}, { passive: true });
 			}
 
 			// Initialize features for newly loaded items
@@ -10850,8 +10936,8 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 				});
 
 				// Reinitialize buttons (Copy URL, Download, etc.)
-				if (typeof window.initializeButtons === 'function') {
-					setTimeout(() => window.initializeButtons(), 100);
+				if (typeof initializeButtons === 'function') {
+					setTimeout(() => initializeButtons(), 100);
 				} else {
 					// Fallback button initialization if the global function isn't available
 					reinitializeButtons();
@@ -10863,14 +10949,16 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 				// Reinitialize Change Poster buttons
 				reinitializeChangePosterButtons();
 
-				// Handle orphaned delete buttons - IMPORTANT: fix for orphaned buttons
+				// Handle orphaned delete buttons
 				hideNonOrphanedDeleteButtons();
 
 				// Show orphaned badges
 				showOrphanedBadge();
 
-				// Initialize full screen buttons
-				addFullScreenButtons();
+				// Initialize full screen buttons if the function exists
+				if (typeof addFullScreenButtons === 'function') {
+					setTimeout(() => addFullScreenButtons(), 200);
+				}
 
 				// Initialize caption truncation if function exists
 				if (typeof markTruncatedCaptions === 'function') {
@@ -11032,83 +11120,6 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 					});
 			}
 
-			// Add special CSS for mobile touch handling
-			function addMobileTouchCSS() {
-				// Check if styles already added
-				if (document.getElementById('poster-touch-styles')) return;
-
-				const style = document.createElement('style');
-				style.id = 'poster-touch-styles';
-				style.textContent = `
-		/* Mobile touch enhancements */
-		@media (hover: none) {
-			/* Gallery item touch styles */
-			.gallery-item {
-				position: relative;
-				-webkit-tap-highlight-color: transparent;
-			}
-			
-			/* Make overlay visible when touch-active class is present */
-			.gallery-item.touch-active .image-overlay-actions {
-				opacity: 1 !important;
-				visibility: visible !important;
-				display: flex !important;
-				pointer-events: auto !important;
-			}
-			
-			/* Show all buttons when parent is active */
-			.gallery-item.touch-active .overlay-action-button {
-				display: flex !important; 
-				pointer-events: auto !important;
-			}
-			
-			/* Add visual indicator for active state */
-			.gallery-item.touch-active {
-				box-shadow: 0 0 0 2px var(--accent-primary) !important;
-			}
-			
-			/* Ensure all fullscreen buttons are visible */
-			.fullscreen-view-btn {
-				display: flex !important;
-			}
-			
-			/* Button touch feedback */
-			.overlay-action-button:active {
-				transform: scale(0.95) !important;
-				background: var(--accent-hover) !important;
-			}
-			
-			/* Style for the active state of delete orphan button */
-			.orphan-button.delete-btn.orphan-touch-active {
-				transform: scale(0.95) !important;
-				background: var(--accent-hover) !important;
-			}
-		}
-		
-		/* Make sure overlay shows on touch and stays visible */
-		.image-overlay-actions {
-			transition: opacity 0.3s ease, visibility 0.3s ease !important;
-		}
-		
-		/* Force buttons to display properly on all devices */
-		.overlay-action-button {
-			display: flex !important;
-		}
-		
-		/* Special handling for fullscreen button to ensure it's always visible */
-		.fullscreen-view-btn {
-			display: flex !important;
-		}
-		
-		/* FIXED: Make orphan buttons display properly */
-		.orphan-button.delete-btn[data-orphaned="true"] {
-			display: flex !important;
-		}
-		`;
-
-				document.head.appendChild(style);
-			}
-
 			// Initialize
 			function init() {
 				// Create loading indicator
@@ -11116,12 +11127,6 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 
 				// Hide original pagination
 				hidePagination();
-
-				// Add special CSS for mobile touch
-				addMobileTouchCSS();
-
-				// Initial initialization for all existing items
-				initializeNewItems();
 
 				// Add scroll event listener
 				window.addEventListener('scroll', checkScroll, { passive: true });
@@ -11137,6 +11142,101 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 			// Start the magic
 			init();
 		});
+
+		// Add some CSS for the infinite scroll
+		(function () {
+			const style = document.createElement('style');
+			style.textContent = `
+	/* Infinite scroll loading indicator */
+	.infinite-scroll-loading {
+		margin: 30px 0;
+		padding: 20px;
+		text-align: center;
+		color: var(--text-secondary);
+	}
+
+	/* "All posters loaded" message */
+	.all-posters-loaded {
+		margin: 30px auto;
+		padding: 15px;
+		text-align: center;
+		font-weight: 500;
+		color: var(--text-secondary);
+		background: rgba(255, 159, 67, 0.1);
+		border: 1px solid var(--accent-primary);
+		border-radius: 8px;
+		width: 100%;
+		max-width: 400px;
+	}
+
+	/* Fix for overlay buttons */
+	.gallery-item.touch-active .image-overlay-actions {
+		opacity: 1;
+		pointer-events: auto;
+	}
+
+	.gallery-item.touch-active .overlay-action-button {
+		pointer-events: auto;
+	}
+
+	/* Make sure loading spinner is visible */
+	.loading-spinner {
+		width: 40px;
+		height: 40px;
+		border-radius: 50%;
+		border: 4px solid var(--text-secondary);
+		border-top-color: var(--accent-primary);
+		animation: spin 1s infinite linear;
+		margin: 0 auto;
+	}
+
+	/* Fix for button interactions on mobile */
+	@media (hover: none) {
+		.gallery-item.touch-active .image-overlay-actions {
+			opacity: 1;
+			display: flex;
+		}
+		
+		.overlay-action-button {
+			display: flex !important;
+		}
+		
+		/* Fix for Plex buttons */
+		.send-to-plex-btn, 
+		.import-from-plex-btn,
+		.change-poster-btn {
+			display: flex !important;
+		}
+	}
+
+	/* Ensure new items fade in smoothly */
+	.gallery-item {
+		animation: fadeIn 0.5s ease-out;
+	}
+
+	@keyframes fadeIn {
+		from { opacity: 0; transform: translateY(20px); }
+		to { opacity: 1; transform: translateY(0); }
+	}
+
+	/* Ensure placeholder is visible initially */
+	.gallery-image-placeholder {
+		opacity: 1;
+		background-color: var(--bg-tertiary);
+	}
+
+	.gallery-image-placeholder.hidden {
+		opacity: 0;
+		transition: opacity 0.3s ease;
+	}
+
+	/* Fix to make sure gallery lazy loading works properly */
+	.gallery-image.loaded {
+		opacity: 1;
+	}
+	`;
+			document.head.appendChild(style);
+		})();
 	</script>
 
 
