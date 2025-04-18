@@ -9846,7 +9846,8 @@ function generateGalleryItem($image, $allImages, $config, $isLoggedIn = false)
 			const lazyLoad = function () {
 				lazyImages.forEach(img => {
 					if (img.dataset.src && img.getBoundingClientRect().top < window.innerHeight + 200) {
-						img.src = img.dataset.src;
+						// Properly encode the URL, specifically handling the # character correctly
+						img.src = encodeURI(img.dataset.src).replace(/#/g, '%23');
 						img.classList.remove("lazy");
 					}
 				});
@@ -10767,7 +10768,7 @@ function generateGalleryItem($image, $allImages, $config, $isLoggedIn = false)
 							}
 						};
 
-						img.src = img.dataset.src;
+						img.src = encodeURI(img.dataset.src).replace(/#/g, '%23');
 					}
 				});
 
