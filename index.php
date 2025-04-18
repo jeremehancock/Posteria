@@ -10674,70 +10674,54 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 						}
 					});
 
-					// Directly add click handlers to all buttons in the overlay
-					const buttons = item.querySelectorAll('.overlay-action-button');
-					buttons.forEach(button => {
-						// First, remove any existing click listeners to avoid duplicates
-						const newButton = button.cloneNode(true);
-						button.parentNode.replaceChild(newButton, button);
+					// Special handling for delete buttons - making sure they work
+					const deleteButtons = item.querySelectorAll('.delete-btn');
+					deleteButtons.forEach(button => {
+						if (!button.classList.contains('delete-initialized')) {
+							button.classList.add('delete-initialized');
 
-						// Add appropriate event handlers based on button type
-						if (newButton.classList.contains('copy-url-btn')) {
+							// Remove existing listeners to avoid duplicates
+							const newButton = button.cloneNode(true);
+							button.parentNode.replaceChild(newButton, button);
+
+							// Add our new click handler
 							newButton.addEventListener('click', function (e) {
+								e.preventDefault();
 								e.stopPropagation(); // Prevent gallery item event
 
-								// Get the URL
-								const url = this.getAttribute('data-url');
-								if (!url) return;
+								const filename = this.getAttribute('data-filename');
+								const dirname = this.getAttribute('data-dirname');
 
-								const encodedUrl = encodeURI(url).replace(/#/g, '%23');
+								// Debugging output
+								console.log("Delete button clicked with:", { filename, dirname });
 
-								// Copy to clipboard
-								navigator.clipboard.writeText(encodedUrl).then(() => {
-									// Show notification
-									const notification = document.getElementById('copyNotification');
-									if (notification) {
-										notification.style.display = 'block';
-										notification.classList.add('show');
+								// Set values in delete modal
+								const deleteFilenameInput = document.getElementById('deleteFilename');
+								const deleteDirectoryInput = document.getElementById('deleteDirectory');
+
+								if (deleteFilenameInput && deleteDirectoryInput) {
+									deleteFilenameInput.value = filename;
+									deleteDirectoryInput.value = dirname;
+
+									// Show delete modal
+									const deleteModal = document.getElementById('deleteModal');
+									if (deleteModal) {
+										deleteModal.style.display = 'block';
 										setTimeout(() => {
-											notification.classList.remove('show');
-											setTimeout(() => {
-												notification.style.display = 'none';
-											}, 300);
-										}, 2000);
+											deleteModal.classList.add('show');
+										}, 10);
+									} else {
+										console.error("Delete modal not found!");
 									}
-								}).catch(err => {
-									// Fallback for browsers without clipboard API
-									const textarea = document.createElement('textarea');
-									textarea.value = encodedUrl;
-									textarea.style.position = 'fixed';
-									document.body.appendChild(textarea);
-									textarea.select();
-
-									try {
-										document.execCommand('copy');
-										// Show notification
-										const notification = document.getElementById('copyNotification');
-										if (notification) {
-											notification.style.display = 'block';
-											notification.classList.add('show');
-											setTimeout(() => {
-												notification.classList.remove('show');
-												setTimeout(() => {
-													notification.style.display = 'none';
-												}, 300);
-											}, 2000);
-										}
-									} catch (e) {
-										console.error('Copy failed:', e);
-									}
-
-									document.body.removeChild(textarea);
-								});
+								} else {
+									console.error("Delete input fields not found!");
+								}
 							});
-						} else if (newButton.classList.contains('delete-btn')) {
-							newButton.addEventListener('click', function (e) {
-								e.stopPropagation(); // Prevent gallery item event
+
+							// Also add touch handler (extra safety for mobile)
+							newButton.addEventListener('touchend', function (e) {
+								e.preventDefault();
+								e.stopPropagation();
 
 								const filename = this.getAttribute('data-filename');
 								const dirname = this.getAttribute('data-dirname');
@@ -10759,132 +10743,6 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 										}, 10);
 									}
 								}
-							});
-						} else if (newButton.classList.contains('send-to-plex-btn')) {
-							newButton.addEventListener('click', function (e) {
-								e.stopPropagation(); // Prevent gallery item event
-
-								const filename = this.getAttribute('data-filename');
-								const directory = this.getAttribute('data-dirname');
-
-								// Set data in Plex modal
-								const modal = document.getElementById('plexConfirmModal');
-								const filenameElement = document.getElementById('plexConfirmFilename');
-
-								if (modal && filenameElement) {
-									filenameElement.textContent = filename;
-									filenameElement.setAttribute('data-filename', filename);
-									filenameElement.setAttribute('data-dirname', directory);
-
-									// Show the modal
-									modal.style.display = 'block';
-									setTimeout(() => {
-										modal.classList.add('show');
-									}, 10);
-								}
-							});
-						} else if (newButton.classList.contains('import-from-plex-btn')) {
-							newButton.addEventListener('click', function (e) {
-								e.stopPropagation(); // Prevent gallery item event
-
-								const filename = this.getAttribute('data-filename');
-								const directory = this.getAttribute('data-dirname');
-
-								// Set data in import from Plex modal
-								const modal = document.getElementById('importFromPlexModal');
-								const filenameElement = document.getElementById('importFromPlexFilename');
-
-								if (modal && filenameElement) {
-									filenameElement.textContent = filename;
-									filenameElement.setAttribute('data-filename', filename);
-									filenameElement.setAttribute('data-dirname', directory);
-
-									// Show the modal
-									modal.style.display = 'block';
-									setTimeout(() => {
-										modal.classList.add('show');
-									}, 10);
-								}
-							});
-						} else if (newButton.classList.contains('change-poster-btn')) {
-							newButton.addEventListener('click', function (e) {
-								e.stopPropagation(); // Prevent gallery item event
-
-								const filename = this.getAttribute('data-filename');
-								const dirname = this.getAttribute('data-dirname');
-
-								// Get the change poster modal
-								const changePosterModal = document.getElementById('changePosterModal');
-								if (changePosterModal) {
-									// Set filename in modal
-									const modalFilename = document.getElementById('changePosterFilename');
-									if (modalFilename) {
-										// Clean the filename for display
-										const cleanedFilename = filename
-											.replace(/\.jpg$/i, '')
-											.replace(/\-\-Plex\-\-|\-\-Orphaned\-\-/g, '')
-											.replace(/\[\[.*?\]\]|\[.*?\]/gs, '')
-											.replace(/\s*\(A\d{8,12}\)\s*/g, ' ')
-											.replace(/\s+/g, ' ')
-											.trim();
-
-										modalFilename.textContent = `Changing poster: ${cleanedFilename}`;
-									}
-
-									// Set form values
-									document.getElementById('fileChangePosterOriginalFilename').value = filename;
-									document.getElementById('fileChangePosterDirectory').value = dirname;
-									document.getElementById('urlChangePosterOriginalFilename').value = filename;
-									document.getElementById('urlChangePosterDirectory').value = dirname;
-
-									// Reset file input
-									const fileInput = document.getElementById('fileChangePosterInput');
-									if (fileInput) {
-										fileInput.value = '';
-										const fileNameElement = fileInput.parentElement.querySelector('.file-name');
-										if (fileNameElement) {
-											fileNameElement.textContent = '';
-										}
-									}
-
-									// Reset URL input
-									const urlInput = document.querySelector('#urlChangePosterForm input[name="image_url"]');
-									if (urlInput) {
-										urlInput.value = '';
-									}
-
-									// Disable submit button until a file is selected
-									const fileSubmitButton = document.querySelector('#fileChangePosterForm button[type="submit"]');
-									if (fileSubmitButton) {
-										fileSubmitButton.disabled = true;
-									}
-
-									// Reset to file tab
-									const fileTabs = changePosterModal.querySelectorAll('.upload-tab-btn');
-									fileTabs.forEach(tab => {
-										if (tab.getAttribute('data-tab') === 'file') {
-											tab.classList.add('active');
-										} else {
-											tab.classList.remove('active');
-										}
-									});
-
-									// Show file form, hide URL form
-									document.getElementById('fileChangePosterForm').classList.add('active');
-									document.getElementById('urlChangePosterForm').classList.remove('active');
-
-									// Show the modal
-									changePosterModal.style.display = 'block';
-									setTimeout(() => {
-										changePosterModal.classList.add('show');
-									}, 10);
-								}
-							});
-						} else if (newButton.classList.contains('fullscreen-view-btn') || newButton.classList.contains('download-btn')) {
-							// These buttons are links or have their own handlers
-							// Just stop propagation to prevent overlay toggle
-							newButton.addEventListener('click', function (e) {
-								e.stopPropagation();
 							});
 						}
 					});
