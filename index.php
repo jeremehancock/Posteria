@@ -9978,9 +9978,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 
 	<script>
 		/**
-		 * Fixed Infinite Scroll Implementation for Posteria - Fullscreen Button Fix
-		 * 
-		 * This version fixes the fullscreen button functionality
+		 * Fixed Infinite Scroll Implementation for Posteria - Mobile Delete Orphan Button Fix
 		 */
 		document.addEventListener('DOMContentLoaded', function () {
 			// Configuration
@@ -10023,7 +10021,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 			<button class="fullscreen-close">×</button>
 		`;
 
-				// Add CSS for the full-screen modal to match the URL preview style
+				// Add CSS for the full-screen modal
 				const style = document.createElement('style');
 				style.textContent = `
 			.fullscreen-modal {
@@ -10203,10 +10201,10 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 				return 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 			}
 
-			// Simplified version of hideNonOrphanedDeleteButtons for new content
+			// FIXED: Properly handle Delete Orphan buttons - MOBILE FIX
 			function hideNonOrphanedDeleteButtons() {
 				// Target only newly added delete buttons that haven't been processed yet
-				document.querySelectorAll('.delete-btn:not(.orphaned-initialized)').forEach(button => {
+				document.querySelectorAll('.orphan-button.delete-btn:not(.orphaned-initialized)').forEach(button => {
 					const isOrphaned = button.getAttribute('data-orphaned') === 'true';
 					// Add initialized class to all buttons
 					button.classList.add('orphaned-initialized');
@@ -10216,8 +10214,118 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 					} else {
 						// Make sure orphaned buttons are visible
 						button.style.display = 'flex';
+
+						// Add click event handler for desktop
+						button.addEventListener('click', handleDeleteOrphanClick);
+
+						// Add touch event handlers for mobile
+						if (isTouchDevice) {
+							// Remove any existing handlers first to avoid duplicates
+							button.removeEventListener('touchstart', handleDeleteOrphanTouchStart);
+							button.removeEventListener('touchend', handleDeleteOrphanTouchEnd);
+
+							// Add new touch handlers
+							button.addEventListener('touchstart', handleDeleteOrphanTouchStart, { passive: false });
+							button.addEventListener('touchend', handleDeleteOrphanTouchEnd, { passive: false });
+						}
 					}
 				});
+			}
+
+			// Touchstart variables for tracking touch position
+			let touchStartX = 0;
+			let touchStartY = 0;
+			let touchElement = null;
+
+			// Touch handlers for Delete Orphan buttons
+			function handleDeleteOrphanTouchStart(e) {
+				// Store the touch position for later comparison
+				touchStartX = e.touches[0].clientX;
+				touchStartY = e.touches[0].clientY;
+				touchElement = this;
+
+				// Add active state for visual feedback
+				this.classList.add('orphan-touch-active');
+
+				// Prevent default to avoid any weird behavior
+				e.preventDefault();
+				e.stopPropagation();
+			}
+
+			function handleDeleteOrphanTouchEnd(e) {
+				// Only process if this is the same element
+				if (this !== touchElement) return;
+
+				// Check if it was a tap (not a scroll)
+				const touchEndX = e.changedTouches[0].clientX;
+				const touchEndY = e.changedTouches[0].clientY;
+				const dx = Math.abs(touchEndX - touchStartX);
+				const dy = Math.abs(touchEndY - touchStartY);
+
+				// Remove active state regardless
+				this.classList.remove('orphan-touch-active');
+
+				// If it was a tap (minimal movement)
+				if (dx < 10 && dy < 10) {
+					// Get the data attributes
+					const filename = this.getAttribute('data-filename');
+					const dirname = this.getAttribute('data-dirname');
+
+					// Set the values in the delete modal
+					const deleteFilenameInput = document.getElementById('deleteFilename');
+					const deleteDirectoryInput = document.getElementById('deleteDirectory');
+
+					if (deleteFilenameInput && deleteDirectoryInput) {
+						deleteFilenameInput.value = filename;
+						deleteDirectoryInput.value = dirname;
+
+						// Show the delete modal
+						const deleteModal = document.getElementById('deleteModal');
+						if (deleteModal) {
+							deleteModal.style.display = 'block';
+							setTimeout(() => {
+								deleteModal.classList.add('show');
+							}, 10);
+						}
+					}
+
+					// Prevent default behavior
+					e.preventDefault();
+					e.stopPropagation();
+				}
+
+				// Reset touch tracking
+				touchElement = null;
+			}
+
+			// Click handler for Delete Orphan button (desktop)
+			function handleDeleteOrphanClick(e) {
+				// Skip if this is a touch device (we'll use touch events instead)
+				if (isTouchDevice) return;
+
+				e.preventDefault();
+				e.stopPropagation();
+
+				const filename = this.getAttribute('data-filename');
+				const dirname = this.getAttribute('data-dirname');
+
+				// Set values in delete modal
+				const deleteFilenameInput = document.getElementById('deleteFilename');
+				const deleteDirectoryInput = document.getElementById('deleteDirectory');
+
+				if (deleteFilenameInput && deleteDirectoryInput) {
+					deleteFilenameInput.value = filename;
+					deleteDirectoryInput.value = dirname;
+
+					// Show delete modal
+					const deleteModal = document.getElementById('deleteModal');
+					if (deleteModal) {
+						deleteModal.style.display = 'block';
+						setTimeout(() => {
+							deleteModal.classList.add('show');
+						}, 10);
+					}
+				}
 			}
 
 			// Simplified version of showOrphanedBadge for new content
@@ -10318,8 +10426,8 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 					});
 				});
 
-				// Delete buttons
-				document.querySelectorAll('.delete-btn:not(.initialized)').forEach(button => {
+				// Regular delete buttons 
+				document.querySelectorAll('.delete-btn:not(.orphan-button):not(.initialized)').forEach(button => {
 					button.classList.add('initialized');
 					button.addEventListener('click', function (e) {
 						e.preventDefault();
@@ -10403,7 +10511,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 				});
 			}
 
-			// FIXED: Initialize Full Screen buttons for new items
+			// Initialize Full Screen buttons for new items
 			function addFullScreenButtons() {
 				// Find all gallery items without full screen buttons
 				const galleryItems = document.querySelectorAll('.gallery-item:not(.fullscreen-added)');
@@ -10574,7 +10682,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 				});
 			}
 
-			// IMPROVED: Fix mobile touch interactions for the overlay buttons
+			// Fix mobile touch interactions for the overlay buttons
 			function fixTouchInteractions() {
 				// Only initialize event delegation once
 				if (!document.touchHandlersInitialized) {
@@ -10589,7 +10697,8 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 							if (!galleryItem) return;
 
 							// Don't do anything if touching an action button directly
-							if (e.target.closest('.overlay-action-button')) return;
+							if (e.target.closest('.overlay-action-button') ||
+								e.target.closest('.orphan-button')) return;
 
 							// Store touch start position 
 							galleryItem.touchStartX = e.touches[0].clientX;
@@ -10624,6 +10733,9 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 						}, { passive: true });
 
 						document.addEventListener('touchend', function (e) {
+							// Don't handle if touching a Delete Orphan button
+							if (e.target.closest('.orphan-button')) return;
+
 							// Close all other open items first
 							const activeItems = document.querySelectorAll('.gallery-item.touch-active');
 							const target = e.target;
@@ -10666,9 +10778,6 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 							} else {
 								galleryItem.classList.add('touch-active');
 							}
-
-							// Prevent any default action
-							e.preventDefault();
 
 							// Clean up
 							galleryItem.dataset.touchInProgress = 'false';
@@ -10754,14 +10863,13 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 				// Reinitialize Change Poster buttons
 				reinitializeChangePosterButtons();
 
-				// Handle orphaned delete buttons
+				// Handle orphaned delete buttons - IMPORTANT: fix for orphaned buttons
 				hideNonOrphanedDeleteButtons();
 
 				// Show orphaned badges
 				showOrphanedBadge();
 
-				// Initialize full screen buttons - CRITICAL: moved this above the touch interactions
-				// This will ensure fullscreen buttons are added before mobile touch behavior is initialized
+				// Initialize full screen buttons
 				addFullScreenButtons();
 
 				// Initialize caption truncation if function exists
@@ -10769,7 +10877,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 					setTimeout(() => markTruncatedCaptions(), 300);
 				}
 
-				// Fix mobile touch interactions - IMPORTANT: run this last
+				// Fix mobile touch interactions
 				fixTouchInteractions();
 
 				// Fire event for other scripts to hook into
@@ -10969,6 +11077,17 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 				transform: scale(0.95) !important;
 				background: var(--accent-hover) !important;
 			}
+			
+			/* FIXED: Make orphan buttons display properly on mobile */
+			.orphan-button.delete-btn {
+				display: flex !important;
+			}
+			
+			/* Style for the active state of delete orphan button */
+			.orphan-button.delete-btn.orphan-touch-active {
+				transform: scale(0.95) !important;
+				background: var(--accent-hover) !important;
+			}
 		}
 		
 		/* Make sure overlay shows on touch and stays visible */
@@ -10983,6 +11102,11 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 		
 		/* Special handling for fullscreen button to ensure it's always visible */
 		.fullscreen-view-btn {
+			display: flex !important;
+		}
+		
+		/* FIXED: Make orphan buttons display properly */
+		.orphan-button.delete-btn[data-orphaned="true"] {
 			display: flex !important;
 		}
 		`;
