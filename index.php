@@ -9803,7 +9803,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			const lazyLoad = function () {
 				lazyImages.forEach(img => {
 					if (img.dataset.src && img.getBoundingClientRect().top < window.innerHeight + 200) {
-						img.src = img.dataset.src;
+						img.src = encodeURI(img.dataset.src).replace(/#/g, '%23');
 						img.classList.remove("lazy");
 					}
 				});
