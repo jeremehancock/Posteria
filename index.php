@@ -956,6 +956,167 @@ $page = min($page, max(1, $totalPages)); // Ensure page doesn't exceed total pag
 // Get images for current page
 $startIndex = ($page - 1) * $config['imagesPerPage'];
 $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']);
+
+// Check if this is an AJAX request for infinite scrolling
+if (isset($_GET['ajax']) && $_GET['ajax'] == '1') {
+	// Send JSON response for AJAX requests
+	header('Content-Type: application/json');
+
+	// Buffer output to capture HTML
+	ob_start();
+
+	// Generate HTML for each gallery item
+	foreach ($pageImages as $image) {
+		echo generateGalleryItem($image, $allImages, $config, isLoggedIn());
+	}
+
+	// Get buffered HTML
+	$galleryItemsHtml = ob_get_clean();
+
+	// Calculate if there are more pages
+	$hasMorePages = $totalPages > $page;
+
+	// Send JSON response
+	echo json_encode([
+		'success' => true,
+		'html' => $galleryItemsHtml,
+		'hasMore' => $hasMorePages,
+		'page' => $page,
+		'totalPages' => $totalPages,
+		'totalImages' => $totalImages
+	]);
+	exit;
+}
+
+/**
+ * Generate HTML for a single gallery item
+ * 
+ * @param array $image The image data (filename, directory, fullpath)
+ * @param array $allImages Array of all images data for badge generation
+ * @param array $config Configuration array for the app
+ * @param bool $isLoggedIn Whether the user is logged in
+ * @return string HTML markup for a gallery item
+ */
+function generateGalleryItem($image, $allImages, $config, $isLoggedIn = false)
+{
+	// Buffer output and return as string
+	ob_start();
+
+	// Check if this is an orphaned file (doesn't contain Plex tag)
+	$isOrphaned = (strpos(strtolower($image['filename']), '--plex--') === false);
+
+	// Check if filename contains "Plex" to determine if we should show the Plex-related buttons
+	$isPlexFile = !$isOrphaned;
+
+	// Get clean filename for display
+	$filename = htmlspecialchars($image['filename']);
+	$filepath = htmlspecialchars($image['fullpath']);
+	$cacheBuster = '?v=' . time(); // or use uniqid() if preferred
+
+	// Process filename for caption
+	$captionFilename = pathinfo($image['filename'], PATHINFO_FILENAME);
+	// Create a clean version of the filename (without tags, brackets, timestamps)
+	$cleanFilename = str_replace(['--Plex--', '--Orphaned--'], '', $captionFilename);
+	// Remove IDs, library names in brackets
+	$cleanFilename = preg_replace('/\[\[.*?\]\]|\[.*?\]/s', '', $cleanFilename);
+	// Remove ONLY timestamps e.g. (A1742232441) - but keep years like (2025)
+	$cleanFilename = preg_replace('/\s*\(A\d{8,12}\)\s*/', ' ', $cleanFilename);
+	// Clean up extra spaces and trim
+	$cleanFilename = preg_replace('/\s+/', ' ', $cleanFilename);
+	$cleanFilename = trim($cleanFilename);
+
+	// Display the clean filename, but append "[Orphaned]" if it's orphaned
+	$displayFilename = htmlspecialchars($cleanFilename) . ($isOrphaned ? ' [Orphaned]' : '');
+	?>
+	<div class="gallery-item">
+		<div class="gallery-image-container">
+			<div class="directory-badge">
+				<?php echo generateDirectoryBadge($image, $allImages); ?>
+			</div>
+
+			<div class="orphaned-badge" data-orphaned="<?php echo $isOrphaned ? 'true' : 'false'; ?>"
+				style="display: none;">
+				Orphaned
+			</div>
+
+			<div class="gallery-image-placeholder">
+				<div class="loading-spinner"></div>
+			</div>
+
+			<img src="" alt="<?php echo htmlspecialchars(pathinfo($filename, PATHINFO_FILENAME)); ?>"
+				class="gallery-image lazy" loading="lazy" data-src="<?php echo $filepath . $cacheBuster; ?>">
+
+			<div class="image-overlay-actions">
+				<button class="overlay-action-button copy-url-btn"
+					data-url="<?php echo htmlspecialchars($config['siteUrl'] . $image['fullpath']); ?>">
+					<svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+						stroke="currentColor" stroke-width="2">
+						<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+						<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+					</svg>
+					Copy URL
+				</button>
+				<a href="?download=<?php echo urlencode($image['filename']); ?>&dir=<?php echo urlencode($image['directory']); ?>"
+					class="overlay-action-button download-btn">
+					<svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+						stroke="currentColor" stroke-width="2">
+						<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+						<polyline points="7 10 12 15 17 10"></polyline>
+						<line x1="12" y1="15" x2="12" y2="3"></line>
+					</svg>
+					Download
+				</a>
+				<?php if ($isLoggedIn): ?>
+					<?php if ($isPlexFile): ?>
+						<button class="overlay-action-button send-to-plex-btn"
+							data-filename="<?php echo htmlspecialchars($image['filename']); ?>"
+							data-dirname="<?php echo htmlspecialchars($image['directory']); ?>">
+							<svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+								stroke="currentColor" stroke-width="2">
+								<path d="M9 3h-4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4"></path>
+								<polyline points="16 7 21 12 16 17"></polyline>
+								<line x1="21" y1="12" x2="9" y2="12"></line>
+							</svg>
+							Send to Plex
+						</button>
+
+						<!-- Import from Plex button for Plex files -->
+						<button class="overlay-action-button import-from-plex-btn"
+							data-filename="<?php echo htmlspecialchars($image['filename']); ?>"
+							data-dirname="<?php echo htmlspecialchars($image['directory']); ?>">
+							<svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+								stroke="currentColor" stroke-width="2">
+								<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
+								<polyline points="8 7 3 12 8 17"></polyline>
+								<line x1="3" y1="12" x2="15" y2="12"></line>
+							</svg>
+							Get from Plex
+						</button>
+					<?php endif; ?>
+
+					<button class="orphan-button delete-btn" data-filename="<?php echo htmlspecialchars($image['filename']); ?>"
+						data-dirname="<?php echo htmlspecialchars($image['directory']); ?>"
+						data-orphaned="<?php echo $isOrphaned ? 'true' : 'false'; ?>">
+						<svg height="16px" width="16px" xmlns="http://www.w3.org/2000/svg" shape-rendering="geometricPrecision"
+							text-rendering="geometricPrecision" image-rendering="optimizeQuality" fill-rule="evenodd"
+							clip-rule="evenodd" viewBox="0 0 456 511.82">
+							<path fill="#fff"
+								d="M48.42 140.13h361.99c17.36 0 29.82 9.78 28.08 28.17l-30.73 317.1c-1.23 13.36-8.99 26.42-25.3 26.42H76.34c-13.63-.73-23.74-9.75-25.09-24.14L20.79 168.99c-1.74-18.38 9.75-28.86 27.63-28.86zM24.49 38.15h136.47V28.1c0-15.94 10.2-28.1 27.02-28.1h81.28c17.3 0 27.65 11.77 27.65 28.01v10.14h138.66c.57 0 1.11.07 1.68.13 10.23.93 18.15 9.02 18.69 19.22.03.79.06 1.39.06 2.17v42.76c0 5.99-4.73 10.89-10.62 11.19-.54 0-1.09.03-1.63.03H11.22c-5.92 0-10.77-4.6-11.19-10.38 0-.72-.03-1.47-.03-2.23v-39.5c0-10.93 4.21-20.71 16.82-23.02 2.53-.45 5.09-.37 7.67-.37zm83.78 208.38c-.51-10.17 8.21-18.83 19.53-19.31 11.31-.49 20.94 7.4 21.45 17.57l8.7 160.62c.51 10.18-8.22 18.84-19.53 19.32-11.32.48-20.94-7.4-21.46-17.57l-8.69-160.63zm201.7-1.74c.51-10.17 10.14-18.06 21.45-17.57 11.32.48 20.04 9.14 19.53 19.31l-8.66 160.63c-.52 10.17-10.14 18.05-21.46 17.57-11.31-.48-20.04-9.14-19.53-19.32l8.67-160.62zm-102.94.87c0-10.23 9.23-18.53 20.58-18.53 11.34 0 20.58 8.3 20.58 18.53v160.63c0 10.23-9.24 18.53-20.58 18.53-11.35 0-20.58-8.3-20.58-18.53V245.66z" />
+						</svg>
+						Delete Orphan
+					</button>
+				<?php endif; ?>
+			</div>
+		</div>
+		<div class="gallery-caption"
+			data-full-text="<?php echo htmlspecialchars(pathinfo($image['filename'], PATHINFO_FILENAME)); ?>">
+			<?php echo $displayFilename; ?>
+		</div>
+	</div>
+	<?php
+	return ob_get_clean();
+}
+
 ?>
 
 <!DOCTYPE html>
@@ -3651,131 +3812,12 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		</div>
 		<?php else: ?>
 		<div class="gallery">
-			<?php foreach ($pageImages as $image): ?>
-			<div class="gallery-item">
-				<div class="gallery-image-container">
-					<div class="directory-badge">
-						<?php echo generateDirectoryBadge($image, $allImages); ?>
-					</div>
-
-
-					<div class="orphaned-badge"
-						data-orphaned="<?php echo (strpos(strtolower($image['filename']), '--plex--') === false) ? 'true' : 'false'; ?>"
-						style="display: none;">
-						Orphaned
-					</div>
-
-					<div class="gallery-image-placeholder">
-						<div class="loading-spinner"></div>
-					</div>
-					<!-- <img src="" alt="<?php echo htmlspecialchars(pathinfo($image['filename'], PATHINFO_FILENAME)); ?>"
-						class="gallery-image" loading="lazy"
-						data-src="<?php echo htmlspecialchars($image['fullpath']); ?>"> -->
-					<?php
-					$filename = htmlspecialchars($image['filename']);
-					$filepath = htmlspecialchars($image['fullpath']);
-					$cacheBuster = '?v=' . time(); // or use uniqid() if preferred
-					?>
-
-					<img src="" alt="<?php echo htmlspecialchars(pathinfo($filename, PATHINFO_FILENAME)); ?>"
-						class="gallery-image lazy" loading="lazy" data-src="<?php echo $filepath . $cacheBuster; ?>">
-
-					<div class="image-overlay-actions">
-						<button class="overlay-action-button copy-url-btn"
-							data-url="<?php echo htmlspecialchars($config['siteUrl'] . $image['fullpath']); ?>">
-							<svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
-								fill="none" stroke="currentColor" stroke-width="2">
-								<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-								<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-							</svg>
-							Copy URL
-						</button>
-						<a href="?download=<?php echo urlencode($image['filename']); ?>&dir=<?php echo urlencode($image['directory']); ?>"
-							class="overlay-action-button download-btn">
-							<svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
-								fill="none" stroke="currentColor" stroke-width="2">
-								<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-								<polyline points="7 10 12 15 17 10"></polyline>
-								<line x1="12" y1="15" x2="12" y2="3"></line>
-							</svg>
-							Download
-						</a>
-						<?php if (isLoggedIn()): ?>
-						<?php
-						// Check if filename contains "Plex" to determine if we should show the Plex-related buttons
-						$isPlexFile = strpos(strtolower($image['filename']), '--plex--') !== false;
-
-						// Only show Send to Plex button for Plex files
-						if ($isPlexFile):
-							?>
-						<button class="overlay-action-button send-to-plex-btn"
-							data-filename="<?php echo htmlspecialchars($image['filename']); ?>"
-							data-dirname="<?php echo htmlspecialchars($image['directory']); ?>">
-							<svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
-								fill="none" stroke="currentColor" stroke-width="2">
-								<path d="M9 3h-4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4"></path>
-								<polyline points="16 7 21 12 16 17"></polyline>
-								<line x1="21" y1="12" x2="9" y2="12"></line>
-							</svg>
-							Send to Plex
-						</button>
-
-						<!-- Import from Plex button for Plex files -->
-						<button class="overlay-action-button import-from-plex-btn"
-							data-filename="<?php echo htmlspecialchars($image['filename']); ?>"
-							data-dirname="<?php echo htmlspecialchars($image['directory']); ?>">
-							<svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
-								fill="none" stroke="currentColor" stroke-width="2">
-								<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
-								<polyline points="8 7 3 12 8 17"></polyline>
-								<line x1="3" y1="12" x2="15" y2="12"></line>
-							</svg>
-							Get from Plex
-						</button>
-						<?php endif; ?>
-
-						<button class="orphan-button delete-btn"
-							data-filename="<?php echo htmlspecialchars($image['filename']); ?>"
-							data-dirname="<?php echo htmlspecialchars($image['directory']); ?>"
-							data-orphaned="<?php echo (strpos(strtolower($image['filename']), '--plex--') === false) ? 'true' : 'false'; ?>">
-							<svg height="16px" width="16px" xmlns="http://www.w3.org/2000/svg"
-								shape-rendering="geometricPrecision" text-rendering="geometricPrecision"
-								image-rendering="optimizeQuality" fill-rule="evenodd" clip-rule="evenodd"
-								viewBox="0 0 456 511.82">
-								<path fill="#fff"
-									d="M48.42 140.13h361.99c17.36 0 29.82 9.78 28.08 28.17l-30.73 317.1c-1.23 13.36-8.99 26.42-25.3 26.42H76.34c-13.63-.73-23.74-9.75-25.09-24.14L20.79 168.99c-1.74-18.38 9.75-28.86 27.63-28.86zM24.49 38.15h136.47V28.1c0-15.94 10.2-28.1 27.02-28.1h81.28c17.3 0 27.65 11.77 27.65 28.01v10.14h138.66c.57 0 1.11.07 1.68.13 10.23.93 18.15 9.02 18.69 19.22.03.79.06 1.39.06 2.17v42.76c0 5.99-4.73 10.89-10.62 11.19-.54 0-1.09.03-1.63.03H11.22c-5.92 0-10.77-4.6-11.19-10.38 0-.72-.03-1.47-.03-2.23v-39.5c0-10.93 4.21-20.71 16.82-23.02 2.53-.45 5.09-.37 7.67-.37zm83.78 208.38c-.51-10.17 8.21-18.83 19.53-19.31 11.31-.49 20.94 7.4 21.45 17.57l8.7 160.62c.51 10.18-8.22 18.84-19.53 19.32-11.32.48-20.94-7.4-21.46-17.57l-8.69-160.63zm201.7-1.74c.51-10.17 10.14-18.06 21.45-17.57 11.32.48 20.04 9.14 19.53 19.31l-8.66 160.63c-.52 10.17-10.14 18.05-21.46 17.57-11.31-.48-20.04-9.14-19.53-19.32l8.67-160.62zm-102.94.87c0-10.23 9.23-18.53 20.58-18.53 11.34 0 20.58 8.3 20.58 18.53v160.63c0 10.23-9.24 18.53-20.58 18.53-11.35 0-20.58-8.3-20.58-18.53V245.66z" />
-							</svg>
-							Delete Orphan
-						</button>
-						<?php endif; ?>
-					</div>
-				</div>
-				<div class="gallery-caption"
-					data-full-text="<?php echo htmlspecialchars(pathinfo($image['filename'], PATHINFO_FILENAME)); ?>">
-					<?php
-					$filename = pathinfo($image['filename'], PATHINFO_FILENAME);
-					// Check if this is an orphaned file (doesn't contain Plex tag)
-					$isOrphaned = (strpos(strtolower($image['filename']), '--plex--') === false);
-
-					// Create a clean version of the filename (without tags, brackets, timestamps)
-					$cleanFilename = str_replace(['--Plex--', '--Orphaned--'], '', $filename);
-
-					// Remove IDs, library names in brackets
-					$cleanFilename = preg_replace('/\[\[.*?\]\]|\[.*?\]/s', '', $cleanFilename);
-
-					// Remove ONLY timestamps e.g. (A1742232441) - but keep years like (2025)
-					$cleanFilename = preg_replace('/\s*\(A\d{8,12}\)\s*/', ' ', $cleanFilename);
-
-					// Clean up extra spaces and trim
-					$cleanFilename = preg_replace('/\s+/', ' ', $cleanFilename);
-					$cleanFilename = trim($cleanFilename);
-
-					// Display the clean filename, but append "[Orphaned]" if it's orphaned
-					echo htmlspecialchars($cleanFilename) . ($isOrphaned ? ' [Orphaned]' : '');
-					?>
-				</div>
-			</div>
-			<?php endforeach; ?>
+			<?php
+			// Use the new function for each image
+			foreach ($pageImages as $image) {
+				echo generateGalleryItem($image, $allImages, $config, isLoggedIn());
+			}
+			?>
 		</div>
 
 		<?php if (!empty($pageImages) && $totalPages > 1): ?>
@@ -10131,6 +10173,1341 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			});
 		});
 	</script>
+
+	<script>
+		// =========== INFINITE SCROLL IMPLEMENTATION WITH FIXED SIZE PLACEHOLDERS ===========
+
+		document.addEventListener('DOMContentLoaded', function () {
+			// Configuration
+			const config = {
+				loadThreshold: 300,       // How many pixels from bottom to trigger loading
+				loadingDelay: 100,        // Reduced delay between loads to make it feel more responsive
+				initialPage: getCurrentPage(),
+				currentPage: getCurrentPage(),
+				isLoading: false,
+				hasMoreContent: true,
+				loadingIndicatorHTML: `
+			<div class="infinite-scroll-loading">
+				<div class="loading-spinner"></div>
+				<div>Loading more posters...</div>
+			</div>
+		`,
+				noMoreContentHTML: `
+			<div class="infinite-scroll-end">
+				<div>No more posters to load</div>
+			</div>
+		`,
+				errorHTML: `
+			<div class="infinite-scroll-error">
+				<div>Error loading posters. <button id="retryLoadButton">Try Again</button></div>
+			</div>
+		`,
+				updateURLOnScroll: false  // Set to false to prevent URL changes during scroll
+			};
+
+			// Create and append CSS styles for infinite scroll and fixed size placeholders
+			const style = document.createElement('style');
+			style.textContent = `
+		/* ===== Infinite Scroll Styles ===== */
+		.infinite-scroll-loading,
+		.infinite-scroll-end,
+		.infinite-scroll-error {
+			text-align: center;
+			padding: 30px;
+			margin: 20px auto;
+			color: var(--text-secondary);
+			width: 100%;
+			max-width: 400px;
+			grid-column: 1 / -1; /* Span all columns */
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			justify-content: center;
+		}
+
+		/* Container for loading indicator to ensure it's centered */
+		.loading-container {
+			grid-column: 1 / -1; /* Span all columns */
+			display: flex;
+			justify-content: center;
+			width: 100%;
+		}
+		
+		.infinite-scroll-loading .loading-spinner {
+			display: inline-block;
+			width: 40px;
+			height: 40px;
+			margin-bottom: 15px;
+			border: 4px solid rgba(255, 255, 255, 0.1);
+			border-radius: 50%;
+			border-top-color: var(--accent-primary);
+			animation: spin 1s infinite linear;
+		}
+		
+		.infinite-scroll-error {
+			color: var(--danger-color);
+			background: rgba(239, 68, 68, 0.1);
+			border: 1px solid var(--danger-color);
+		}
+		
+		.infinite-scroll-end {
+			font-style: italic;
+			padding: 20px;
+		}
+		
+		.infinite-scroll-error button {
+			margin-top: 15px;
+			padding: 8px 16px;
+			background: var(--bg-tertiary);
+			color: var(--text-primary);
+			border: 1px solid var(--border-color);
+			border-radius: 6px;
+			cursor: pointer;
+			transition: all 0.2s;
+		}
+		
+		.infinite-scroll-error button:hover {
+			background: var(--bg-primary);
+			border-color: var(--accent-primary);
+		}
+		
+		/* Hide pagination when infinite scroll is active */
+		.pagination.infinite-scroll-enabled {
+			display: none !important;
+		}
+		
+		/* ===== Fixed Size Placeholder Styles ===== */
+		/* Fixed aspect ratio for gallery items */
+		.gallery-item {
+			display: flex;
+			flex-direction: column;
+		}
+		
+		/* Fixed aspect ratio container using modern aspect-ratio property */
+		.gallery-image-container {
+			aspect-ratio: 2/3;
+			width: 100%;
+			position: relative;
+			overflow: hidden;
+		}
+		
+		/* Fallback for browsers that don't support aspect-ratio */
+		@supports not (aspect-ratio: 2/3) {
+			.gallery-image-container::before {
+				content: "";
+				display: block;
+				padding-top: 150%; /* 2:3 aspect ratio (height/width = 3/2 = 150%) */
+			}
+			
+			.gallery-image-container > * {
+				position: absolute;
+				top: 0;
+				left: 0;
+				width: 100%;
+				height: 100%;
+			}
+		}
+		
+		/* Enhanced placeholder styling - simple version without animation */
+		.gallery-image-placeholder {
+			position: absolute;
+			top: 0;
+			left: 0;
+			width: 100%;
+			height: 100%;
+			background: var(--bg-tertiary);
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			transition: opacity 0.3s ease;
+			z-index: 1;
+		}
+		
+		/* Style for loading spinner */
+		.loading-spinner {
+			width: 40px;
+			height: 40px;
+			border: 4px solid rgba(255, 255, 255, 0.1);
+			border-radius: 50%;
+			border-top-color: var(--accent-primary);
+			animation: spin 1s infinite linear;
+			z-index: 2;
+		}
+		
+		@keyframes spin {
+			0% { transform: rotate(0deg); }
+			100% { transform: rotate(360deg); }
+		}
+		
+		/* Improve placeholder hidden state */
+		.gallery-image-placeholder.hidden {
+			opacity: 0;
+			pointer-events: none;
+		}
+		
+		/* Fix for dynamically loaded items */
+		.gallery-item:not(.initialized) .gallery-image-container {
+			background-color: var(--bg-tertiary);
+		}
+	`;
+			document.head.appendChild(style);
+
+			// Find the gallery element
+			const galleryElement = document.querySelector('.gallery');
+			if (!galleryElement) return; // Exit if gallery not found
+
+			// Find pagination element
+			const paginationElement = document.querySelector('.pagination');
+
+			// Calculate total pages
+			const totalPages = paginationElement ?
+				getMaxPageFromPagination(paginationElement) : 1;
+
+			// Initialize state
+			config.hasMoreContent = config.currentPage < totalPages;
+
+			// Function to measure the first visible gallery item and apply sizing to others
+			function applyConsistentSizing() {
+				const firstItem = document.querySelector('.gallery-item');
+				if (!firstItem) return;
+
+				// Get the computed dimensions
+				const itemStyle = window.getComputedStyle(firstItem);
+				const imageContainer = firstItem.querySelector('.gallery-image-container');
+
+				if (!imageContainer) return;
+
+				const containerStyle = window.getComputedStyle(imageContainer);
+				const containerWidth = containerStyle.width;
+				const containerHeight = containerStyle.height;
+
+				// Only apply if we have valid dimensions
+				if (containerWidth === '0px' || containerHeight === '0px') return;
+
+				// Set a CSS variable to standardize all items
+				document.documentElement.style.setProperty('--poster-width', containerWidth);
+				document.documentElement.style.setProperty('--poster-height', containerHeight);
+			}
+
+			// Apply sizing once the page has loaded
+			if (document.readyState === 'complete') {
+				applyConsistentSizing();
+			} else {
+				window.addEventListener('load', applyConsistentSizing);
+			}
+
+			// Reapply on window resize
+			window.addEventListener('resize', function () {
+				setTimeout(applyConsistentSizing, 200);
+			});
+
+			// Preload flags to optimize performance
+			let preloadTriggered = false;
+			let preloadedHtml = null;
+			let preloadedPage = 0;
+
+			// Enable infinite scroll
+			enableInfiniteScroll();
+
+			/**
+			 * Gets the current page from URL or defaults to 1
+			 */
+			function getCurrentPage() {
+				const urlParams = new URLSearchParams(window.location.search);
+				const page = urlParams.get('page');
+				return page ? parseInt(page, 10) : 1;
+			}
+
+			/**
+			 * Extract the maximum page number from pagination links
+			 */
+			function getMaxPageFromPagination(paginationElement) {
+				const links = paginationElement.querySelectorAll('.pagination-link');
+				let maxPage = 1;
+
+				links.forEach(link => {
+					const pageNum = parseInt(link.textContent, 10);
+					if (!isNaN(pageNum) && pageNum > maxPage) {
+						maxPage = pageNum;
+					}
+				});
+
+				return maxPage;
+			}
+
+			/**
+			 * Enables infinite scroll functionality
+			 */
+			function enableInfiniteScroll() {
+				// If pagination exists, hide it and enable infinite scroll
+				if (paginationElement) {
+					paginationElement.classList.add('infinite-scroll-enabled');
+				}
+
+				// Add scroll event listener with throttling
+				window.addEventListener('scroll', throttle(handleScroll, 100));
+
+				// Initial check in case the page isn't long enough to scroll
+				setTimeout(checkScrollPosition, 300);
+			}
+
+			/**
+			 * Throttle function to limit how often a function is called
+			 * This is better than debounce for scroll events
+			 */
+			function throttle(func, limit) {
+				let lastCall = 0;
+				return function () {
+					const now = Date.now();
+					if (now - lastCall >= limit) {
+						lastCall = now;
+						func.apply(this, arguments);
+					}
+				};
+			}
+
+			/**
+			 * Handle scroll event to check position and load more content
+			 */
+			function handleScroll() {
+				checkScrollPosition();
+			}
+
+			/**
+			 * Check the scroll position and load more content or preload if needed
+			 */
+			function checkScrollPosition() {
+				// Calculate how far from bottom
+				const scrollTop = (document.documentElement && document.documentElement.scrollTop) || document.body.scrollTop;
+				const scrollHeight = (document.documentElement && document.documentElement.scrollHeight) || document.body.scrollHeight;
+				const clientHeight = document.documentElement.clientHeight || window.innerHeight;
+
+				// Calculate distance from bottom
+				const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+
+				// Preload next page when within 2x threshold (farther than the load threshold)
+				if (!preloadTriggered &&
+					!config.isLoading &&
+					config.hasMoreContent &&
+					distanceFromBottom < (config.loadThreshold * 2)) {
+					preloadNextPage();
+				}
+
+				// Load more content if scrolled to threshold
+				if (!config.isLoading &&
+					config.hasMoreContent &&
+					distanceFromBottom < config.loadThreshold) {
+					loadMoreContent();
+				}
+			}
+
+			/**
+			 * Preload the next page of content to reduce perceived loading time
+			 */
+			function preloadNextPage() {
+				preloadTriggered = true;
+
+				// Calculate next page
+				const nextPage = config.currentPage + 1;
+
+				// Don't preload if we've already preloaded this page
+				if (preloadedPage === nextPage && preloadedHtml !== null) {
+					return;
+				}
+
+				// Build request URL with all current filters
+				const urlParams = new URLSearchParams(window.location.search);
+				urlParams.set('page', nextPage);
+				urlParams.set('ajax', '1'); // Flag for AJAX request
+
+				// Fetch the next page in the background
+				fetch(window.location.pathname + '?' + urlParams.toString())
+					.then(response => {
+						if (!response.ok) {
+							throw new Error('Network response was not ok');
+						}
+						return response.json();
+					})
+					.then(data => {
+						if (data.success) {
+							// Store the preloaded content
+							preloadedHtml = data.html;
+							preloadedPage = nextPage;
+							// Store if there's more content
+							config.hasMoreContent = data.hasMore;
+						}
+					})
+					.catch(error => {
+						console.error('Error preloading content:', error);
+						// Reset preload trigger to allow future attempts
+						preloadTriggered = false;
+					});
+			}
+
+			/**
+			 * Load more content via AJAX or use preloaded content if available
+			 */
+			function loadMoreContent() {
+				// Set loading state
+				config.isLoading = true;
+
+				// Next page to load
+				const nextPage = config.currentPage + 1;
+
+				// Add loading indicator
+				const loadingContainer = document.createElement('div');
+				loadingContainer.className = 'loading-container';
+				galleryElement.appendChild(loadingContainer);
+
+				const loadingIndicator = document.createElement('div');
+				loadingIndicator.innerHTML = config.loadingIndicatorHTML;
+				loadingIndicator.className = 'loading-indicator';
+				loadingContainer.appendChild(loadingIndicator);
+
+				// Use preloaded content if available
+				if (preloadedHtml !== null && preloadedPage === nextPage) {
+					setTimeout(() => {
+						// Remove loading container
+						loadingContainer.remove();
+
+						// Update state
+						config.currentPage = nextPage;
+
+						// Append preloaded content
+						appendNewContent(preloadedHtml);
+
+						// Update URL only if configured to do so
+						if (config.updateURLOnScroll) {
+							updateBrowserHistory(nextPage);
+						}
+
+						// Initialize the newly added content (tooltips, buttons, etc.)
+						initializeNewContent();
+
+						// Reset loading state and preload flags
+						config.isLoading = false;
+						preloadTriggered = false;
+						preloadedHtml = null;
+
+						// Show "no more content" message if reached the end
+						if (!config.hasMoreContent) {
+							const endMessageContainer = document.createElement('div');
+							endMessageContainer.className = 'loading-container';
+							galleryElement.appendChild(endMessageContainer);
+
+							const endMessageElement = document.createElement('div');
+							endMessageElement.innerHTML = config.noMoreContentHTML;
+							endMessageContainer.appendChild(endMessageElement);
+						} else {
+							// Check if we should load more content
+							setTimeout(checkScrollPosition, 200);
+						}
+					}, 100); // Short delay to show loading indicator briefly
+
+					return;
+				}
+
+				// Fetch the next page if no preloaded content
+				const urlParams = new URLSearchParams(window.location.search);
+				urlParams.set('page', nextPage);
+				urlParams.set('ajax', '1'); // Flag for AJAX request
+
+				fetch(window.location.pathname + '?' + urlParams.toString())
+					.then(response => {
+						if (!response.ok) {
+							throw new Error('Network response was not ok');
+						}
+						return response.json();
+					})
+					.then(data => {
+						// Remove loading container
+						loadingContainer.remove();
+
+						if (data.success) {
+							// Update state
+							config.currentPage = nextPage;
+							config.hasMoreContent = data.hasMore;
+
+							// Append new content
+							appendNewContent(data.html);
+
+							// Update URL only if configured to do so
+							if (config.updateURLOnScroll) {
+								updateBrowserHistory(nextPage);
+							}
+
+							// Initialize the newly added content (tooltips, buttons, etc.)
+							initializeNewContent();
+
+							// Reset loading state
+							config.isLoading = false;
+							preloadTriggered = false;
+
+							// Show "no more content" message if reached the end
+							if (!config.hasMoreContent) {
+								const endMessageContainer = document.createElement('div');
+								endMessageContainer.className = 'loading-container';
+								galleryElement.appendChild(endMessageContainer);
+
+								const endMessageElement = document.createElement('div');
+								endMessageElement.innerHTML = config.noMoreContentHTML;
+								endMessageContainer.appendChild(endMessageElement);
+							} else {
+								// Check if we should load more content or preload next page
+								setTimeout(checkScrollPosition, 200);
+							}
+						} else {
+							// Show error message
+							handleLoadError();
+						}
+					})
+					.catch(error => {
+						// Remove loading container
+						loadingContainer.remove();
+
+						// Handle error
+						handleLoadError();
+						console.error('Error loading more content:', error);
+					});
+			}
+
+			/**
+			 * Append new content to the gallery with fixed size placeholders
+			 */
+			function appendNewContent(html) {
+				// Create a temporary container
+				const tempContainer = document.createElement('div');
+				tempContainer.innerHTML = html;
+
+				// Get all gallery items from the response
+				const newItems = tempContainer.querySelectorAll('.gallery-item');
+
+				// Append them to the gallery with proper initialization
+				newItems.forEach(item => {
+					// Ensure the placeholder is visible during load
+					const placeholder = item.querySelector('.gallery-image-placeholder');
+					if (placeholder) {
+						placeholder.classList.remove('hidden');
+					}
+
+					// Add to gallery
+					galleryElement.appendChild(item);
+				});
+			}
+
+			/**
+			 * Update browser history without refreshing the page
+			 * Only called if config.updateURLOnScroll is true
+			 */
+			function updateBrowserHistory(page) {
+				const urlParams = new URLSearchParams(window.location.search);
+				urlParams.set('page', page);
+
+				const newUrl = window.location.pathname + '?' + urlParams.toString();
+				window.history.replaceState({ page: page }, '', newUrl);
+			}
+
+			function handleLoadError() {
+				const errorContainer = document.createElement('div');
+				errorContainer.className = 'loading-container';
+				galleryElement.appendChild(errorContainer);
+
+				const errorElement = document.createElement('div');
+				errorElement.innerHTML = config.errorHTML;
+				errorContainer.appendChild(errorElement);
+
+				// Add retry button handler
+				const retryButton = errorElement.querySelector('#retryLoadButton');
+				if (retryButton) {
+					retryButton.addEventListener('click', () => {
+						// Remove error container
+						errorContainer.remove();
+
+						// Reset loading state
+						config.isLoading = false;
+						preloadTriggered = false;
+
+						// Try loading again
+						loadMoreContent();
+					});
+				}
+
+				// Reset loading state after a short delay
+				setTimeout(() => {
+					config.isLoading = false;
+					preloadTriggered = false;
+				}, 200);
+			}
+
+			/**
+			 * Initialize newly added content
+			 */
+			function initializeNewContent() {
+				// Initialize lazy loading for images
+				const newImages = document.querySelectorAll('.gallery-image:not(.loaded)');
+				newImages.forEach(img => {
+					if (img.dataset.src) {
+						// Set up loading behavior
+						img.style.opacity = '0';
+						img.style.transition = 'opacity 0.3s';
+
+						const placeholder = img.previousElementSibling;
+
+						img.onload = () => {
+							img.classList.add('loaded');
+							img.style.opacity = '1';
+							if (placeholder && placeholder.classList.contains('gallery-image-placeholder')) {
+								placeholder.classList.add('hidden');
+							}
+						};
+
+						img.onerror = () => {
+							if (placeholder) {
+								placeholder.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`;
+							}
+						};
+
+						img.src = img.dataset.src;
+					}
+				});
+
+				// Re-initialize copy URL buttons
+				document.querySelectorAll('.gallery-item:not(.initialized) .copy-url-btn').forEach(button => {
+					button.addEventListener('click', function () {
+						const url = this.getAttribute('data-url');
+						const encodedUrl = encodeURI(url).replace(/#/g, '%23');
+
+						try {
+							navigator.clipboard.writeText(encodedUrl).then(() => {
+								showCopyNotification();
+							});
+						} catch (err) {
+							// Fallback for browsers that don't support clipboard API
+							const textarea = document.createElement('textarea');
+							textarea.value = encodedUrl;
+							textarea.style.position = 'fixed';
+							document.body.appendChild(textarea);
+							textarea.select();
+
+							try {
+								document.execCommand('copy');
+								showCopyNotification();
+							} catch (e) {
+								alert('Copy failed. Please select and copy the URL manually.');
+							}
+
+							document.body.removeChild(textarea);
+						}
+					});
+				});
+
+				// Re-initialize delete buttons
+				document.querySelectorAll('.gallery-item:not(.initialized) .delete-btn').forEach(button => {
+					button.addEventListener('click', function (e) {
+						e.preventDefault();
+						const filename = this.getAttribute('data-filename');
+						const dirname = this.getAttribute('data-dirname');
+
+						// Get the delete modal elements
+						const deleteModal = document.getElementById('deleteModal');
+						const deleteFilenameInput = document.getElementById('deleteFilename');
+						const deleteDirectoryInput = document.getElementById('deleteDirectory');
+
+						if (deleteModal && deleteFilenameInput && deleteDirectoryInput) {
+							deleteFilenameInput.value = filename;
+							deleteDirectoryInput.value = dirname;
+
+							// Show the modal
+							deleteModal.style.display = 'block';
+							deleteModal.offsetHeight; // Force reflow
+							deleteModal.classList.add('show');
+						}
+					});
+				});
+
+				// Initialize Send to Plex buttons
+				document.querySelectorAll('.gallery-item:not(.initialized)').forEach(item => {
+					const filenameElement = item.querySelector('.gallery-caption');
+					const overlayActions = item.querySelector('.image-overlay-actions');
+
+					if (filenameElement && overlayActions) {
+						const filename = filenameElement.getAttribute('data-full-text');
+
+						// Only show the Send to Plex button for files with "Plex" in the name
+						if (filename && filename.toLowerCase().includes('--plex--')) {
+							// Check if button already exists to avoid duplicates
+							if (!overlayActions.querySelector('.send-to-plex-btn')) {
+								// Get existing button as reference for data attributes
+								const deleteButton = overlayActions.querySelector('.delete-btn');
+
+								if (deleteButton) {
+									const directoryValue = deleteButton.getAttribute('data-dirname');
+									const filenameValue = deleteButton.getAttribute('data-filename');
+
+									// Create Send to Plex button
+									const sendToPlexButton = document.createElement('button');
+									sendToPlexButton.className = 'overlay-action-button send-to-plex-btn';
+									sendToPlexButton.setAttribute('data-filename', filenameValue);
+									sendToPlexButton.setAttribute('data-dirname', directoryValue);
+									sendToPlexButton.innerHTML = `
+								<svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+									<path d="M9 3h-4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4"></path>
+									<polyline points="16 7 21 12 16 17"></polyline>
+									<line x1="21" y1="12" x2="9" y2="12"></line>
+								</svg>
+								Send to Plex
+							`;
+
+									// Insert before Delete button
+									deleteButton.parentNode.insertBefore(sendToPlexButton, deleteButton);
+
+									// Add event listener
+									sendToPlexButton.addEventListener('click', function (e) {
+										e.preventDefault();
+										const filename = this.getAttribute('data-filename');
+										const directory = this.getAttribute('data-dirname');
+
+										// Get the modal elements
+										const plexConfirmModal = document.getElementById('plexConfirmModal');
+										const filenameElement = document.getElementById('plexConfirmFilename');
+
+										if (plexConfirmModal && filenameElement) {
+											filenameElement.textContent = filename;
+											filenameElement.setAttribute('data-filename', filename);
+											filenameElement.setAttribute('data-dirname', directory);
+
+											// Show the modal
+											plexConfirmModal.style.display = 'block';
+											plexConfirmModal.offsetHeight; // Force reflow
+											plexConfirmModal.classList.add('show');
+										}
+									});
+								}
+							}
+
+							// Add Import from Plex button
+							if (!overlayActions.querySelector('.import-from-plex-btn')) {
+								// Get existing button as reference
+								const deleteButton = overlayActions.querySelector('.delete-btn');
+
+								if (deleteButton) {
+									const directoryValue = deleteButton.getAttribute('data-dirname');
+									const filenameValue = deleteButton.getAttribute('data-filename');
+
+									const importFromPlexButton = document.createElement('button');
+									importFromPlexButton.className = 'overlay-action-button import-from-plex-btn';
+									importFromPlexButton.setAttribute('data-filename', filenameValue);
+									importFromPlexButton.setAttribute('data-dirname', directoryValue);
+									importFromPlexButton.innerHTML = `
+								<svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+									<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
+									<polyline points="8 7 3 12 8 17"></polyline>
+									<line x1="3" y1="12" x2="15" y2="12"></line>
+								</svg>
+								Get from Plex
+							`;
+
+									// Add this button before the delete button or as appropriate
+									const sendToPlexButton = overlayActions.querySelector('.send-to-plex-btn');
+									if (sendToPlexButton) {
+										sendToPlexButton.insertAdjacentElement('afterend', importFromPlexButton);
+									} else if (deleteButton) {
+										deleteButton.parentNode.insertBefore(importFromPlexButton, deleteButton);
+									}
+
+									// Add event listener
+									importFromPlexButton.addEventListener('click', function (e) {
+										e.preventDefault();
+										const filename = this.getAttribute('data-filename');
+										const directory = this.getAttribute('data-dirname');
+
+										// Get or create the modal
+										let importFromPlexModal = document.getElementById('importFromPlexModal');
+
+										// If modal doesn't exist, create it (this handles the first load case)
+										if (!importFromPlexModal) {
+											createImportFromPlexModal();
+											importFromPlexModal = document.getElementById('importFromPlexModal');
+										}
+
+										if (importFromPlexModal) {
+											const filenameElement = document.getElementById('importFromPlexFilename');
+											if (filenameElement) {
+												filenameElement.textContent = filename;
+												filenameElement.setAttribute('data-filename', filename);
+												filenameElement.setAttribute('data-dirname', directory);
+
+												// Show the modal
+												importFromPlexModal.style.display = 'block';
+												importFromPlexModal.offsetHeight; // Force reflow
+												importFromPlexModal.classList.add('show');
+											}
+										}
+									});
+								}
+							}
+
+							// Add Change Poster button
+							if (!overlayActions.querySelector('.change-poster-btn')) {
+								// Get existing button as reference
+								const deleteButton = overlayActions.querySelector('.delete-btn');
+
+								if (deleteButton) {
+									const directoryValue = deleteButton.getAttribute('data-dirname');
+									const filenameValue = deleteButton.getAttribute('data-filename');
+
+									const changePosterButton = document.createElement('button');
+									changePosterButton.className = 'overlay-action-button change-poster-btn';
+									changePosterButton.setAttribute('data-filename', filenameValue);
+									changePosterButton.setAttribute('data-dirname', directoryValue);
+									changePosterButton.innerHTML = `
+								<svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+									<rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+									<circle cx="8.5" cy="8.5" r="1.5"></circle>
+									<polyline points="21 15 16 10 5 21"></polyline>
+								</svg>
+								Change Poster
+							`;
+
+									// Insert before Delete button
+									deleteButton.parentNode.insertBefore(changePosterButton, deleteButton);
+
+									// Add event listener for Change Poster
+									changePosterButton.addEventListener('click', function (e) {
+										e.preventDefault();
+										const filename = this.getAttribute('data-filename');
+										const dirname = this.getAttribute('data-dirname');
+
+										// Get clean filename for display in modal
+										const cleanedFilename = filename
+											.replace(/\.jpg$/i, '')
+											.replace(/\-\-Plex\-\-|\-\-Orphaned\-\-/g, '')
+											.replace(/\[\[.*?\]\]|\[.*?\]/gs, '')
+											.replace(/\s*\(A\d{8,12}\)\s*/g, ' ')
+											.replace(/\s+/g, ' ')
+											.trim();
+
+										// Update the modal with file info
+										const changePosterModal = document.getElementById('changePosterModal');
+										const filenameElement = document.getElementById('changePosterFilename');
+
+										if (changePosterModal && filenameElement) {
+											filenameElement.textContent = `Changing poster: ${cleanedFilename}`;
+
+											// Update hidden form fields
+											document.getElementById('fileChangePosterOriginalFilename').value = filename;
+											document.getElementById('fileChangePosterDirectory').value = dirname;
+											document.getElementById('urlChangePosterOriginalFilename').value = filename;
+											document.getElementById('urlChangePosterDirectory').value = dirname;
+
+											// Reset form elements
+											const fileInput = document.getElementById('fileChangePosterInput');
+											if (fileInput) {
+												fileInput.value = '';
+												const fileNameElement = fileInput.parentElement.querySelector('.file-name');
+												if (fileNameElement) {
+													fileNameElement.textContent = '';
+												}
+											}
+
+											// Reset URL input
+											const urlInput = document.getElementById('urlChangePosterForm').querySelector('input[name="image_url"]');
+											if (urlInput) {
+												urlInput.value = '';
+											}
+
+											// Disable submit button until selection
+											const fileSubmitButton = document.getElementById('fileChangePosterForm').querySelector('button[type="submit"]');
+											if (fileSubmitButton) {
+												fileSubmitButton.disabled = true;
+											}
+
+											// Reset to file tab
+											const fileTabs = changePosterModal.querySelectorAll('.upload-tab-btn');
+											fileTabs.forEach(tab => {
+												if (tab.getAttribute('data-tab') === 'file') {
+													tab.classList.add('active');
+												} else {
+													tab.classList.remove('active');
+												}
+											});
+
+											// Show file form, hide URL form
+											const fileForm = document.getElementById('fileChangePosterForm');
+											const urlForm = document.getElementById('urlChangePosterForm');
+											if (fileForm && urlForm) {
+												fileForm.classList.add('active');
+												urlForm.classList.remove('active');
+											}
+
+											// Show the modal
+											changePosterModal.style.display = 'block';
+											changePosterModal.offsetHeight; // Force reflow
+											changePosterModal.classList.add('show');
+										}
+									});
+								}
+							}
+						}
+					}
+				});
+
+				// Add fullscreen button to new items
+				document.querySelectorAll('.gallery-item:not(.initialized)').forEach(item => {
+					const overlayActions = item.querySelector('.image-overlay-actions');
+					const imageElement = item.querySelector('.gallery-image');
+
+					if (overlayActions && imageElement && !overlayActions.querySelector('.fullscreen-view-btn')) {
+						// Get the image source
+						const imageSrc = imageElement.getAttribute('data-src');
+						if (!imageSrc) return;
+
+						// Create the full-screen button
+						const fullScreenBtn = document.createElement('button');
+						fullScreenBtn.className = 'overlay-action-button fullscreen-view-btn';
+						fullScreenBtn.innerHTML = `
+					<svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+					</svg>
+					Full Screen
+				`;
+
+						// Add click event
+						fullScreenBtn.addEventListener('click', function (e) {
+							e.preventDefault();
+							e.stopPropagation();
+
+							// Clean the URL to ensure proper loading
+							const cleanImageUrl = imageSrc.split('?')[0] + '?v=' + new Date().getTime();
+
+							// Use existing showFullScreenModal function if available, or create simplified version
+							if (typeof showFullScreenModal === 'function') {
+								showFullScreenModal(cleanImageUrl);
+							} else {
+								// Simple implementation if the function doesn't exist
+								const modal = document.getElementById('fullScreenModal');
+								if (modal) {
+									const img = modal.querySelector('#fullScreenImage');
+									if (img) {
+										img.src = cleanImageUrl;
+										modal.style.display = 'flex';
+										modal.classList.add('show');
+									}
+								}
+							}
+						});
+
+						// Insert button at appropriate position
+						const copyUrlBtn = overlayActions.querySelector('.copy-url-btn');
+						if (copyUrlBtn) {
+							copyUrlBtn.parentNode.insertBefore(fullScreenBtn, copyUrlBtn);
+						} else {
+							overlayActions.prepend(fullScreenBtn);
+						}
+					}
+				});
+
+				// Mark all items as initialized
+				document.querySelectorAll('.gallery-item:not(.initialized)').forEach(item => {
+					item.classList.add('initialized');
+				});
+			}
+
+			/**
+			 * Helper function to create the Import from Plex modal if needed
+			 */
+			function createImportFromPlexModal() {
+				if (document.getElementById('importFromPlexModal')) return;
+
+				const modalHTML = `
+		<div id="importFromPlexModal" class="modal">
+			<div class="modal-content">
+				<div class="modal-header">
+					<h3>Get from Plex</h3>
+					<button type="button" class="modal-close-btn">×</button>
+				</div>
+				<div class="modal-body">
+					<p>Are you sure you want to replace this poster with the one from Plex?</p>
+					<p id="importFromPlexFilename" style="margin-top: 10px; font-weight: 500; overflow-wrap: break-word; display: none;" data-filename="" data-dirname=""></p>
+				</div>
+				<div class="modal-actions">
+					<button type="button" class="modal-button cancel" id="cancelImportFromPlex">Cancel</button>
+					<button type="button" class="modal-button import-from-plex-confirm">Get</button>
+				</div>
+			</div>
+		</div>
+		`;
+
+				// Append modal to body
+				document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+				// Set up event handlers
+				const modal = document.getElementById('importFromPlexModal');
+				const closeBtn = modal.querySelector('.modal-close-btn');
+				const cancelBtn = modal.querySelector('#cancelImportFromPlex');
+				const confirmBtn = modal.querySelector('.import-from-plex-confirm');
+
+				// Close button handler
+				closeBtn.addEventListener('click', () => {
+					modal.classList.remove('show');
+					setTimeout(() => {
+						modal.style.display = 'none';
+					}, 300);
+				});
+
+				// Cancel button handler
+				cancelBtn.addEventListener('click', () => {
+					modal.classList.remove('show');
+					setTimeout(() => {
+						modal.style.display = 'none';
+					}, 300);
+				});
+
+				// Confirm button handler
+				confirmBtn.addEventListener('click', () => {
+					const filenameElement = document.getElementById('importFromPlexFilename');
+					const filename = filenameElement.getAttribute('data-filename');
+					const directory = filenameElement.getAttribute('data-dirname');
+
+					// Hide the modal
+					modal.classList.remove('show');
+					setTimeout(() => {
+						modal.style.display = 'none';
+					}, 300);
+
+					// Call the importFromPlex function if it exists
+					if (typeof importFromPlex === 'function') {
+						importFromPlex(filename, directory);
+					} else {
+						// Fallback implementation
+						const notification = document.createElement('div');
+						notification.className = 'plex-notification plex-sending';
+						notification.innerHTML = `
+				<div class="plex-notification-content">
+					<div class="plex-spinner"></div>
+					<span>Importing from Plex...</span>
+				</div>
+				`;
+						document.body.appendChild(notification);
+						notification.offsetHeight;
+						notification.classList.add('show');
+
+						// Make AJAX request
+						const formData = new FormData();
+						formData.append('action', 'import_from_plex');
+						formData.append('filename', filename);
+						formData.append('directory', directory);
+
+						fetch('./include/get-from-plex.php', {
+							method: 'POST',
+							body: formData
+						})
+							.then(response => response.json())
+							.then(data => {
+								notification.remove();
+
+								if (data.success) {
+									// Show success notification
+									const successNotif = document.createElement('div');
+									successNotif.className = 'plex-notification plex-success';
+									successNotif.innerHTML = `
+						<div class="plex-notification-content">
+							<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+								<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+								<polyline points="22 4 12 14.01 9 11.01"></polyline>
+							</svg>
+							<span>Imported from Plex successfully!</span>
+						</div>
+						`;
+									document.body.appendChild(successNotif);
+									successNotif.offsetHeight;
+									successNotif.classList.add('show');
+
+									setTimeout(() => {
+										successNotif.classList.remove('show');
+										setTimeout(() => {
+											successNotif.remove();
+										}, 300);
+									}, 3000);
+
+									// Refresh the image
+									if (data.renamed) {
+										location.reload(); // Simple reload if handling renamed is complex
+									} else {
+										// Force reload the image by changing its src
+										const imgElements = document.querySelectorAll(`.gallery-image[data-src*="${filename}"]`);
+										imgElements.forEach(img => {
+											const currentSrc = img.getAttribute('src');
+											const newSrc = currentSrc.split('?')[0] + '?v=' + new Date().getTime();
+											img.setAttribute('src', newSrc);
+										});
+									}
+								} else {
+									// Show error notification
+									const errorNotif = document.createElement('div');
+									errorNotif.className = 'plex-notification plex-error';
+									errorNotif.innerHTML = `
+						<div class="plex-notification-content">
+							<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+								<circle cx="12" cy="12" r="10"></circle>
+								<line x1="12" y1="8" x2="12" y2="12"></line>
+								<line x1="12" y1="16" x2="12.01" y2="16"></line>
+							</svg>
+							<span>${data.error || 'Failed to import poster from Plex'}</span>
+						</div>
+						`;
+									document.body.appendChild(errorNotif);
+									errorNotif.offsetHeight;
+									errorNotif.classList.add('show');
+
+									setTimeout(() => {
+										errorNotif.classList.remove('show');
+										setTimeout(() => {
+											errorNotif.remove();
+										}, 300);
+									}, 5000);
+								}
+							})
+							.catch(error => {
+								notification.remove();
+
+								// Show error notification
+								const errorNotif = document.createElement('div');
+								errorNotif.className = 'plex-notification plex-error';
+								errorNotif.innerHTML = `
+					<div class="plex-notification-content">
+						<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+							<circle cx="12" cy="12" r="10"></circle>
+							<line x1="12" y1="8" x2="12" y2="12"></line>
+							<line x1="12" y1="16" x2="12.01" y2="16"></line>
+						</svg>
+						<span>Error importing poster from Plex: ${error.message}</span>
+					</div>
+					`;
+								document.body.appendChild(errorNotif);
+								errorNotif.offsetHeight;
+								errorNotif.classList.add('show');
+
+								setTimeout(() => {
+									errorNotif.classList.remove('show');
+									setTimeout(() => {
+										errorNotif.remove();
+									}, 300);
+								}, 5000);
+							});
+					}
+				});
+
+				// Close on background click
+				modal.addEventListener('click', function (e) {
+					if (e.target === modal) {
+						modal.classList.remove('show');
+						setTimeout(() => {
+							modal.style.display = 'none';
+						}, 300);
+					}
+				});
+			}
+
+			/**
+			 * Helper function to show copy notification
+			 */
+			function showCopyNotification() {
+				const copyNotification = document.getElementById('copyNotification');
+				if (copyNotification) {
+					copyNotification.style.display = 'block';
+					copyNotification.classList.add('show');
+
+					setTimeout(() => {
+						copyNotification.classList.remove('show');
+						setTimeout(() => {
+							copyNotification.style.display = 'none';
+						}, 300);
+					}, 2000);
+				}
+			}
+		});
+
+		// =========== GO TO TOP BUTTON IMPLEMENTATION ===========
+
+		document.addEventListener('DOMContentLoaded', function () {
+			// Create the go to top button
+			const goToTopButton = document.createElement('button');
+			goToTopButton.id = 'goToTopButton';
+			goToTopButton.className = 'go-to-top-button';
+			goToTopButton.setAttribute('aria-label', 'Go to top of page');
+			goToTopButton.setAttribute('title', 'Back to Top');
+
+			// Add the arrow SVG icon
+			goToTopButton.innerHTML = `
+		<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+			<polyline points="18 15 12 9 6 15"></polyline>
+		</svg>
+	`;
+
+			// Add the CSS styles
+			const style = document.createElement('style');
+			style.textContent = `
+		.go-to-top-button {
+			position: fixed;
+			bottom: 30px;
+			right: 30px;
+			width: 50px;
+			height: 50px;
+			border-radius: 50%;
+			background: linear-gradient(45deg, var(--accent-primary), #ff9f43);
+			color: #1f1f1f;
+			border: none;
+			cursor: pointer;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			opacity: 0;
+			visibility: hidden;
+			transition: all 0.3s ease;
+			transform: translateY(20px) scale(0.9);
+			box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+			z-index: 999;
+		}
+		
+		.go-to-top-button.visible {
+			opacity: 1;
+			visibility: visible;
+			transform: translateY(0) scale(1);
+		}
+		
+		.go-to-top-button:hover {
+			background: linear-gradient(45deg, #f5b025, #ffa953);
+			transform: translateY(-5px) scale(1.05);
+			box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+		}
+		
+		.go-to-top-button svg {
+			width: 24px;
+			height: 24px;
+			stroke-width: 3;
+		}
+		
+		/* Add a subtle pulse animation */
+		@keyframes pulse {
+			0% { box-shadow: 0 0 0 0 rgba(229, 160, 13, 0.5); }
+			70% { box-shadow: 0 0 0 10px rgba(229, 160, 13, 0); }
+			100% { box-shadow: 0 0 0 0 rgba(229, 160, 13, 0); }
+		}
+		
+		.go-to-top-button.visible {
+			animation: pulse 2s infinite;
+		}
+		
+		/* Responsive adjustments */
+		@media (max-width: 768px) {
+			.go-to-top-button {
+				width: 45px;
+				height: 45px;
+				bottom: 20px;
+				right: 20px;
+			}
+			
+			.go-to-top-button svg {
+				width: 20px;
+				height: 20px;
+			}
+		}
+		
+		@media (max-width: 480px) {
+			.go-to-top-button {
+				width: 40px;
+				height: 40px;
+				bottom: 15px;
+				right: 15px;
+			}
+			
+			.go-to-top-button svg {
+				width: 18px;
+				height: 18px;
+			}
+		}
+	`;
+
+			// Append the button and styles to the document
+			document.head.appendChild(style);
+			document.body.appendChild(goToTopButton);
+
+			// Function to toggle button visibility based on scroll position
+			function toggleGoToTopButton() {
+				// Show button after scrolling down 300px
+				const scrollThreshold = 300;
+
+				if (window.scrollY > scrollThreshold) {
+					goToTopButton.classList.add('visible');
+				} else {
+					goToTopButton.classList.remove('visible');
+				}
+			}
+
+			// Add scroll event listener with throttling to improve performance
+			let isScrolling = false;
+			window.addEventListener('scroll', function () {
+				if (!isScrolling) {
+					window.requestAnimationFrame(function () {
+						toggleGoToTopButton();
+						isScrolling = false;
+					});
+					isScrolling = true;
+				}
+			});
+
+			// Add click event listener for smooth scrolling
+			goToTopButton.addEventListener('click', function (e) {
+				e.preventDefault();
+
+				// Apply different scroll behaviors based on browser support
+				if ('scrollBehavior' in document.documentElement.style) {
+					// Modern browsers with smooth scroll support
+					window.scrollTo({
+						top: 0,
+						behavior: 'smooth'
+					});
+				} else {
+					// Fallback for browsers without smooth scroll support
+					smoothScrollTo(0, 800); // 800ms duration
+				}
+
+				// Add clicked state for better feedback
+				this.classList.add('clicked');
+				setTimeout(() => {
+					this.classList.remove('clicked');
+				}, 600);
+			});
+
+			// Fallback smooth scroll function for browsers without native support
+			function smoothScrollTo(targetY, duration) {
+				const startY = window.scrollY;
+				const difference = targetY - startY;
+				const startTime = performance.now();
+
+				function step() {
+					const elapsed = performance.now() - startTime;
+					const progress = Math.min(elapsed / duration, 1);
+
+					// Easing function - easeOutQuad
+					const easeProgress = 1 - (1 - progress) * (1 - progress);
+
+					window.scrollTo(0, startY + difference * easeProgress);
+
+					if (progress < 1) {
+						window.requestAnimationFrame(step);
+					}
+				}
+
+				window.requestAnimationFrame(step);
+			}
+
+			// Initialize button visibility on page load
+			toggleGoToTopButton();
+		});
+	</script>
+
 </body>
 
 </html>
