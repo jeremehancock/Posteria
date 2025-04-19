@@ -10257,499 +10257,293 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 	<?php if (getenv('IMAGES_PER_PAGE') !== false && intval(getenv('IMAGES_PER_PAGE')) === 0) { ?>
 	<script>
 		/**
-	 * Complete Fixed Infinite Scroll Implementation for Posteria
-	 *
-	 * This version fixes:
-	 * - Function definition order (hideNonOrphanedDeleteButtons defined before it's used)
-	 * - Orphaned button visibility
-	 * - All previous issues with posters, Plex buttons, etc.
-	 */
-
+		 * VirtualScroll - Optimized Infinite Scroll Implementation for Posteria
+		 * 
+		 * This implementation significantly reduces DOM bloat by:
+		 * 1. Implementing element recycling (virtualization)
+		 * 2. Using event delegation instead of many individual listeners
+		 * 3. Efficiently batching DOM operations
+		 * 4. Cleaning up elements that are far outside the viewport
+		 * 5. Only initializing new elements once
+		 */
 		document.addEventListener('DOMContentLoaded', function () {
 			// Configuration
 			const config = {
-				loadingThreshold: 500,     // Increased from 200px to 500px - load much earlier
-				batchSize: 24,             // Number of items per page
-				loadingDelay: 50,          // Reduced to 50ms for faster response
-				debug: false               // Set to true to enable console logging
+				bufferSize: 100,         // Maximum number of items to keep in DOM
+				batchSize: 24,           // Number of items per fetch
+				loadingThreshold: 800,   // Load more when this far from bottom (px)
+				cleanupThreshold: 2000,  // Remove items when this far from viewport (px)
+				throttleDelay: 100,      // Throttle scroll event (ms)
+				debug: false,            // Enable debugging information
+				fadeInDuration: 500      // Fade in animation duration (ms)
 			};
 
-			// State variables
-			let isLoading = false;     // Flag to prevent multiple simultaneous requests
-			let allLoaded = false;     // Flag to indicate all items have been loaded
-			let currentPage = 1;       // Current page number (starts at 1 since first page is already loaded)
-			let loadingTimer = null;   // Timer for loading delay
-
-			// Elements
+			// Core Elements
 			const galleryContainer = document.querySelector('.gallery');
 			const paginationContainer = document.querySelector('.pagination');
-			let loadingIndicator = null;
 
 			// Only initialize if gallery exists
 			if (!galleryContainer) return;
 
-			// Helper function definitions (defined BEFORE they're used)
+			// State
+			let state = {
+				isLoading: false,          // Flag to prevent multiple requests
+				allLoaded: false,          // Flag for when all content is loaded
+				currentPage: 1,            // Current page (starts at 1)
+				lastScrollY: 0,            // Last scroll position for throttling
+				totalItems: 0,             // Total items loaded so far
+				loadedItemsMap: new Map(), // Map of all loaded items by unique ID
+				visibleItems: new Set(),   // Currently visible item IDs
+				totalPages: 1,             // Total pages available
+				ticking: false,            // RequestAnimationFrame flag
+				cleanupPending: false,     // Flag to prevent multiple cleanups
+				loadingItemsCount: 0,      // Number of items currently being loaded
+				uniqueIdCounter: 0,        // Counter for assigning unique IDs
+				elementRegistry: {}        // Registry of event handlers
+			};
 
-			// Simplified version of hideNonOrphanedDeleteButtons for new content
-			function hideNonOrphanedDeleteButtons() {
-				// Target only newly added delete buttons that haven't been processed yet
-				document.querySelectorAll('.delete-btn:not(.orphaned-initialized)').forEach(button => {
-					const isOrphaned = button.getAttribute('data-orphaned') === 'true';
-					// Add initialized class to all buttons
-					button.classList.add('orphaned-initialized');
+			// DOM Elements
+			let elements = {
+				loadingIndicator: null,    // Loading spinner element
+				allLoadedMessage: null,    // "All posters loaded" message
+				observer: null,            // Intersection observer
+				scrollThrottleTimer: null  // Timer for scroll throttling
+			};
 
-					if (!isOrphaned) {
-						button.style.display = 'none';
-					} else {
-						// Make sure orphaned buttons are visible
-						button.style.display = 'flex';
-					}
-				});
-			}
+			//============== CORE FUNCTIONALITY ==============//
 
-			// Simplified version of showOrphanedBadge for new content
-			function showOrphanedBadge() {
-				document.querySelectorAll('.orphaned-badge:not(.badge-initialized)').forEach(badge => {
-					badge.classList.add('badge-initialized');
-					const isOrphaned = badge.getAttribute('data-orphaned') === 'true';
-					if (isOrphaned) {
-						badge.style.display = 'flex';
-					}
-				});
-			}
+			/**
+			 * Initialize the infinite scroll functionality
+			 */
+			function initialize() {
+				// Extract total pages from pagination if available
+				extractTotalPagesFromPagination();
 
-			// Create loading indicator
-			function createLoadingIndicator() {
-				// Create if it doesn't exist
-				if (!loadingIndicator) {
-					loadingIndicator = document.createElement('div');
-					loadingIndicator.className = 'infinite-scroll-loading';
-					loadingIndicator.style.display = 'none';
-					loadingIndicator.innerHTML = `
-																								<div class="loading-spinner" style="margin: 20px auto;"></div>
-																								<div style="text-align: center; color: var(--text-secondary);">Loading more posters...</div>
-																							`;
-
-					// Insert after gallery
-					galleryContainer.parentNode.insertBefore(loadingIndicator, galleryContainer.nextSibling);
-				}
-				return loadingIndicator;
-			}
-
-			// Hide pagination if it exists
-			function hidePagination() {
+				// Hide original pagination
 				if (paginationContainer) {
-					// Store total pages info if it exists
-					let totalPages = 1;
+					paginationContainer.style.display = 'none';
+				}
 
-					// Try to get total pages from pagination
-					const paginationLinks = paginationContainer.querySelectorAll('.pagination-link');
-					if (paginationLinks.length > 0) {
-						// Find the highest page number
-						paginationLinks.forEach(link => {
-							// Extract page number from href
-							const href = link.getAttribute('href');
-							if (href) {
-								const match = href.match(/page=(\d+)/);
-								if (match && match[1]) {
-									const pageNum = parseInt(match[1]);
-									if (!isNaN(pageNum) && pageNum > totalPages) {
-										totalPages = pageNum;
-									}
-								}
-							}
+				// Create loading indicator
+				elements.loadingIndicator = createLoadingIndicator();
 
-							// Also check the link text for page numbers
-							const text = link.textContent.trim();
-							if (/^\d+$/.test(text)) {
-								const pageNum = parseInt(text);
+				// Set up intersection observer for lazy loading
+				setupIntersectionObserver();
+
+				// Set up event delegation
+				setupEventDelegation();
+
+				// Set up scroll event listener (throttled)
+				window.addEventListener('scroll', throttleScroll, { passive: true });
+
+				// Initialize existing items
+				initializeExistingItems();
+
+				// Add back to top button
+				addBackToTopButton();
+
+				// Initial check in case page is short
+				setTimeout(checkScroll, 500);
+
+				if (config.debug) console.log('Virtual Scroll initialized with buffer size:', config.bufferSize);
+			}
+
+			/**
+			 * Extract total pages info from pagination
+			 */
+			function extractTotalPagesFromPagination() {
+				if (!paginationContainer) return;
+
+				let totalPages = 1;
+
+				// First try to get from dataset if already set
+				if (galleryContainer.dataset.totalPages) {
+					totalPages = parseInt(galleryContainer.dataset.totalPages, 10);
+					if (!isNaN(totalPages)) {
+						state.totalPages = totalPages;
+						return;
+					}
+				}
+
+				// Try to get total pages from pagination links
+				const paginationLinks = paginationContainer.querySelectorAll('.pagination-link');
+				if (paginationLinks.length > 0) {
+					paginationLinks.forEach(link => {
+						// Extract from href
+						const href = link.getAttribute('href');
+						if (href) {
+							const match = href.match(/page=(\d+)/);
+							if (match && match[1]) {
+								const pageNum = parseInt(match[1], 10);
 								if (!isNaN(pageNum) && pageNum > totalPages) {
 									totalPages = pageNum;
 								}
 							}
-						});
-					}
+						}
 
-					galleryContainer.dataset.totalPages = totalPages;
-
-					// Hide pagination
-					paginationContainer.style.display = 'none';
+						// Extract from text content
+						const text = link.textContent.trim();
+						if (/^\d+$/.test(text)) {
+							const pageNum = parseInt(text, 10);
+							if (!isNaN(pageNum) && pageNum > totalPages) {
+								totalPages = pageNum;
+							}
+						}
+					});
 				}
+
+				state.totalPages = totalPages;
+
+				// Store in gallery's dataset
+				galleryContainer.dataset.totalPages = totalPages;
 			}
 
-			// Fallback button initialization
-			function reinitializeButtons() {
-				// Copy URL buttons
-				document.querySelectorAll('.copy-url-btn:not(.initialized)').forEach(button => {
-					button.classList.add('initialized');
-					button.addEventListener('click', function () {
-						// Get the URL
-						const url = this.getAttribute('data-url');
-						const encodedUrl = encodeURI(url).replace(/#/g, '%23');
+			/**
+			 * Set up intersection observer for lazy loading
+			 */
+			function setupIntersectionObserver() {
+				elements.observer = new IntersectionObserver((entries) => {
+					entries.forEach(entry => {
+						const targetElement = entry.target;
 
-						// Copy to clipboard
-						navigator.clipboard.writeText(encodedUrl).then(() => {
-							// Show notification
-							const notification = document.getElementById('copyNotification');
-							if (notification) {
-								notification.style.display = 'block';
-								notification.classList.add('show');
-								setTimeout(() => {
-									notification.classList.remove('show');
-									setTimeout(() => {
-										notification.style.display = 'none';
-									}, 300);
-								}, 2000);
+						// Handle image loading
+						if (targetElement.classList.contains('gallery-image')) {
+							if (entry.isIntersecting) {
+								loadImage(targetElement);
 							}
-						});
-					});
-				});
-
-				// Delete buttons
-				document.querySelectorAll('.delete-btn:not(.initialized)').forEach(button => {
-					button.classList.add('initialized');
-					button.addEventListener('click', function (e) {
-						e.preventDefault();
-						const filename = this.getAttribute('data-filename');
-						const dirname = this.getAttribute('data-dirname');
-
-						// Set values in delete modal
-						const deleteFilenameInput = document.getElementById('deleteFilename');
-						const deleteDirectoryInput = document.getElementById('deleteDirectory');
-						if (deleteFilenameInput && deleteDirectoryInput) {
-							deleteFilenameInput.value = filename;
-							deleteDirectoryInput.value = dirname;
-
-							// Show delete modal
-							const deleteModal = document.getElementById('deleteModal');
-							if (deleteModal) {
-								deleteModal.style.display = 'block';
-								setTimeout(() => {
-									deleteModal.classList.add('show');
-								}, 10);
+						}
+						// Handle visibility tracking for gallery items
+						else if (targetElement.classList.contains('gallery-item')) {
+							if (entry.isIntersecting) {
+								state.visibleItems.add(targetElement.dataset.itemId);
+							} else {
+								state.visibleItems.delete(targetElement.dataset.itemId);
 							}
 						}
 					});
+				}, {
+					root: null,
+					rootMargin: '200px',
+					threshold: 0.1
 				});
 			}
 
-			// Initialize Plex buttons for new items
-			function reinitializePlexButtons() {
-				// Send to Plex buttons
-				document.querySelectorAll('.send-to-plex-btn:not(.initialized)').forEach(button => {
-					button.classList.add('initialized');
-					button.addEventListener('click', function (e) {
-						e.preventDefault();
-						const filename = this.getAttribute('data-filename');
-						const directory = this.getAttribute('data-dirname');
+			/**
+			 * Set up event delegation for all interactive elements
+			 */
+			function setupEventDelegation() {
+				// Use a single delegated event listener on gallery container
+				galleryContainer.addEventListener('click', (e) => {
+					// Only handle button clicks if they are visible
+					// (either not touch device or overlay is already active)
+					const galleryItem = e.target.closest('.gallery-item');
+					const isButtonAction = e.target.closest('.overlay-action-button');
 
-						// Set data in Plex modal
-						const modal = document.getElementById('plexConfirmModal');
-						const filenameElement = document.getElementById('plexConfirmFilename');
-
-						if (modal && filenameElement) {
-							filenameElement.textContent = filename;
-							filenameElement.setAttribute('data-filename', filename);
-							filenameElement.setAttribute('data-dirname', directory);
-
-							// Show the modal
-							modal.style.display = 'block';
-							setTimeout(() => {
-								modal.classList.add('show');
-							}, 10);
+					// For touch devices, prevent button actions unless overlay is showing
+					if (isTouchDevice && isButtonAction && galleryItem) {
+						if (!galleryItem.classList.contains('touch-active')) {
+							e.preventDefault();
+							e.stopPropagation();
+							// Show the overlay first
+							handleGalleryItemTouch(galleryItem);
+							return;
 						}
-					});
-				});
+					}
 
-				// Import from Plex buttons
-				document.querySelectorAll('.import-from-plex-btn:not(.initialized)').forEach(button => {
-					button.classList.add('initialized');
-					button.addEventListener('click', function (e) {
+					// Handle specific button actions when appropriate
+					// Copy URL button
+					if (e.target.closest('.copy-url-btn')) {
+						const button = e.target.closest('.copy-url-btn');
+						handleCopyUrl(button);
 						e.preventDefault();
-						const filename = this.getAttribute('data-filename');
-						const directory = this.getAttribute('data-dirname');
+						e.stopPropagation();
+						return;
+					}
 
-						// Set data in import from Plex modal
-						const modal = document.getElementById('importFromPlexModal');
-						const filenameElement = document.getElementById('importFromPlexFilename');
+					// Delete button
+					if (e.target.closest('.delete-btn')) {
+						const button = e.target.closest('.delete-btn');
+						handleDelete(button);
+						e.preventDefault();
+						e.stopPropagation();
+						return;
+					}
 
-						if (modal && filenameElement) {
-							filenameElement.textContent = filename;
-							filenameElement.setAttribute('data-filename', filename);
-							filenameElement.setAttribute('data-dirname', directory);
+					// Send to Plex button
+					if (e.target.closest('.send-to-plex-btn')) {
+						const button = e.target.closest('.send-to-plex-btn');
+						handleSendToPlex(button);
+						e.preventDefault();
+						e.stopPropagation();
+						return;
+					}
 
-							// Show the modal
-							modal.style.display = 'block';
-							setTimeout(() => {
-								modal.classList.add('show');
-							}, 10);
-						}
-					});
-				});
-			}
+					// Import from Plex button
+					if (e.target.closest('.import-from-plex-btn')) {
+						const button = e.target.closest('.import-from-plex-btn');
+						handleImportFromPlex(button);
+						e.preventDefault();
+						e.stopPropagation();
+						return;
+					}
 
-			// Initialize Change Poster buttons
-			function reinitializeChangePosterButtons() {
-				document.querySelectorAll('.gallery-item').forEach(item => {
-					// Skip already processed items
-					if (item.classList.contains('change-poster-added')) return;
-					item.classList.add('change-poster-added');
+					// Change poster button
+					if (e.target.closest('.change-poster-btn')) {
+						const button = e.target.closest('.change-poster-btn');
+						handleChangePoster(button);
+						e.preventDefault();
+						e.stopPropagation();
+						return;
+					}
 
-					const filenameElement = item.querySelector('.gallery-caption');
-					const overlayActions = item.querySelector('.image-overlay-actions');
+					// Full screen view button
+					if (e.target.closest('.fullscreen-view-btn')) {
+						const button = e.target.closest('.fullscreen-view-btn');
+						handleFullScreenView(button);
+						e.preventDefault();
+						e.stopPropagation();
+						return;
+					}
 
-					if (filenameElement && overlayActions) {
-						const filename = filenameElement.getAttribute('data-full-text');
-
-						// Only show Change Poster button for Plex files
-						if (filename && filename.toLowerCase().includes('--plex--')) {
-							// Check if button already exists
-							if (!overlayActions.querySelector('.change-poster-btn')) {
-								// Get the delete button as reference for positioning
-								const deleteButton = overlayActions.querySelector('.delete-btn');
-
-								if (deleteButton) {
-									const directoryValue = deleteButton.getAttribute('data-dirname');
-									const filenameValue = deleteButton.getAttribute('data-filename');
-
-									// Create Change Poster button
-									const changePosterButton = document.createElement('button');
-									changePosterButton.className = 'overlay-action-button change-poster-btn';
-									changePosterButton.setAttribute('data-filename', filenameValue);
-									changePosterButton.setAttribute('data-dirname', directoryValue);
-									changePosterButton.innerHTML = `
-																												<svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-																													<rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-																													<circle cx="8.5" cy="8.5" r="1.5"></circle>
-																													<polyline points="21 15 16 10 5 21"></polyline>
-																												</svg>
-																												Change Poster
-																											`;
-
-									// Insert before Delete button
-									deleteButton.parentNode.insertBefore(changePosterButton, deleteButton);
-
-									// Add click event listener
-									changePosterButton.addEventListener('click', function (e) {
-										e.preventDefault();
-
-										// Get the change poster modal
-										const changePosterModal = document.getElementById('changePosterModal');
-										if (changePosterModal) {
-											// Set filename in modal
-											const modalFilename = document.getElementById('changePosterFilename');
-											if (modalFilename) {
-												// Clean the filename for display
-												const cleanedFilename = filenameValue
-													.replace(/\.jpg$/i, '')
-													.replace(/\-\-Plex\-\-|\-\-Orphaned\-\-/g, '')
-													.replace(/\[\[.*?\]\]|\[.*?\]/gs, '')
-													.replace(/\s*\(A\d{8,12}\)\s*/g, ' ')
-													.replace(/\s+/g, ' ')
-													.trim();
-
-												modalFilename.textContent = `Changing poster: ${cleanedFilename}`;
-											}
-
-											// Set form values
-											document.getElementById('fileChangePosterOriginalFilename').value = filenameValue;
-											document.getElementById('fileChangePosterDirectory').value = directoryValue;
-											document.getElementById('urlChangePosterOriginalFilename').value = filenameValue;
-											document.getElementById('urlChangePosterDirectory').value = directoryValue;
-
-											// Reset file input
-											const fileInput = document.getElementById('fileChangePosterInput');
-											if (fileInput) {
-												fileInput.value = '';
-												const fileNameElement = fileInput.parentElement.querySelector('.file-name');
-												if (fileNameElement) {
-													fileNameElement.textContent = '';
-												}
-											}
-
-											// Reset URL input
-											const urlInput = document.querySelector('#urlChangePosterForm input[name="image_url"]');
-											if (urlInput) {
-												urlInput.value = '';
-											}
-
-											// Disable submit button until a file is selected
-											const fileSubmitButton = document.querySelector('#fileChangePosterForm button[type="submit"]');
-											if (fileSubmitButton) {
-												fileSubmitButton.disabled = true;
-											}
-
-											// Reset to file tab
-											const fileTabs = changePosterModal.querySelectorAll('.upload-tab-btn');
-											fileTabs.forEach(tab => {
-												if (tab.getAttribute('data-tab') === 'file') {
-													tab.classList.add('active');
-												} else {
-													tab.classList.remove('active');
-												}
-											});
-
-											// Show file form, hide URL form
-											document.getElementById('fileChangePosterForm').classList.add('active');
-											document.getElementById('urlChangePosterForm').classList.remove('active');
-
-											// Show the modal
-											changePosterModal.style.display = 'block';
-											setTimeout(() => {
-												changePosterModal.classList.add('show');
-											}, 10);
-										}
-									});
-								}
-							}
+					// Handle gallery item tap (when not clicking a button)
+					if (galleryItem && !isButtonAction) {
+						if (isTouchDevice) {
+							handleGalleryItemTouch(galleryItem);
+							e.preventDefault();
+							e.stopPropagation();
+							return;
 						}
 					}
 				});
-			}
 
-			function fixTouchInteractions() {
-				// Find all gallery items not already processed
-				const galleryItems = document.querySelectorAll('.gallery-item:not(.touch-fixed)');
+				// Touch start event for tracking touch positions
+				galleryContainer.addEventListener('touchstart', (e) => {
+					const galleryItem = e.target.closest('.gallery-item');
+					if (galleryItem) {
+						galleryItem.touchStartX = e.touches[0].clientX;
+						galleryItem.touchStartY = e.touches[0].clientY;
+						galleryItem.touchTimeStart = Date.now();
+						galleryItem.isTouchScrolling = false;
+					}
+				}, { passive: true });
 
-				galleryItems.forEach(item => {
-					item.classList.add('touch-fixed');
-
-					let touchStartY = 0;
-					let touchStartX = 0;
-					let touchTimeStart = 0;
-					let isTouchScrolling = false;
-
-					// Handle touch start
-					item.addEventListener('touchstart', function (e) {
-						touchStartY = e.touches[0].clientY;
-						touchStartX = e.touches[0].clientX;
-						touchTimeStart = Date.now();
-						isTouchScrolling = false;
-					}, { passive: true });
-
-					// Handle touch move to detect scrolling
-					item.addEventListener('touchmove', function (e) {
-						const touchY = e.touches[0].clientY;
-						const touchX = e.touches[0].clientX;
-
-						// If moved more than 10px, consider it a scroll
-						if (Math.abs(touchY - touchStartY) > 10 || Math.abs(touchX - touchStartX) > 10) {
-							isTouchScrolling = true;
-							// Remove active class if scrolling
-							this.classList.remove('touch-active');
+				// Touch move to detect scrolling
+				galleryContainer.addEventListener('touchmove', (e) => {
+					const galleryItem = e.target.closest('.gallery-item');
+					if (galleryItem) {
+						if (Math.abs(e.touches[0].clientY - galleryItem.touchStartY) > 10 ||
+							Math.abs(e.touches[0].clientX - galleryItem.touchStartX) > 10) {
+							galleryItem.isTouchScrolling = true;
+							galleryItem.classList.remove('touch-active');
 						}
-					}, { passive: true });
+					}
+				}, { passive: true });
 
-					// Handle touch end
-					item.addEventListener('touchend', function (e) {
-						if (isTouchScrolling) return;
-
-						const touchEndY = e.changedTouches[0].clientY;
-						const touchEndX = e.changedTouches[0].clientX;
-						const touchTime = Date.now() - touchTimeStart;
-
-						const dy = Math.abs(touchEndY - touchStartY);
-						const dx = Math.abs(touchEndX - touchStartX);
-
-						// If it was a tap (short duration, minimal movement)
-						if (touchTime < 300 && dy < 10 && dx < 10) {
-							// Check if we tapped directly on a button
-							const tappedButton = e.target.closest('.overlay-action-button');
-
-							// If we're tapping on a button and the overlay is already active, let event proceed
-							if (tappedButton && this.classList.contains('touch-active')) {
-								return; // Don't prevent default, allow button tap to work
-							}
-
-							// Otherwise handle the poster tap
-							e.preventDefault();
-
-							// Remove active class from all other items
-							document.querySelectorAll('.gallery-item').forEach(otherItem => {
-								if (otherItem !== this) {
-									otherItem.classList.remove('touch-active');
-								}
-							});
-
-							// Toggle active class on this item
-							this.classList.toggle('touch-active');
-						}
-					});
-
-					// Special handling for delete buttons - making sure they work
-					const deleteButtons = item.querySelectorAll('.delete-btn');
-					deleteButtons.forEach(button => {
-						if (!button.classList.contains('delete-initialized')) {
-							button.classList.add('delete-initialized');
-
-							// Instead of cloning and replacing, just add our handlers directly
-							// Remove the default click event by using a cleaner approach
-							button.addEventListener('click', function (e) {
-								// Only process the click if the parent item has the touch-active class
-								// or we're not on a touch device
-								if (!isTouchDevice || this.closest('.gallery-item').classList.contains('touch-active')) {
-									e.preventDefault();
-									e.stopPropagation(); // Prevent gallery item event
-
-									const filename = this.getAttribute('data-filename');
-									const dirname = this.getAttribute('data-dirname');
-
-									// Set values in delete modal
-									const deleteFilenameInput = document.getElementById('deleteFilename');
-									const deleteDirectoryInput = document.getElementById('deleteDirectory');
-
-									if (deleteFilenameInput && deleteDirectoryInput) {
-										deleteFilenameInput.value = filename;
-										deleteDirectoryInput.value = dirname;
-
-										// Show delete modal
-										const deleteModal = document.getElementById('deleteModal');
-										if (deleteModal) {
-											deleteModal.style.display = 'block';
-											setTimeout(() => {
-												deleteModal.classList.add('show');
-											}, 10);
-										}
-									}
-								}
-							});
-
-							// For touch devices, only activate the button when the overlay is already shown
-							button.addEventListener('touchend', function (e) {
-								// Only process if the parent gallery item has the touch-active class
-								if (this.closest('.gallery-item').classList.contains('touch-active')) {
-									e.preventDefault();
-									e.stopPropagation();
-
-									const filename = this.getAttribute('data-filename');
-									const dirname = this.getAttribute('data-dirname');
-
-									// Set values in delete modal
-									const deleteFilenameInput = document.getElementById('deleteFilename');
-									const deleteDirectoryInput = document.getElementById('deleteDirectory');
-
-									if (deleteFilenameInput && deleteDirectoryInput) {
-										deleteFilenameInput.value = filename;
-										deleteDirectoryInput.value = dirname;
-
-										// Show delete modal
-										const deleteModal = document.getElementById('deleteModal');
-										if (deleteModal) {
-											deleteModal.style.display = 'block';
-											setTimeout(() => {
-												deleteModal.classList.add('show');
-											}, 10);
-										}
-									}
-								}
-							});
-						}
-					});
-				});
-
-				// Close active overlay when touching outside
-				document.addEventListener('touchstart', function (e) {
-					if (!e.target.closest('.gallery-item') && !e.target.closest('.overlay-action-button')) {
+				// Add global document handler to close overlays
+				document.addEventListener('touchstart', (e) => {
+					if (!e.target.closest('.gallery-item') &&
+						!e.target.closest('.overlay-action-button') &&
+						!e.target.closest('.modal-content')) {
 						document.querySelectorAll('.gallery-item.touch-active').forEach(item => {
 							item.classList.remove('touch-active');
 						});
@@ -10757,127 +10551,125 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 				}, { passive: true });
 			}
 
-			// Initialize features for newly loaded items
-			function initializeNewItems() {
-				// Reinitialize lazy loading for new images
-				const lazyImages = document.querySelectorAll("img.lazy:not(.lazy-initialized)");
-				lazyImages.forEach(img => {
-					img.classList.add('lazy-initialized');
-					if (img.dataset.src) {
-						const encodedSrc = encodeURI(img.dataset.src).replace(/#/g, '%23');
+			/**
+			 * Initialize existing gallery items that are already on the page
+			 */
+			function initializeExistingItems() {
+				const existingItems = galleryContainer.querySelectorAll('.gallery-item');
 
-						// Create loading observer
-						const observer = new IntersectionObserver(entries => {
-							entries.forEach(entry => {
-								if (entry.isIntersecting) {
-									img.src = encodedSrc;
-									img.classList.remove("lazy");
-									observer.unobserve(img);
+				existingItems.forEach((item, index) => {
+					// Assign unique ID to each item
+					const itemId = 'item-' + (++state.uniqueIdCounter);
+					item.dataset.itemId = itemId;
 
-									// Handle image loading
-									img.onload = function () {
-										// Show image
-										img.classList.add('loaded');
-										// Hide placeholder
-										const placeholder = img.previousElementSibling;
-										if (placeholder && placeholder.classList.contains('gallery-image-placeholder')) {
-											placeholder.classList.add('hidden');
-										}
-									};
-								}
-							});
-						}, { rootMargin: '200px' });
+					// Add to loaded items map
+					state.loadedItemsMap.set(itemId, {
+						element: item,
+						index: index,
+						isVisible: true
+					});
 
-						observer.observe(img);
+					// Observe item for visibility
+					elements.observer.observe(item);
+
+					// Observe lazy images inside the item
+					const lazyImages = item.querySelectorAll('.gallery-image');
+					lazyImages.forEach(img => {
+						elements.observer.observe(img);
+					});
+
+					// Initialize orphaned elements
+					const isOrphaned = item.querySelector('.delete-btn')?.getAttribute('data-orphaned') === 'true';
+					if (isOrphaned) {
+						const orphanedBadge = item.querySelector('.orphaned-badge');
+						if (orphanedBadge) {
+							orphanedBadge.style.display = 'flex';
+						}
+
+						const deleteBtn = item.querySelector('.delete-btn');
+						if (deleteBtn) {
+							deleteBtn.style.display = 'flex';
+						}
+					} else {
+						const deleteBtn = item.querySelector('.delete-btn');
+						if (deleteBtn) {
+							deleteBtn.style.display = 'none';
+						}
 					}
 				});
 
-				// Reinitialize buttons (Copy URL, Download, etc.)
-				if (typeof initializeButtons === 'function') {
-					setTimeout(() => initializeButtons(), 100);
-				} else {
-					// Fallback button initialization if the global function isn't available
-					reinitializeButtons();
-				}
-
-				// Reinitialize Plex-specific buttons
-				reinitializePlexButtons();
-
-				// Reinitialize Change Poster buttons
-				reinitializeChangePosterButtons();
-
-				// Handle orphaned delete buttons
-				hideNonOrphanedDeleteButtons();
-
-				// Show orphaned badges
-				showOrphanedBadge();
-
-				// Initialize full screen buttons if the function exists
-				if (typeof addFullScreenButtons === 'function') {
-					setTimeout(() => addFullScreenButtons(), 200);
-				}
-
-				// Initialize caption truncation if function exists
-				if (typeof markTruncatedCaptions === 'function') {
-					setTimeout(() => markTruncatedCaptions(), 300);
-				}
-
-				// Fix mobile touch interactions
-				fixTouchInteractions();
-
-				// Fire event for other scripts to hook into
-				document.dispatchEvent(new CustomEvent('posteriaNewContent'));
+				// Update total items count
+				state.totalItems = existingItems.length;
 			}
 
-			// Check if we should load more content
+			/**
+			 * Check if we should load more content
+			 */
 			function checkScroll() {
-				// Don't check if already loading or all loaded
-				if (isLoading || allLoaded) return;
+				// Don't check if already loading or all items loaded
+				if (state.isLoading || state.allLoaded) return;
 
-				// Calculate distance from bottom of page
+				// Calculate distance from bottom of viewport
 				const scrollY = window.scrollY || window.pageYOffset;
 				const windowHeight = window.innerHeight;
 				const documentHeight = document.documentElement.scrollHeight;
 				const distanceFromBottom = documentHeight - (scrollY + windowHeight);
 
-				if (config.debug) {
-					console.log(`Distance from bottom: ${distanceFromBottom}px`);
+				// Check if we should load more
+				if (distanceFromBottom < config.loadingThreshold) {
+					loadMoreContent();
 				}
 
-				// Load earlier (500px from bottom) and reduce delay to 50ms
-				if (distanceFromBottom < 500) {
-					clearTimeout(loadingTimer);
-					loadingTimer = setTimeout(loadMoreContent, 50);
+				// Check if we should perform cleanup
+				if (!state.cleanupPending && state.loadedItemsMap.size > config.bufferSize) {
+					state.cleanupPending = true;
+					requestAnimationFrame(cleanupOffscreenItems);
 				}
 			}
 
-			// Load more content via AJAX
-			function loadMoreContent() {
-				if (isLoading || allLoaded) return;
+			/**
+			 * Throttled scroll event handler using requestAnimationFrame
+			 */
+			function throttleScroll() {
+				// Store current scroll position
+				state.lastScrollY = window.scrollY;
 
+				// Use requestAnimationFrame to limit updates
+				if (!state.ticking) {
+					requestAnimationFrame(() => {
+						checkScroll();
+						state.ticking = false;
+					});
+					state.ticking = true;
+				}
+			}
+
+			/**
+			 * Load more content via AJAX
+			 */
+			function loadMoreContent() {
 				// Set loading state
-				isLoading = true;
+				state.isLoading = true;
 
 				// Show loading indicator
-				const indicator = createLoadingIndicator();
-				indicator.style.display = 'block';
+				elements.loadingIndicator.style.display = 'block';
 
 				// Get current URL and parameters
 				const url = new URL(window.location.href);
 				const params = new URLSearchParams(url.search);
 
 				// Update parameters for AJAX request
-				params.set('page', currentPage + 1);
-				params.set('ajax', 'true'); // Add flag for AJAX request
+				params.set('page', state.currentPage + 1);
+				params.set('ajax', 'true');
 
 				// Get URL for AJAX request
 				const ajaxUrl = `${url.pathname}?${params.toString()}`;
 
 				if (config.debug) {
-					console.log(`Loading page ${currentPage + 1} from: ${ajaxUrl}`);
+					console.log(`Loading page ${state.currentPage + 1} from: ${ajaxUrl}`);
 				}
 
-				// Make AJAX request
+				// Fetch new content
 				fetch(ajaxUrl)
 					.then(response => {
 						if (!response.ok) {
@@ -10888,310 +10680,893 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 					.then(html => {
 						// Check if the response contains the "No posters found" message
 						if (html.includes('No posters found') || html.includes('No more posters found')) {
-							// No more items available
-							allLoaded = true;
-
-							// Add "all loaded" message
-							const allLoadedMsg = document.createElement('div');
-							allLoadedMsg.className = 'all-posters-loaded';
-							allLoadedMsg.innerHTML = 'All Posters Loaded';
-							indicator.parentNode.insertBefore(allLoadedMsg, indicator.nextSibling);
-
-							if (config.debug) {
-								console.log('No more posters found message detected');
-							}
-
-							return; // Exit early
-						}
-
-						// Parse HTML response
-						const parser = new DOMParser();
-						const doc = parser.parseFromString(html, 'text/html');
-
-						// Get gallery items from response
-						let newItems = [];
-
-						// First try to get gallery items directly
-						newItems = doc.querySelectorAll('.gallery-item');
-
-						// If no items found and the response is just raw HTML without a container
-						if (newItems.length === 0) {
-							// Create a temporary container to parse the HTML
-							const tempContainer = document.createElement('div');
-							tempContainer.innerHTML = html;
-							newItems = tempContainer.querySelectorAll('.gallery-item');
-						}
-
-						// CRITICAL FIX: Check if we actually got any new items
-						if (newItems.length === 0) {
-							// If no items found at all, mark as all loaded
-							allLoaded = true;
-
-							// Add "all loaded" message
-							const allLoadedMsg = document.createElement('div');
-							allLoadedMsg.className = 'all-posters-loaded';
-							allLoadedMsg.innerHTML = 'All Posters Loaded';
-							indicator.parentNode.insertBefore(allLoadedMsg, indicator.nextSibling);
-
-							if (config.debug) {
-								console.log('No items found in response, marking as all loaded');
-							}
-
+							handleNoMoreContent();
 							return;
 						}
 
-						// Check for duplicate items
-						const existingFiles = new Set();
-						document.querySelectorAll('.gallery-item').forEach(item => {
-							const deleteBtn = item.querySelector('.delete-btn');
-							if (deleteBtn) {
-								const filename = deleteBtn.getAttribute('data-filename');
-								const dirname = deleteBtn.getAttribute('data-dirname');
-								existingFiles.add(`${dirname}:${filename}`);
-							} else {
-								// Try to get URL from copy button
-								const copyBtn = item.querySelector('.copy-url-btn');
-								if (copyBtn) {
-									existingFiles.add(copyBtn.getAttribute('data-url'));
-								}
-							}
-						});
-
-						// Filter out duplicates
-						const uniqueNewItems = [];
-						newItems.forEach(item => {
-							const deleteBtn = item.querySelector('.delete-btn');
-							if (deleteBtn) {
-								const filename = deleteBtn.getAttribute('data-filename');
-								const dirname = deleteBtn.getAttribute('data-dirname');
-								const itemKey = `${dirname}:${filename}`;
-
-								if (!existingFiles.has(itemKey)) {
-									uniqueNewItems.push(item);
-									existingFiles.add(itemKey);
-								}
-							} else {
-								// Try URL as fallback
-								const copyBtn = item.querySelector('.copy-url-btn');
-								if (copyBtn) {
-									const url = copyBtn.getAttribute('data-url');
-									if (!existingFiles.has(url)) {
-										uniqueNewItems.push(item);
-										existingFiles.add(url);
-									}
-								} else {
-									// No identifiers found, assume unique
-									uniqueNewItems.push(item);
-								}
-							}
-						});
-
-						if (config.debug) {
-							console.log(`Found ${newItems.length} items, ${uniqueNewItems.length} are unique`);
-						}
-
-						// CRITICAL CHECK: Compare with total items expected in a full page
-						const imagesPerPage = <?php echo htmlspecialchars($config['imagesPerPage']); ?> || 24;
-
-						// If we got fewer unique items than a full page AND we're still on page 1,
-						// this is likely a search result with fewer items than a full page
-						if (uniqueNewItems.length < imagesPerPage && currentPage === 1) {
-							if (config.debug) {
-								console.log(`Found fewer items (${uniqueNewItems.length}) than per page limit (${imagesPerPage}), likely a partial page of search results`);
-							}
-
-							// DON'T mark as all loaded yet - we need to verify by checking if page 2 has duplicates
-						}
-
-						// If no unique items OR we got duplicates of all items from page 1
-						if (uniqueNewItems.length === 0) {
-							allLoaded = true;
-
-							// Add "all loaded" message
-							const allLoadedMsg = document.createElement('div');
-							allLoadedMsg.className = 'all-posters-loaded';
-							allLoadedMsg.innerHTML = 'All Posters Loaded';
-							indicator.parentNode.insertBefore(allLoadedMsg, indicator.nextSibling);
-
-							if (config.debug) {
-								console.log('No unique items found, marking as all loaded');
-							}
-
-							return;
-						}
-
-						// Append unique new items
-						uniqueNewItems.forEach(item => {
-							galleryContainer.appendChild(document.importNode(item, true));
-						});
-
-						// Increment page counter
-						currentPage++;
-
-						// Check if we've loaded all pages
-						const totalPages = parseInt(galleryContainer.dataset.totalPages);
-						if (!isNaN(totalPages) && currentPage >= totalPages) {
-							allLoaded = true;
-
-							if (config.debug) {
-								console.log(`All pages loaded (${currentPage}/${totalPages})`);
-							}
-
-							// Add "all loaded" message
-							const allLoadedMsg = document.createElement('div');
-							allLoadedMsg.className = 'all-posters-loaded';
-							allLoadedMsg.innerHTML = 'All Posters Loaded';
-
-							// Insert after loading indicator
-							indicator.parentNode.insertBefore(allLoadedMsg, indicator.nextSibling);
-						}
-
-						// Initialize features for new items
-						initializeNewItems();
+						// Process the new content
+						processNewContent(html);
 					})
 					.catch(error => {
 						console.error('Error loading more content:', error);
-
-						// Add retry button
-						const retryButton = document.createElement('button');
-						retryButton.className = 'overlay-action-button';
-						retryButton.style.margin = '20px auto';
-						retryButton.style.display = 'block';
-						retryButton.innerHTML = 'Retry';
-						retryButton.addEventListener('click', () => {
-							indicator.style.display = 'none';
-							retryButton.remove();
-							isLoading = false;
-							loadMoreContent();
-						});
-
-						// Insert after loading indicator
-						indicator.parentNode.insertBefore(retryButton, indicator.nextSibling);
+						showRetryButton();
 					})
 					.finally(() => {
 						// Reset loading state
-						isLoading = false;
-						indicator.style.display = 'none';
+						state.isLoading = false;
+						elements.loadingIndicator.style.display = 'none';
 					});
 			}
 
-			// Initialize
-			function init() {
-				// Create loading indicator
-				createLoadingIndicator();
+			/**
+			 * Process new content from AJAX response
+			 */
+			function processNewContent(html) {
+				// Parse HTML response
+				const parser = new DOMParser();
+				const doc = parser.parseFromString(html, 'text/html');
 
-				// Hide original pagination
-				hidePagination();
+				// Get gallery items from response
+				let newItems = doc.querySelectorAll('.gallery-item');
 
-				// Add scroll event listener
-				window.addEventListener('scroll', checkScroll, { passive: true });
+				// Try alternate method if no items found
+				if (newItems.length === 0) {
+					const tempContainer = document.createElement('div');
+					tempContainer.innerHTML = html;
+					newItems = tempContainer.querySelectorAll('.gallery-item');
+				}
 
-				// Initial check in case the page doesn't have enough content to scroll
-				setTimeout(checkScroll, 500);
+				// Check if we actually got any new items
+				if (newItems.length === 0) {
+					handleNoMoreContent();
+					return;
+				}
+
+				// Filter out duplicates
+				const existingIds = new Set();
+				document.querySelectorAll('.gallery-item').forEach(item => {
+					const deleteBtn = item.querySelector('.delete-btn');
+					if (deleteBtn) {
+						const dirname = deleteBtn.getAttribute('data-dirname');
+						const filename = deleteBtn.getAttribute('data-filename');
+						existingIds.add(`${dirname}:${filename}`);
+					}
+				});
+
+				// Append only unique items
+				const uniqueItems = [];
+				const fragment = document.createDocumentFragment();
+
+				newItems.forEach(item => {
+					const deleteBtn = item.querySelector('.delete-btn');
+					if (deleteBtn) {
+						const dirname = deleteBtn.getAttribute('data-dirname');
+						const filename = deleteBtn.getAttribute('data-filename');
+						const itemKey = `${dirname}:${filename}`;
+
+						if (!existingIds.has(itemKey)) {
+							// Add unique ID
+							const itemId = 'item-' + (++state.uniqueIdCounter);
+							item.dataset.itemId = itemId;
+
+							// Add item to fragment
+							fragment.appendChild(item);
+							uniqueItems.push(item);
+							existingIds.add(itemKey);
+
+							// Add to loaded items map
+							state.loadedItemsMap.set(itemId, {
+								element: item,
+								index: state.totalItems + uniqueItems.length - 1,
+								isVisible: false
+							});
+						}
+					} else {
+						// Add unique ID (for items without delete button)
+						const itemId = 'item-' + (++state.uniqueIdCounter);
+						item.dataset.itemId = itemId;
+
+						// Add item to fragment
+						fragment.appendChild(item);
+						uniqueItems.push(item);
+
+						// Add to loaded items map
+						state.loadedItemsMap.set(itemId, {
+							element: item,
+							index: state.totalItems + uniqueItems.length - 1,
+							isVisible: false
+						});
+					}
+				});
+
+				// Add all unique items to gallery at once for better performance
+				galleryContainer.appendChild(fragment);
+
+				// Observe new items and initialize them
+				uniqueItems.forEach(item => {
+					// Observe for visibility
+					elements.observer.observe(item);
+
+					// Observe lazy images
+					const lazyImages = item.querySelectorAll('.gallery-image');
+					lazyImages.forEach(img => {
+						elements.observer.observe(img);
+					});
+
+					// Handle orphaned status
+					const isOrphaned = item.querySelector('.delete-btn')?.getAttribute('data-orphaned') === 'true';
+					if (isOrphaned) {
+						const orphanedBadge = item.querySelector('.orphaned-badge');
+						if (orphanedBadge) {
+							orphanedBadge.style.display = 'flex';
+						}
+
+						const deleteBtn = item.querySelector('.delete-btn');
+						if (deleteBtn) {
+							deleteBtn.style.display = 'flex';
+						}
+					} else {
+						const deleteBtn = item.querySelector('.delete-btn');
+						if (deleteBtn) {
+							deleteBtn.style.display = 'none';
+						}
+					}
+
+					// Add fade-in animation
+					item.style.animation = `fadeIn ${config.fadeInDuration}ms ease-out`;
+				});
+
+				// Increment page counter
+				state.currentPage++;
+
+				// Update total items count
+				state.totalItems += uniqueItems.length;
 
 				if (config.debug) {
-					console.log('Infinite scroll initialized');
+					console.log(`Added ${uniqueItems.length} new items. Total: ${state.totalItems}`);
+				}
+
+				// Check if we've loaded all pages
+				if (state.currentPage >= state.totalPages) {
+					handleNoMoreContent();
+				}
+
+				// Check if loaded fewer than expected items
+				const imagesPerPage = config.batchSize;
+				if (uniqueItems.length < imagesPerPage && uniqueItems.length > 0) {
+					if (config.debug) {
+						console.log(`Loaded ${uniqueItems.length} items, which is less than the batch size (${imagesPerPage})`);
+					}
+				}
+
+				// Dispatch event for other scripts
+				document.dispatchEvent(new CustomEvent('posteriaNewContent'));
+			}
+
+			/**
+			 * Handle case where no more content is available
+			 */
+			function handleNoMoreContent() {
+				state.allLoaded = true;
+
+				// Create "all loaded" message if it doesn't exist
+				if (!elements.allLoadedMessage) {
+					elements.allLoadedMessage = document.createElement('div');
+					elements.allLoadedMessage.className = 'all-posters-loaded';
+					elements.allLoadedMessage.innerHTML = 'All Posters Loaded';
+
+					// Insert after loading indicator
+					const indicator = elements.loadingIndicator;
+					indicator.parentNode.insertBefore(elements.allLoadedMessage, indicator.nextSibling);
+				} else {
+					elements.allLoadedMessage.style.display = 'block';
+				}
+
+				if (config.debug) {
+					console.log('All content loaded');
 				}
 			}
 
-			// Start the magic
-			init();
+			/**
+			 * Remove items that are far outside the viewport to reduce DOM size
+			 */
+			function cleanupOffscreenItems() {
+				// Reset pending flag
+				state.cleanupPending = false;
+
+				// Don't cleanup if we have fewer than buffer size items
+				if (state.loadedItemsMap.size <= config.bufferSize) {
+					return;
+				}
+
+				const currentScrollY = window.scrollY;
+				const windowHeight = window.innerHeight;
+				const cleanupThreshold = config.cleanupThreshold;
+
+				// Sort items by distance from viewport
+				const itemsByDistance = Array.from(state.loadedItemsMap.entries()).map(([id, data]) => {
+					let distance = Infinity;
+
+					// If element is in the DOM, calculate distance
+					if (data.element.parentNode) {
+						const rect = data.element.getBoundingClientRect();
+						const topDistance = rect.top;
+						const bottomDistance = rect.bottom - windowHeight;
+
+						// Use the smaller absolute distance
+						distance = Math.abs(topDistance) < Math.abs(bottomDistance) ?
+							topDistance : bottomDistance;
+					}
+
+					return {
+						id,
+						data,
+						distance: Math.abs(distance)
+					};
+				});
+
+				// Sort by distance (furthest first)
+				itemsByDistance.sort((a, b) => b.distance - a.distance);
+
+				// Calculate how many items to remove
+				const itemsToKeep = config.bufferSize;
+				const itemsToRemove = state.loadedItemsMap.size - itemsToKeep;
+
+				// Only remove items that are far from viewport
+				let removedCount = 0;
+
+				for (let i = 0; i < itemsByDistance.length && removedCount < itemsToRemove; i++) {
+					const item = itemsByDistance[i];
+
+					// Only remove if item is far enough from viewport
+					if (item.distance > cleanupThreshold && !state.visibleItems.has(item.id)) {
+						const element = item.data.element;
+
+						// Unobserve element
+						elements.observer.unobserve(element);
+
+						// Remove from DOM but keep in map
+						if (element.parentNode) {
+							element.parentNode.removeChild(element);
+							removedCount++;
+						}
+					}
+				}
+
+				if (config.debug && removedCount > 0) {
+					console.log(`Cleaned up ${removedCount} items. Remaining in DOM: ${state.loadedItemsMap.size - removedCount}`);
+				}
+			}
+
+			/**
+			 * Restore item to the DOM if it was removed during cleanup
+			 * @param {string} itemId The ID of the item to restore
+			 */
+			function restoreItem(itemId) {
+				const itemData = state.loadedItemsMap.get(itemId);
+				if (!itemData) return;
+
+				const element = itemData.element;
+
+				// Skip if already in DOM
+				if (element.parentNode) return;
+
+				// Find the right position to insert
+				const index = itemData.index;
+				let insertBefore = null;
+
+				// Find the next visible item to insert before
+				let foundPosition = false;
+				state.loadedItemsMap.forEach((data, id) => {
+					if (!foundPosition && data.element.parentNode && data.index > index) {
+						insertBefore = data.element;
+						foundPosition = true;
+					}
+				});
+
+				// Insert at the correct position
+				if (insertBefore) {
+					galleryContainer.insertBefore(element, insertBefore);
+				} else {
+					galleryContainer.appendChild(element);
+				}
+
+				// Re-observe element
+				elements.observer.observe(element);
+
+				// Re-observe lazy images
+				const lazyImages = element.querySelectorAll('.gallery-image:not(.loaded)');
+				lazyImages.forEach(img => {
+					elements.observer.observe(img);
+				});
+			}
+
+			//============== HELPER FUNCTIONS ==============//
+
+			/**
+			 * Show retry button when loading fails
+			 */
+			function showRetryButton() {
+				const retryButton = document.createElement('button');
+				retryButton.className = 'overlay-action-button';
+				retryButton.style.margin = '20px auto';
+				retryButton.style.display = 'block';
+				retryButton.innerHTML = 'Retry';
+
+				retryButton.addEventListener('click', () => {
+					elements.loadingIndicator.style.display = 'none';
+					retryButton.remove();
+					state.isLoading = false;
+					loadMoreContent();
+				});
+
+				// Insert after loading indicator
+				elements.loadingIndicator.parentNode.insertBefore(
+					retryButton,
+					elements.loadingIndicator.nextSibling
+				);
+			}
+
+			/**
+			 * Create and add loading indicator to the page
+			 */
+			function createLoadingIndicator() {
+				// Create if it doesn't exist
+				if (!elements.loadingIndicator) {
+					const indicator = document.createElement('div');
+					indicator.className = 'infinite-scroll-loading';
+					indicator.style.display = 'none';
+					indicator.innerHTML = `
+						<div class="loading-spinner" style="margin: 20px auto;"></div>
+						<div style="text-align: center; color: var(--text-secondary);">Loading more posters...</div>
+					`;
+
+					// Insert after gallery
+					galleryContainer.parentNode.insertBefore(indicator, galleryContainer.nextSibling);
+					elements.loadingIndicator = indicator;
+				}
+				return elements.loadingIndicator;
+			}
+
+			/**
+			 * Load an image that has entered the viewport
+			 */
+			function loadImage(imageElement) {
+				// Skip if already loaded
+				if (imageElement.classList.contains('loaded')) return;
+
+				// Get image source from data attribute
+				const src = imageElement.dataset.src;
+				if (!src) return;
+
+				// Encode special characters properly
+				const encodedSrc = encodeURI(src).replace(/#/g, '%23');
+
+				// Set the source
+				imageElement.src = encodedSrc;
+
+				// Handle load event
+				imageElement.onload = function () {
+					// Mark as loaded
+					imageElement.classList.add('loaded');
+
+					// Hide placeholder
+					const placeholder = imageElement.previousElementSibling;
+					if (placeholder && placeholder.classList.contains('gallery-image-placeholder')) {
+						placeholder.classList.add('hidden');
+					}
+
+					// Stop observing this image
+					elements.observer.unobserve(imageElement);
+				};
+
+				// Handle error
+				imageElement.onerror = function () {
+					// Add error styling to placeholder
+					const placeholder = imageElement.previousElementSibling;
+					if (placeholder && placeholder.classList.contains('gallery-image-placeholder')) {
+						placeholder.innerHTML = `
+							<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="opacity: 0.5;">
+								<circle cx="12" cy="12" r="10"></circle>
+								<line x1="15" y1="9" x2="9" y2="15"></line>
+								<line x1="9" y1="9" x2="15" y2="15"></line>
+							</svg>
+						`;
+					}
+
+					// Stop observing this image
+					elements.observer.unobserve(imageElement);
+				};
+			}
+
+			//============== EVENT HANDLERS ==============//
+
+			/**
+			 * Handle copy URL button click
+			 */
+			function handleCopyUrl(button) {
+				// Get the URL and properly encode special characters
+				const url = button.getAttribute('data-url');
+				const encodedUrl = encodeURI(url).replace(/#/g, '%23');
+
+				try {
+					navigator.clipboard.writeText(encodedUrl).then(() => {
+						showCopyNotification();
+					});
+				} catch (err) {
+					// Fallback for browsers that don't support clipboard API
+					const textarea = document.createElement('textarea');
+					textarea.value = encodedUrl;
+					textarea.style.position = 'fixed';
+					document.body.appendChild(textarea);
+					textarea.select();
+
+					try {
+						document.execCommand('copy');
+						showCopyNotification();
+					} catch (e) {
+						alert('Copy failed. Please select and copy the URL manually.');
+					}
+
+					document.body.removeChild(textarea);
+				}
+			}
+
+			/**
+			 * Show copy success notification
+			 */
+			function showCopyNotification() {
+				const notification = document.getElementById('copyNotification');
+				if (notification) {
+					notification.style.display = 'block';
+					notification.classList.add('show');
+
+					setTimeout(() => {
+						notification.classList.remove('show');
+						setTimeout(() => {
+							notification.style.display = 'none';
+						}, 300);
+					}, 2000);
+				}
+			}
+
+			/**
+			 * Handle delete button click
+			 */
+			function handleDelete(button) {
+				const filename = button.getAttribute('data-filename');
+				const dirname = button.getAttribute('data-dirname');
+
+				// Set values in delete modal
+				const deleteFilenameInput = document.getElementById('deleteFilename');
+				const deleteDirectoryInput = document.getElementById('deleteDirectory');
+
+				if (deleteFilenameInput && deleteDirectoryInput) {
+					deleteFilenameInput.value = filename;
+					deleteDirectoryInput.value = dirname;
+
+					// Show delete modal
+					const deleteModal = document.getElementById('deleteModal');
+					if (deleteModal) {
+						deleteModal.style.display = 'block';
+						setTimeout(() => {
+							deleteModal.classList.add('show');
+						}, 10);
+					}
+				}
+			}
+
+			/**
+			 * Handle send to Plex button click
+			 */
+			function handleSendToPlex(button) {
+				const filename = button.getAttribute('data-filename');
+				const directory = button.getAttribute('data-dirname');
+
+				// Set data in Plex modal
+				const modal = document.getElementById('plexConfirmModal');
+				const filenameElement = document.getElementById('plexConfirmFilename');
+
+				if (modal && filenameElement) {
+					filenameElement.textContent = filename;
+					filenameElement.setAttribute('data-filename', filename);
+					filenameElement.setAttribute('data-dirname', directory);
+
+					// Show the modal
+					modal.style.display = 'block';
+					setTimeout(() => {
+						modal.classList.add('show');
+					}, 10);
+				}
+			}
+
+			/**
+			 * Handle import from Plex button click
+			 */
+			function handleImportFromPlex(button) {
+				const filename = button.getAttribute('data-filename');
+				const directory = button.getAttribute('data-dirname');
+
+				// Set data in import from Plex modal
+				const modal = document.getElementById('importFromPlexModal');
+				const filenameElement = document.getElementById('importFromPlexFilename');
+
+				if (modal && filenameElement) {
+					filenameElement.textContent = filename;
+					filenameElement.setAttribute('data-filename', filename);
+					filenameElement.setAttribute('data-dirname', directory);
+
+					// Show the modal
+					modal.style.display = 'block';
+					setTimeout(() => {
+						modal.classList.add('show');
+					}, 10);
+				}
+			}
+
+			/**
+			 * Handle change poster button click
+			 */
+			function handleChangePoster(button) {
+				const filename = button.getAttribute('data-filename');
+				const directory = button.getAttribute('data-dirname');
+
+				// Get the change poster modal
+				const changePosterModal = document.getElementById('changePosterModal');
+				if (!changePosterModal) return;
+
+				// Clean the filename for display
+				const cleanedFilename = filename
+					.replace(/\.jpg$/i, '')
+					.replace(/\-\-Plex\-\-|\-\-Orphaned\-\-/g, '')
+					.replace(/\[\[.*?\]\]|\[.*?\]/gs, '')
+					.replace(/\s*\(A\d{8,12}\)\s*/g, ' ')
+					.replace(/\s+/g, ' ')
+					.trim();
+
+				// Set filename in modal
+				const modalFilename = document.getElementById('changePosterFilename');
+				if (modalFilename) {
+					modalFilename.textContent = `Changing poster: ${cleanedFilename}`;
+				}
+
+				// Set form values
+				document.getElementById('fileChangePosterOriginalFilename').value = filename;
+				document.getElementById('fileChangePosterDirectory').value = directory;
+				document.getElementById('urlChangePosterOriginalFilename').value = filename;
+				document.getElementById('urlChangePosterDirectory').value = directory;
+
+				// Reset file input
+				const fileInput = document.getElementById('fileChangePosterInput');
+				if (fileInput) {
+					fileInput.value = '';
+					const fileNameElement = fileInput.parentElement.querySelector('.file-name');
+					if (fileNameElement) {
+						fileNameElement.textContent = '';
+					}
+				}
+
+				// Reset URL input
+				const urlInput = document.querySelector('#urlChangePosterForm input[name="image_url"]');
+				if (urlInput) {
+					urlInput.value = '';
+				}
+
+				// Disable submit button until a file is selected
+				const fileSubmitButton = document.querySelector('#fileChangePosterForm button[type="submit"]');
+				if (fileSubmitButton) {
+					fileSubmitButton.disabled = true;
+				}
+
+				// Reset to file tab
+				const fileTabs = changePosterModal.querySelectorAll('.upload-tab-btn');
+				fileTabs.forEach(tab => {
+					if (tab.getAttribute('data-tab') === 'file') {
+						tab.classList.add('active');
+					} else {
+						tab.classList.remove('active');
+					}
+				});
+
+				// Show file form, hide URL form
+				document.getElementById('fileChangePosterForm').classList.add('active');
+				document.getElementById('urlChangePosterForm').classList.remove('active');
+
+				// Show the modal
+				changePosterModal.style.display = 'block';
+				setTimeout(() => {
+					changePosterModal.classList.add('show');
+				}, 10);
+			}
+
+			/**
+			 * Handle full screen view button click
+			 */
+			function handleFullScreenView(button) {
+				const galleryItem = button.closest('.gallery-item');
+				if (!galleryItem) return;
+
+				const imageElement = galleryItem.querySelector('.gallery-image');
+				if (!imageElement) return;
+
+				const imageSrc = imageElement.getAttribute('data-src') || imageElement.src;
+				if (!imageSrc) return;
+
+				// Clean the URL to ensure proper loading
+				const cleanImageUrl = imageSrc.split('?')[0] + '?v=' + new Date().getTime();
+
+				// Show full screen modal
+				const fullScreenModal = document.getElementById('fullScreenModal');
+				if (fullScreenModal) {
+					const fullScreenImage = document.getElementById('fullScreenImage');
+					if (fullScreenImage) {
+						fullScreenImage.src = cleanImageUrl;
+
+						fullScreenModal.style.display = 'flex';
+						fullScreenModal.offsetHeight; // Force reflow
+						fullScreenModal.classList.add('show');
+					}
+				}
+			}
+
+			/**
+			 * Handle gallery item touch for mobile devices
+			 */
+			function handleGalleryItemTouch(galleryItem) {
+				// If this is a scroll gesture, ignore
+				if (galleryItem.isTouchScrolling) return;
+
+				// Calculate if a valid tap (handle manually since we're delegating)
+				const touchTime = Date.now() - (galleryItem.touchTimeStart || 0);
+				if (touchTime > 300) return; // Not a tap if too long
+
+				// Check tap distance
+				const touchX = galleryItem.touchStartX || 0;
+				const touchY = galleryItem.touchStartY || 0;
+				if (!touchX || !touchY) return;
+
+				// Remove active class from all other items
+				document.querySelectorAll('.gallery-item').forEach(item => {
+					if (item !== galleryItem) {
+						item.classList.remove('touch-active');
+					}
+				});
+
+				// Toggle active class on this item
+				galleryItem.classList.toggle('touch-active');
+
+				// Ensure pointer events work properly for buttons in the overlay
+				const overlay = galleryItem.querySelector('.image-overlay-actions');
+				if (overlay) {
+					// Make overlay itself clickable
+					overlay.style.pointerEvents = galleryItem.classList.contains('touch-active') ? 'auto' : 'none';
+
+					// Make all buttons in overlay clickable 
+					const buttons = overlay.querySelectorAll('.overlay-action-button');
+					buttons.forEach(button => {
+						button.style.pointerEvents = galleryItem.classList.contains('touch-active') ? 'auto' : 'none';
+					});
+				}
+			}
+
+			/**
+			 * Add back to top button to improve UX with infinite scroll
+			 */
+			function addBackToTopButton() {
+				// Don't add if it already exists
+				if (document.getElementById('back-to-top')) return;
+
+				// Create button element
+				const backToTopButton = document.createElement('button');
+				backToTopButton.id = 'back-to-top';
+				backToTopButton.className = 'back-to-top-btn';
+				backToTopButton.setAttribute('aria-label', 'Back to top');
+				backToTopButton.innerHTML = `
+					<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<polyline points="18 15 12 9 6 15"></polyline>
+					</svg>
+				`;
+
+				// Add styles if not already in the page
+				if (!document.querySelector('style#backToTopStyle')) {
+					const style = document.createElement('style');
+					style.id = 'backToTopStyle';
+					style.textContent = `
+						.back-to-top-btn {
+							position: fixed;
+							bottom: 30px;
+							right: 30px;
+							width: 50px;
+							height: 50px;
+							border-radius: 50%;
+							background: linear-gradient(45deg, var(--accent-primary), #ff9f43);
+							color: #1f1f1f;
+							border: none;
+							cursor: pointer;
+							display: flex;
+							align-items: center;
+							justify-content: center;
+							box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+							opacity: 0;
+							visibility: hidden;
+							transform: translateY(20px);
+							transition: all 0.3s ease;
+							z-index: 99;
+						}
+				
+						.back-to-top-btn.visible {
+							opacity: 1;
+							visibility: visible;
+							transform: translateY(0);
+						}
+				
+						.back-to-top-btn:hover {
+							background: linear-gradient(45deg, #f5b025, #ffa953);
+							transform: translateY(-5px);
+							box-shadow: 0 6px 15px rgba(0, 0, 0, 0.4);
+						}
+				
+						.back-to-top-btn svg {
+							width: 24px;
+							height: 24px;
+							stroke-width: 2.5;
+						}
+				
+						@media (max-width: 768px) {
+							.back-to-top-btn {
+								width: 45px;
+								height: 45px;
+								bottom: 20px;
+								right: 20px;
+							}
+						}
+				
+						@media (max-width: 480px) {
+							.back-to-top-btn {
+								width: 40px;
+								height: 40px;
+								bottom: 15px;
+								right: 15px;
+							}
+					
+							.back-to-top-btn svg {
+								width: 20px;
+								height: 20px;
+							}
+						}
+					`;
+					document.head.appendChild(style);
+				}
+
+				// Add button to the DOM
+				document.body.appendChild(backToTopButton);
+
+				// Show/hide button based on scroll position
+				function toggleBackToTopButton() {
+					if (window.scrollY > 300) {
+						backToTopButton.classList.add('visible');
+					} else {
+						backToTopButton.classList.remove('visible');
+					}
+				}
+
+				// Add scroll event listener (use the same throttling as main scroll)
+				window.addEventListener('scroll', toggleBackToTopButton, { passive: true });
+
+				// Click handler for smooth scrolling
+				backToTopButton.addEventListener('click', function () {
+					// Use smooth scroll with fallback
+					if ('scrollBehavior' in document.documentElement.style) {
+						window.scrollTo({
+							top: 0,
+							behavior: 'smooth'
+						});
+					} else {
+						// Fallback smooth scroll
+						const scrollToTop = function () {
+							const currentPosition = window.scrollY;
+							if (currentPosition > 0) {
+								window.scrollTo(0, currentPosition - currentPosition / 8);
+								window.requestAnimationFrame(scrollToTop);
+							}
+						};
+						window.requestAnimationFrame(scrollToTop);
+					}
+				});
+
+				// Initialize button visibility
+				toggleBackToTopButton();
+			}
+
+			//============== UTILITY FUNCTIONS ==============//
+
+			// Detect if device supports touch events
+			const isTouchDevice = 'ontouchstart' in window ||
+				navigator.maxTouchPoints > 0 ||
+				navigator.msMaxTouchPoints > 0;
+
+			// Add necessary CSS if not already in the page
+			function addRequiredCSS() {
+				if (!document.querySelector('style#virtualScrollStyles')) {
+					const style = document.createElement('style');
+					style.id = 'virtualScrollStyles';
+					style.textContent = `
+						/* Animation for new items */
+						@keyframes fadeIn {
+							from { opacity: 0; transform: translateY(20px); }
+							to { opacity: 1; transform: translateY(0); }
+						}
+				
+						/* Loading indicator styles */
+						.infinite-scroll-loading {
+							margin: 30px 0;
+							padding: 20px;
+							text-align: center;
+							color: var(--text-secondary);
+						}
+				
+						/* "All posters loaded" message */
+						.all-posters-loaded {
+							margin: 30px auto;
+							padding: 15px;
+							text-align: center;
+							font-weight: 500;
+							color: var(--text-secondary);
+							background: rgba(255, 159, 67, 0.1);
+							border: 1px solid var(--accent-primary);
+							border-radius: 8px;
+							width: 100%;
+							max-width: 400px;
+						}
+				
+						/* Ensure placeholder styling */
+						.gallery-image-placeholder {
+							opacity: 1;
+							background-color: var(--bg-tertiary);
+						}
+				
+						.gallery-image-placeholder.hidden {
+							opacity: 0;
+							transition: opacity 0.3s ease;
+						}
+				
+						/* Special class for virtualized items */
+						.gallery-item[data-virtualized] {
+							animation: fadeIn ${config.fadeInDuration}ms ease-out;
+						}
+				
+						/* Fix for mobile interactions */
+						@media (hover: none) {
+							.gallery-item.touch-active .image-overlay-actions {
+								opacity: 1 !important;
+								display: flex !important;
+							}
+					
+							.gallery-item.touch-active .overlay-action-button {
+								display: flex !important;
+							}
+					
+							/* Fix for Plex buttons */
+							.change-poster-btn,
+							.send-to-plex-btn, 
+							.import-from-plex-btn {
+								display: flex !important;
+							}
+					
+							/* Ensure buttons are visible */
+							.gallery-item.touch-active .overlay-action-button {
+								pointer-events: auto !important;
+							}
+						}
+					`;
+					document.head.appendChild(style);
+				}
+			}
+
+			// Add the CSS and initialize the virtual scroll
+			addRequiredCSS();
+			initialize();
 		});
-
-		// Add some CSS for the infinite scroll
-		(function () {
-			const style = document.createElement('style');
-			style.textContent = `
-																					/* Infinite scroll loading indicator */
-																					.infinite-scroll-loading {
-																						margin: 30px 0;
-																						padding: 20px;
-																						text-align: center;
-																						color: var(--text-secondary);
-																					}
-
-																					/* "All posters loaded" message */
-																					.all-posters-loaded {
-																						margin: 30px auto;
-																						padding: 15px;
-																						text-align: center;
-																						font-weight: 500;
-																						color: var(--text-secondary);
-																						background: rgba(255, 159, 67, 0.1);
-																						border: 1px solid var(--accent-primary);
-																						border-radius: 8px;
-																						width: 100%;
-																						max-width: 400px;
-																					}
-
-																					/* Fix for overlay buttons */
-																					.gallery-item.touch-active .image-overlay-actions {
-																						opacity: 1;
-																						pointer-events: auto;
-																					}
-
-																					.gallery-item.touch-active .overlay-action-button {
-																						pointer-events: auto;
-																					}
-
-																					/* Make sure loading spinner is visible */
-																					.loading-spinner {
-																						width: 40px;
-																						height: 40px;
-																						border-radius: 50%;
-																						border: 4px solid var(--text-secondary);
-																						border-top-color: var(--accent-primary);
-																						animation: spin 1s infinite linear;
-																						margin: 0 auto;
-																					}
-
-																					/* Fix for button interactions on mobile */
-																					@media (hover: none) {
-																						.gallery-item.touch-active .image-overlay-actions {
-																							opacity: 1;
-																							display: flex;
-																						}
-		
-																						.overlay-action-button {
-																							display: flex !important;
-																						}
-		
-																						/* Fix for Plex buttons */
-																						.send-to-plex-btn, 
-																						.import-from-plex-btn,
-																						.change-poster-btn {
-																							display: flex !important;
-																						}
-																					}
-
-																					/* Ensure new items fade in smoothly */
-																					.gallery-item {
-																						animation: fadeIn 0.5s ease-out;
-																					}
-
-																					@keyframes fadeIn {
-																						from { opacity: 0; transform: translateY(20px); }
-																						to { opacity: 1; transform: translateY(0); }
-																					}
-
-																					/* Ensure placeholder is visible initially */
-																					.gallery-image-placeholder {
-																						opacity: 1;
-																						background-color: var(--bg-tertiary);
-																					}
-
-																					.gallery-image-placeholder.hidden {
-																						opacity: 0;
-																						transition: opacity 0.3s ease;
-																					}
-
-																					/* Fix to make sure gallery lazy loading works properly */
-																					.gallery-image.loaded {
-																						opacity: 1;
-																					}
-																					`;
-			document.head.appendChild(style);
-		})();
 	</script>
 
 	<script>
@@ -11209,10 +11584,10 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 			backToTopButton.id = 'back-to-top';
 			backToTopButton.className = 'back-to-top-btn';
 			backToTopButton.innerHTML = `
-																						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-																							<polyline points="18 15 12 9 6 15"></polyline>
-																						</svg>
-																					`;
+																								<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+																									<polyline points="18 15 12 9 6 15"></polyline>
+																								</svg>
+																							`;
 			backToTopButton.title = "Back to Top";
 
 			// Add button to the DOM
@@ -11221,70 +11596,70 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 			// Add CSS for the button
 			const style = document.createElement('style');
 			style.textContent = `
-																						.back-to-top-btn {
-																							position: fixed;
-																							bottom: 30px;
-																							right: 30px;
-																							width: 50px;
-																							height: 50px;
-																							border-radius: 50%;
-																							background: linear-gradient(45deg, var(--accent-primary), #ff9f43);
-																							color: #1f1f1f;
-																							border: none;
-																							cursor: pointer;
-																							display: flex;
-																							align-items: center;
-																							justify-content: center;
-																							box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
-																							opacity: 0;
-																							visibility: hidden;
-																							transform: translateY(20px);
-																							transition: all 0.3s ease;
-																							z-index: 99;
-																						}
+																								.back-to-top-btn {
+																									position: fixed;
+																									bottom: 30px;
+																									right: 30px;
+																									width: 50px;
+																									height: 50px;
+																									border-radius: 50%;
+																									background: linear-gradient(45deg, var(--accent-primary), #ff9f43);
+																									color: #1f1f1f;
+																									border: none;
+																									cursor: pointer;
+																									display: flex;
+																									align-items: center;
+																									justify-content: center;
+																									box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+																									opacity: 0;
+																									visibility: hidden;
+																									transform: translateY(20px);
+																									transition: all 0.3s ease;
+																									z-index: 99;
+																								}
 		
-																						.back-to-top-btn.visible {
-																							opacity: 1;
-																							visibility: visible;
-																							transform: translateY(0);
-																						}
+																								.back-to-top-btn.visible {
+																									opacity: 1;
+																									visibility: visible;
+																									transform: translateY(0);
+																								}
 		
-																						.back-to-top-btn:hover {
-																							background: linear-gradient(45deg, #f5b025, #ffa953);
-																							transform: translateY(-5px);
-																							box-shadow: 0 6px 15px rgba(0, 0, 0, 0.4);
-																						}
+																								.back-to-top-btn:hover {
+																									background: linear-gradient(45deg, #f5b025, #ffa953);
+																									transform: translateY(-5px);
+																									box-shadow: 0 6px 15px rgba(0, 0, 0, 0.4);
+																								}
 		
-																						.back-to-top-btn svg {
-																							width: 24px;
-																							height: 24px;
-																							stroke-width: 2.5;
-																						}
+																								.back-to-top-btn svg {
+																									width: 24px;
+																									height: 24px;
+																									stroke-width: 2.5;
+																								}
 		
-																						/* Mobile responsive adjustments */
-																						@media (max-width: 768px) {
-																							.back-to-top-btn {
-																								width: 45px;
-																								height: 45px;
-																								bottom: 20px;
-																								right: 20px;
-																							}
-																						}
+																								/* Mobile responsive adjustments */
+																								@media (max-width: 768px) {
+																									.back-to-top-btn {
+																										width: 45px;
+																										height: 45px;
+																										bottom: 20px;
+																										right: 20px;
+																									}
+																								}
 		
-																						@media (max-width: 480px) {
-																							.back-to-top-btn {
-																								width: 40px;
-																								height: 40px;
-																								bottom: 15px;
-																								right: 15px;
-																							}
+																								@media (max-width: 480px) {
+																									.back-to-top-btn {
+																										width: 40px;
+																										height: 40px;
+																										bottom: 15px;
+																										right: 15px;
+																									}
 			
-																							.back-to-top-btn svg {
-																								width: 20px;
-																								height: 20px;
-																							}
-																						}
-																					`;
+																									.back-to-top-btn svg {
+																										width: 20px;
+																										height: 20px;
+																									}
+																								}
+																							`;
 			document.head.appendChild(style);
 
 			// Show/hide button based on scroll position
