@@ -10266,10 +10266,10 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 		document.addEventListener('DOMContentLoaded', function () {
 			// Configuration
 			const config = {
-				loadingThreshold: 200, // Distance from bottom (in px) to trigger loading
-				batchSize: 24,         // Number of items to load per request
-				loadingDelay: 300,     // Delay in ms to prevent multiple simultaneous requests
-				debug: false           // Set to true to enable console logging
+				loadingThreshold: 500,     // Increased from 200px to 500px - load much earlier
+				batchSize: 24,             // Number of items per page
+				loadingDelay: 50,          // Reduced to 50ms for faster response
+				debug: false               // Set to true to enable console logging
 			};
 
 			// State variables
@@ -10842,14 +10842,14 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 					console.log(`Distance from bottom: ${distanceFromBottom}px`);
 				}
 
-				// If we're close to the bottom, load more content
-				if (distanceFromBottom < config.loadingThreshold) {
-					// Use a timer to prevent multiple requests
+				// Load earlier (500px from bottom) and reduce delay to 50ms
+				if (distanceFromBottom < 500) {
 					clearTimeout(loadingTimer);
-					loadingTimer = setTimeout(loadMoreContent, config.loadingDelay);
+					loadingTimer = setTimeout(loadMoreContent, 50);
 				}
 			}
 
+			// Load more content via AJAX
 			function loadMoreContent() {
 				if (isLoading || allLoaded) return;
 
@@ -10868,7 +10868,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 				params.set('page', currentPage + 1);
 				params.set('ajax', 'true'); // Add flag for AJAX request
 
-				// Get URL for AJAX request (same as current but with updated parameters)
+				// Get URL for AJAX request
 				const ajaxUrl = `${url.pathname}?${params.toString()}`;
 
 				if (config.debug) {
@@ -10906,7 +10906,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 						const parser = new DOMParser();
 						const doc = parser.parseFromString(html, 'text/html');
 
-						// Get gallery items from response - this could be just the raw HTML if PHP returns only the items
+						// Get gallery items from response
 						let newItems = [];
 
 						// First try to get gallery items directly
@@ -10920,7 +10920,25 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 							newItems = tempContainer.querySelectorAll('.gallery-item');
 						}
 
-						// Check for duplicate items by creating a set of existing items
+						// CRITICAL FIX: Check if we actually got any new items
+						if (newItems.length === 0) {
+							// If no items found at all, mark as all loaded
+							allLoaded = true;
+
+							// Add "all loaded" message
+							const allLoadedMsg = document.createElement('div');
+							allLoadedMsg.className = 'all-posters-loaded';
+							allLoadedMsg.innerHTML = 'All posters loaded';
+							indicator.parentNode.insertBefore(allLoadedMsg, indicator.nextSibling);
+
+							if (config.debug) {
+								console.log('No items found in response, marking as all loaded');
+							}
+
+							return;
+						}
+
+						// Check for duplicate items
 						const existingFiles = new Set();
 						document.querySelectorAll('.gallery-item').forEach(item => {
 							const deleteBtn = item.querySelector('.delete-btn');
@@ -10929,7 +10947,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 								const dirname = deleteBtn.getAttribute('data-dirname');
 								existingFiles.add(`${dirname}:${filename}`);
 							} else {
-								// Try to get the URL from copy button as a fallback
+								// Try to get URL from copy button
 								const copyBtn = item.querySelector('.copy-url-btn');
 								if (copyBtn) {
 									existingFiles.add(copyBtn.getAttribute('data-url'));
@@ -10937,7 +10955,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 							}
 						});
 
-						// Filter out duplicates before appending
+						// Filter out duplicates
 						const uniqueNewItems = [];
 						newItems.forEach(item => {
 							const deleteBtn = item.querySelector('.delete-btn');
@@ -10951,7 +10969,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 									existingFiles.add(itemKey);
 								}
 							} else {
-								// Try to get the URL from copy button as a fallback
+								// Try URL as fallback
 								const copyBtn = item.querySelector('.copy-url-btn');
 								if (copyBtn) {
 									const url = copyBtn.getAttribute('data-url');
@@ -10960,18 +10978,8 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 										existingFiles.add(url);
 									}
 								} else {
-									// If no delete button or copy URL button, fallback to checking image src
-									const img = item.querySelector('.gallery-image');
-									if (img) {
-										const src = img.getAttribute('data-src');
-										if (src && !existingFiles.has(src)) {
-											uniqueNewItems.push(item);
-											existingFiles.add(src);
-										}
-									} else {
-										// Last resort: assume unique if we can't find identifiers
-										uniqueNewItems.push(item);
-									}
+									// No identifiers found, assume unique
+									uniqueNewItems.push(item);
 								}
 							}
 						});
@@ -10980,7 +10988,20 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 							console.log(`Found ${newItems.length} items, ${uniqueNewItems.length} are unique`);
 						}
 
-						// If no unique items found, mark as all loaded
+						// CRITICAL CHECK: Compare with total items expected in a full page
+						const imagesPerPage = <?php echo htmlspecialchars($config['imagesPerPage']); ?> || 24;
+
+						// If we got fewer unique items than a full page AND we're still on page 1,
+						// this is likely a search result with fewer items than a full page
+						if (uniqueNewItems.length < imagesPerPage && currentPage === 1) {
+							if (config.debug) {
+								console.log(`Found fewer items (${uniqueNewItems.length}) than per page limit (${imagesPerPage}), likely a partial page of search results`);
+							}
+
+							// DON'T mark as all loaded yet - we need to verify by checking if page 2 has duplicates
+						}
+
+						// If no unique items OR we got duplicates of all items from page 1
 						if (uniqueNewItems.length === 0) {
 							allLoaded = true;
 
@@ -10997,7 +11018,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 							return;
 						}
 
-						// Append only unique new items
+						// Append unique new items
 						uniqueNewItems.forEach(item => {
 							galleryContainer.appendChild(document.importNode(item, true));
 						});
