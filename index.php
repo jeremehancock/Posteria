@@ -10680,67 +10680,64 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 						if (!button.classList.contains('delete-initialized')) {
 							button.classList.add('delete-initialized');
 
-							// Remove existing listeners to avoid duplicates
-							const newButton = button.cloneNode(true);
-							button.parentNode.replaceChild(newButton, button);
+							// Instead of cloning and replacing, just add our handlers directly
+							// Remove the default click event by using a cleaner approach
+							button.addEventListener('click', function (e) {
+								// Only process the click if the parent item has the touch-active class
+								// or we're not on a touch device
+								if (!isTouchDevice || this.closest('.gallery-item').classList.contains('touch-active')) {
+									e.preventDefault();
+									e.stopPropagation(); // Prevent gallery item event
 
-							// Add our new click handler
-							newButton.addEventListener('click', function (e) {
-								e.preventDefault();
-								e.stopPropagation(); // Prevent gallery item event
+									const filename = this.getAttribute('data-filename');
+									const dirname = this.getAttribute('data-dirname');
 
-								const filename = this.getAttribute('data-filename');
-								const dirname = this.getAttribute('data-dirname');
+									// Set values in delete modal
+									const deleteFilenameInput = document.getElementById('deleteFilename');
+									const deleteDirectoryInput = document.getElementById('deleteDirectory');
 
-								// Debugging output
-								console.log("Delete button clicked with:", { filename, dirname });
+									if (deleteFilenameInput && deleteDirectoryInput) {
+										deleteFilenameInput.value = filename;
+										deleteDirectoryInput.value = dirname;
 
-								// Set values in delete modal
-								const deleteFilenameInput = document.getElementById('deleteFilename');
-								const deleteDirectoryInput = document.getElementById('deleteDirectory');
-
-								if (deleteFilenameInput && deleteDirectoryInput) {
-									deleteFilenameInput.value = filename;
-									deleteDirectoryInput.value = dirname;
-
-									// Show delete modal
-									const deleteModal = document.getElementById('deleteModal');
-									if (deleteModal) {
-										deleteModal.style.display = 'block';
-										setTimeout(() => {
-											deleteModal.classList.add('show');
-										}, 10);
-									} else {
-										console.error("Delete modal not found!");
+										// Show delete modal
+										const deleteModal = document.getElementById('deleteModal');
+										if (deleteModal) {
+											deleteModal.style.display = 'block';
+											setTimeout(() => {
+												deleteModal.classList.add('show');
+											}, 10);
+										}
 									}
-								} else {
-									console.error("Delete input fields not found!");
 								}
 							});
 
-							// Also add touch handler (extra safety for mobile)
-							newButton.addEventListener('touchend', function (e) {
-								e.preventDefault();
-								e.stopPropagation();
+							// For touch devices, only activate the button when the overlay is already shown
+							button.addEventListener('touchend', function (e) {
+								// Only process if the parent gallery item has the touch-active class
+								if (this.closest('.gallery-item').classList.contains('touch-active')) {
+									e.preventDefault();
+									e.stopPropagation();
 
-								const filename = this.getAttribute('data-filename');
-								const dirname = this.getAttribute('data-dirname');
+									const filename = this.getAttribute('data-filename');
+									const dirname = this.getAttribute('data-dirname');
 
-								// Set values in delete modal
-								const deleteFilenameInput = document.getElementById('deleteFilename');
-								const deleteDirectoryInput = document.getElementById('deleteDirectory');
+									// Set values in delete modal
+									const deleteFilenameInput = document.getElementById('deleteFilename');
+									const deleteDirectoryInput = document.getElementById('deleteDirectory');
 
-								if (deleteFilenameInput && deleteDirectoryInput) {
-									deleteFilenameInput.value = filename;
-									deleteDirectoryInput.value = dirname;
+									if (deleteFilenameInput && deleteDirectoryInput) {
+										deleteFilenameInput.value = filename;
+										deleteDirectoryInput.value = dirname;
 
-									// Show delete modal
-									const deleteModal = document.getElementById('deleteModal');
-									if (deleteModal) {
-										deleteModal.style.display = 'block';
-										setTimeout(() => {
-											deleteModal.classList.add('show');
-										}, 10);
+										// Show delete modal
+										const deleteModal = document.getElementById('deleteModal');
+										if (deleteModal) {
+											deleteModal.style.display = 'block';
+											setTimeout(() => {
+												deleteModal.classList.add('show');
+											}, 10);
+										}
 									}
 								}
 							});
