@@ -10579,23 +10579,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 					});
 
 					// Initialize orphaned elements
-					const isOrphaned = item.querySelector('.delete-btn')?.getAttribute('data-orphaned') === 'true';
-					if (isOrphaned) {
-						const orphanedBadge = item.querySelector('.orphaned-badge');
-						if (orphanedBadge) {
-							orphanedBadge.style.display = 'flex';
-						}
-
-						const deleteBtn = item.querySelector('.delete-btn');
-						if (deleteBtn) {
-							deleteBtn.style.display = 'flex';
-						}
-					} else {
-						const deleteBtn = item.querySelector('.delete-btn');
-						if (deleteBtn) {
-							deleteBtn.style.display = 'none';
-						}
-					}
+					handleOrphanedStatus(item);
 				});
 
 				// Update total items count
@@ -10793,26 +10777,8 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 						elements.observer.observe(img);
 					});
 
-					// Handle orphaned status
-					const isOrphaned = item.querySelector('.delete-btn')?.getAttribute('data-orphaned') === 'true';
-					if (isOrphaned) {
-						const orphanedBadge = item.querySelector('.orphaned-badge');
-						if (orphanedBadge) {
-							orphanedBadge.style.display = 'flex';
-						}
-
-						const deleteBtn = item.querySelector('.delete-btn');
-						if (deleteBtn) {
-							deleteBtn.style.display = 'flex';
-						}
-					} else {
-						const deleteBtn = item.querySelector('.delete-btn');
-						if (deleteBtn) {
-							deleteBtn.style.display = 'none';
-						}
-					}
-
-					// Add Change Poster button for Plex files
+					// Handle orphaned status and change poster buttons
+					handleOrphanedStatus(item);
 					addChangePosterButton(item);
 
 					// Add fade-in animation
@@ -10983,11 +10949,68 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 					elements.observer.observe(img);
 				});
 
-				// Re-add Change Poster button
+				// Re-add change poster button and handle orphaned status again
+				handleOrphanedStatus(element);
 				addChangePosterButton(element);
 			}
 
 			//============== HELPER FUNCTIONS ==============//
+
+			/**
+			 * Handle orphaned status of a gallery item
+			 * @param {Element} item The gallery item to process
+			 */
+			function handleOrphanedStatus(item) {
+				// First properly determine if item is orphaned
+				// Check both the data-orphaned attribute and the presence of --Plex-- in the caption text
+				const deleteBtn = item.querySelector('.delete-btn');
+				const caption = item.querySelector('.gallery-caption');
+
+				// Try multiple methods to determine orphan status
+				let isOrphaned = false;
+
+				// Method 1: Check data-orphaned attribute
+				if (deleteBtn && deleteBtn.getAttribute('data-orphaned') === 'true') {
+					isOrphaned = true;
+				}
+				// Method 2: Check caption text for orphaned indicator
+				else if (caption && caption.textContent.includes('[Orphaned]')) {
+					isOrphaned = true;
+				}
+				// Method 3: Check for absence of --Plex-- in full text
+				else if (caption && caption.hasAttribute('data-full-text')) {
+					const fullText = caption.getAttribute('data-full-text');
+					if (!fullText.toLowerCase().includes('--plex--')) {
+						isOrphaned = true;
+
+						// Update data-orphaned attribute if needed
+						if (deleteBtn && deleteBtn.getAttribute('data-orphaned') !== 'true') {
+							deleteBtn.setAttribute('data-orphaned', 'true');
+						}
+					}
+				}
+
+				// Show or hide orphaned badge and delete button
+				if (isOrphaned) {
+					// Show orphaned badge
+					const orphanedBadge = item.querySelector('.orphaned-badge');
+					if (orphanedBadge) {
+						orphanedBadge.style.display = 'flex';
+					}
+
+					// Show delete button
+					if (deleteBtn) {
+						deleteBtn.style.display = 'flex';
+						deleteBtn.classList.add('initialized');
+					}
+				} else {
+					// Hide delete button for non-orphaned items
+					if (deleteBtn) {
+						deleteBtn.style.display = 'none';
+						deleteBtn.classList.add('initialized');
+					}
+				}
+			}
 
 			/**
 			 * Add Change Poster button to Plex item
@@ -11621,136 +11644,6 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 		});
 	</script>
 
-	<script>
-		/**
-	 * Back to Top Button for Posteria
-	 * 
-	 * This script adds a stylish back-to-top button that appears when the user scrolls 
-	 * down the page and smoothly scrolls back to the top when clicked. The styling 
-	 * matches the Posteria theme perfectly.
-	 */
-
-		document.addEventListener('DOMContentLoaded', function () {
-			// Create button element
-			const backToTopButton = document.createElement('button');
-			backToTopButton.id = 'back-to-top';
-			backToTopButton.className = 'back-to-top-btn';
-			backToTopButton.innerHTML = `
-																									<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-																										<polyline points="18 15 12 9 6 15"></polyline>
-																									</svg>
-																								`;
-			backToTopButton.title = "Back to Top";
-
-			// Add button to the DOM
-			document.body.appendChild(backToTopButton);
-
-			// Add CSS for the button
-			const style = document.createElement('style');
-			style.textContent = `
-																									.back-to-top-btn {
-																										position: fixed;
-																										bottom: 30px;
-																										right: 30px;
-																										width: 50px;
-																										height: 50px;
-																										border-radius: 50%;
-																										background: linear-gradient(45deg, var(--accent-primary), #ff9f43);
-																										color: #1f1f1f;
-																										border: none;
-																										cursor: pointer;
-																										display: flex;
-																										align-items: center;
-																										justify-content: center;
-																										box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
-																										opacity: 0;
-																										visibility: hidden;
-																										transform: translateY(20px);
-																										transition: all 0.3s ease;
-																										z-index: 99;
-																									}
-		
-																									.back-to-top-btn.visible {
-																										opacity: 1;
-																										visibility: visible;
-																										transform: translateY(0);
-																									}
-		
-																									.back-to-top-btn:hover {
-																										background: linear-gradient(45deg, #f5b025, #ffa953);
-																										transform: translateY(-5px);
-																										box-shadow: 0 6px 15px rgba(0, 0, 0, 0.4);
-																									}
-		
-																									.back-to-top-btn svg {
-																										width: 24px;
-																										height: 24px;
-																										stroke-width: 2.5;
-																									}
-		
-																									/* Mobile responsive adjustments */
-																									@media (max-width: 768px) {
-																										.back-to-top-btn {
-																											width: 45px;
-																											height: 45px;
-																											bottom: 20px;
-																											right: 20px;
-																										}
-																									}
-		
-																									@media (max-width: 480px) {
-																										.back-to-top-btn {
-																											width: 40px;
-																											height: 40px;
-																											bottom: 15px;
-																											right: 15px;
-																										}
-			
-																										.back-to-top-btn svg {
-																											width: 20px;
-																											height: 20px;
-																										}
-																									}
-																								`;
-			document.head.appendChild(style);
-
-			// Show/hide button based on scroll position
-			function toggleBackToTopButton() {
-				if (window.scrollY > 300) {
-					backToTopButton.classList.add('visible');
-				} else {
-					backToTopButton.classList.remove('visible');
-				}
-			}
-
-			// Add scroll event listener
-			window.addEventListener('scroll', toggleBackToTopButton, { passive: true });
-
-			// Smooth scroll to top
-			backToTopButton.addEventListener('click', function () {
-				// Use smooth scroll behavior with fallback for older browsers
-				if ('scrollBehavior' in document.documentElement.style) {
-					window.scrollTo({
-						top: 0,
-						behavior: 'smooth'
-					});
-				} else {
-					// Fallback smooth scroll for browsers that don't support scrollBehavior
-					const scrollToTop = function () {
-						const currentPosition = window.scrollY;
-						if (currentPosition > 0) {
-							window.scrollTo(0, currentPosition - currentPosition / 8);
-							window.requestAnimationFrame(scrollToTop);
-						}
-					};
-					window.requestAnimationFrame(scrollToTop);
-				}
-			});
-
-			// Initialize button visibility
-			toggleBackToTopButton();
-		});
-	</script>
 	<?php
 	}
 	?>
