@@ -10326,9 +10326,9 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 					loadingIndicator.className = 'infinite-scroll-loading';
 					loadingIndicator.style.display = 'none';
 					loadingIndicator.innerHTML = `
-																				<div class="loading-spinner" style="margin: 20px auto;"></div>
-																				<div style="text-align: center; color: var(--text-secondary);">Loading more posters...</div>
-																			`;
+																								<div class="loading-spinner" style="margin: 20px auto;"></div>
+																								<div style="text-align: center; color: var(--text-secondary);">Loading more posters...</div>
+																							`;
 
 					// Insert after gallery
 					galleryContainer.parentNode.insertBefore(loadingIndicator, galleryContainer.nextSibling);
@@ -10518,13 +10518,13 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 									changePosterButton.setAttribute('data-filename', filenameValue);
 									changePosterButton.setAttribute('data-dirname', directoryValue);
 									changePosterButton.innerHTML = `
-																								<svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-																									<rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-																									<circle cx="8.5" cy="8.5" r="1.5"></circle>
-																									<polyline points="21 15 16 10 5 21"></polyline>
-																								</svg>
-																								Change Poster
-																							`;
+																												<svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+																													<rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+																													<circle cx="8.5" cy="8.5" r="1.5"></circle>
+																													<polyline points="21 15 16 10 5 21"></polyline>
+																												</svg>
+																												Change Poster
+																											`;
 
 									// Insert before Delete button
 									deleteButton.parentNode.insertBefore(changePosterButton, deleteButton);
@@ -10894,7 +10894,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 							// Add "all loaded" message
 							const allLoadedMsg = document.createElement('div');
 							allLoadedMsg.className = 'all-posters-loaded';
-							allLoadedMsg.innerHTML = 'All posters loaded';
+							allLoadedMsg.innerHTML = 'All Posters Loaded';
 							indicator.parentNode.insertBefore(allLoadedMsg, indicator.nextSibling);
 
 							if (config.debug) {
@@ -10930,7 +10930,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 							// Add "all loaded" message
 							const allLoadedMsg = document.createElement('div');
 							allLoadedMsg.className = 'all-posters-loaded';
-							allLoadedMsg.innerHTML = 'All posters loaded';
+							allLoadedMsg.innerHTML = 'All Posters Loaded';
 							indicator.parentNode.insertBefore(allLoadedMsg, indicator.nextSibling);
 
 							if (config.debug) {
@@ -11010,7 +11010,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 							// Add "all loaded" message
 							const allLoadedMsg = document.createElement('div');
 							allLoadedMsg.className = 'all-posters-loaded';
-							allLoadedMsg.innerHTML = 'All posters loaded';
+							allLoadedMsg.innerHTML = 'All Posters Loaded';
 							indicator.parentNode.insertBefore(allLoadedMsg, indicator.nextSibling);
 
 							if (config.debug) {
@@ -11040,7 +11040,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 							// Add "all loaded" message
 							const allLoadedMsg = document.createElement('div');
 							allLoadedMsg.className = 'all-posters-loaded';
-							allLoadedMsg.innerHTML = 'All posters loaded';
+							allLoadedMsg.innerHTML = 'All Posters Loaded';
 
 							// Insert after loading indicator
 							indicator.parentNode.insertBefore(allLoadedMsg, indicator.nextSibling);
@@ -11102,94 +11102,94 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 		(function () {
 			const style = document.createElement('style');
 			style.textContent = `
-																	/* Infinite scroll loading indicator */
-																	.infinite-scroll-loading {
-																		margin: 30px 0;
-																		padding: 20px;
-																		text-align: center;
-																		color: var(--text-secondary);
-																	}
+																					/* Infinite scroll loading indicator */
+																					.infinite-scroll-loading {
+																						margin: 30px 0;
+																						padding: 20px;
+																						text-align: center;
+																						color: var(--text-secondary);
+																					}
 
-																	/* "All posters loaded" message */
-																	.all-posters-loaded {
-																		margin: 30px auto;
-																		padding: 15px;
-																		text-align: center;
-																		font-weight: 500;
-																		color: var(--text-secondary);
-																		background: rgba(255, 159, 67, 0.1);
-																		border: 1px solid var(--accent-primary);
-																		border-radius: 8px;
-																		width: 100%;
-																		max-width: 400px;
-																	}
+																					/* "All posters loaded" message */
+																					.all-posters-loaded {
+																						margin: 30px auto;
+																						padding: 15px;
+																						text-align: center;
+																						font-weight: 500;
+																						color: var(--text-secondary);
+																						background: rgba(255, 159, 67, 0.1);
+																						border: 1px solid var(--accent-primary);
+																						border-radius: 8px;
+																						width: 100%;
+																						max-width: 400px;
+																					}
 
-																	/* Fix for overlay buttons */
-																	.gallery-item.touch-active .image-overlay-actions {
-																		opacity: 1;
-																		pointer-events: auto;
-																	}
+																					/* Fix for overlay buttons */
+																					.gallery-item.touch-active .image-overlay-actions {
+																						opacity: 1;
+																						pointer-events: auto;
+																					}
 
-																	.gallery-item.touch-active .overlay-action-button {
-																		pointer-events: auto;
-																	}
+																					.gallery-item.touch-active .overlay-action-button {
+																						pointer-events: auto;
+																					}
 
-																	/* Make sure loading spinner is visible */
-																	.loading-spinner {
-																		width: 40px;
-																		height: 40px;
-																		border-radius: 50%;
-																		border: 4px solid var(--text-secondary);
-																		border-top-color: var(--accent-primary);
-																		animation: spin 1s infinite linear;
-																		margin: 0 auto;
-																	}
+																					/* Make sure loading spinner is visible */
+																					.loading-spinner {
+																						width: 40px;
+																						height: 40px;
+																						border-radius: 50%;
+																						border: 4px solid var(--text-secondary);
+																						border-top-color: var(--accent-primary);
+																						animation: spin 1s infinite linear;
+																						margin: 0 auto;
+																					}
 
-																	/* Fix for button interactions on mobile */
-																	@media (hover: none) {
-																		.gallery-item.touch-active .image-overlay-actions {
-																			opacity: 1;
-																			display: flex;
-																		}
+																					/* Fix for button interactions on mobile */
+																					@media (hover: none) {
+																						.gallery-item.touch-active .image-overlay-actions {
+																							opacity: 1;
+																							display: flex;
+																						}
 		
-																		.overlay-action-button {
-																			display: flex !important;
-																		}
+																						.overlay-action-button {
+																							display: flex !important;
+																						}
 		
-																		/* Fix for Plex buttons */
-																		.send-to-plex-btn, 
-																		.import-from-plex-btn,
-																		.change-poster-btn {
-																			display: flex !important;
-																		}
-																	}
+																						/* Fix for Plex buttons */
+																						.send-to-plex-btn, 
+																						.import-from-plex-btn,
+																						.change-poster-btn {
+																							display: flex !important;
+																						}
+																					}
 
-																	/* Ensure new items fade in smoothly */
-																	.gallery-item {
-																		animation: fadeIn 0.5s ease-out;
-																	}
+																					/* Ensure new items fade in smoothly */
+																					.gallery-item {
+																						animation: fadeIn 0.5s ease-out;
+																					}
 
-																	@keyframes fadeIn {
-																		from { opacity: 0; transform: translateY(20px); }
-																		to { opacity: 1; transform: translateY(0); }
-																	}
+																					@keyframes fadeIn {
+																						from { opacity: 0; transform: translateY(20px); }
+																						to { opacity: 1; transform: translateY(0); }
+																					}
 
-																	/* Ensure placeholder is visible initially */
-																	.gallery-image-placeholder {
-																		opacity: 1;
-																		background-color: var(--bg-tertiary);
-																	}
+																					/* Ensure placeholder is visible initially */
+																					.gallery-image-placeholder {
+																						opacity: 1;
+																						background-color: var(--bg-tertiary);
+																					}
 
-																	.gallery-image-placeholder.hidden {
-																		opacity: 0;
-																		transition: opacity 0.3s ease;
-																	}
+																					.gallery-image-placeholder.hidden {
+																						opacity: 0;
+																						transition: opacity 0.3s ease;
+																					}
 
-																	/* Fix to make sure gallery lazy loading works properly */
-																	.gallery-image.loaded {
-																		opacity: 1;
-																	}
-																	`;
+																					/* Fix to make sure gallery lazy loading works properly */
+																					.gallery-image.loaded {
+																						opacity: 1;
+																					}
+																					`;
 			document.head.appendChild(style);
 		})();
 	</script>
@@ -11209,10 +11209,10 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 			backToTopButton.id = 'back-to-top';
 			backToTopButton.className = 'back-to-top-btn';
 			backToTopButton.innerHTML = `
-																		<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-																			<polyline points="18 15 12 9 6 15"></polyline>
-																		</svg>
-																	`;
+																						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+																							<polyline points="18 15 12 9 6 15"></polyline>
+																						</svg>
+																					`;
 			backToTopButton.title = "Back to Top";
 
 			// Add button to the DOM
@@ -11221,70 +11221,70 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 			// Add CSS for the button
 			const style = document.createElement('style');
 			style.textContent = `
-																		.back-to-top-btn {
-																			position: fixed;
-																			bottom: 30px;
-																			right: 30px;
-																			width: 50px;
-																			height: 50px;
-																			border-radius: 50%;
-																			background: linear-gradient(45deg, var(--accent-primary), #ff9f43);
-																			color: #1f1f1f;
-																			border: none;
-																			cursor: pointer;
-																			display: flex;
-																			align-items: center;
-																			justify-content: center;
-																			box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
-																			opacity: 0;
-																			visibility: hidden;
-																			transform: translateY(20px);
-																			transition: all 0.3s ease;
-																			z-index: 99;
-																		}
+																						.back-to-top-btn {
+																							position: fixed;
+																							bottom: 30px;
+																							right: 30px;
+																							width: 50px;
+																							height: 50px;
+																							border-radius: 50%;
+																							background: linear-gradient(45deg, var(--accent-primary), #ff9f43);
+																							color: #1f1f1f;
+																							border: none;
+																							cursor: pointer;
+																							display: flex;
+																							align-items: center;
+																							justify-content: center;
+																							box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+																							opacity: 0;
+																							visibility: hidden;
+																							transform: translateY(20px);
+																							transition: all 0.3s ease;
+																							z-index: 99;
+																						}
 		
-																		.back-to-top-btn.visible {
-																			opacity: 1;
-																			visibility: visible;
-																			transform: translateY(0);
-																		}
+																						.back-to-top-btn.visible {
+																							opacity: 1;
+																							visibility: visible;
+																							transform: translateY(0);
+																						}
 		
-																		.back-to-top-btn:hover {
-																			background: linear-gradient(45deg, #f5b025, #ffa953);
-																			transform: translateY(-5px);
-																			box-shadow: 0 6px 15px rgba(0, 0, 0, 0.4);
-																		}
+																						.back-to-top-btn:hover {
+																							background: linear-gradient(45deg, #f5b025, #ffa953);
+																							transform: translateY(-5px);
+																							box-shadow: 0 6px 15px rgba(0, 0, 0, 0.4);
+																						}
 		
-																		.back-to-top-btn svg {
-																			width: 24px;
-																			height: 24px;
-																			stroke-width: 2.5;
-																		}
+																						.back-to-top-btn svg {
+																							width: 24px;
+																							height: 24px;
+																							stroke-width: 2.5;
+																						}
 		
-																		/* Mobile responsive adjustments */
-																		@media (max-width: 768px) {
-																			.back-to-top-btn {
-																				width: 45px;
-																				height: 45px;
-																				bottom: 20px;
-																				right: 20px;
-																			}
-																		}
+																						/* Mobile responsive adjustments */
+																						@media (max-width: 768px) {
+																							.back-to-top-btn {
+																								width: 45px;
+																								height: 45px;
+																								bottom: 20px;
+																								right: 20px;
+																							}
+																						}
 		
-																		@media (max-width: 480px) {
-																			.back-to-top-btn {
-																				width: 40px;
-																				height: 40px;
-																				bottom: 15px;
-																				right: 15px;
-																			}
+																						@media (max-width: 480px) {
+																							.back-to-top-btn {
+																								width: 40px;
+																								height: 40px;
+																								bottom: 15px;
+																								right: 15px;
+																							}
 			
-																			.back-to-top-btn svg {
-																				width: 20px;
-																				height: 20px;
-																			}
-																		}
-																	`;
+																							.back-to-top-btn svg {
+																								width: 20px;
+																								height: 20px;
+																							}
+																						}
+																					`;
 			document.head.appendChild(style);
 
 			// Show/hide button based on scroll position
