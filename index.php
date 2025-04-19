@@ -10257,25 +10257,26 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 	<?php if (getenv('IMAGES_PER_PAGE') !== false && intval(getenv('IMAGES_PER_PAGE')) === 0) { ?>
 	<script>
 		/**
-		 * VirtualScroll - Optimized Infinite Scroll Implementation for Posteria
+		 * Enhanced VirtualScroll - Direction-Aware Infinite Scroll Implementation for Posteria
 		 * 
-		 * This implementation significantly reduces DOM bloat by:
-		 * 1. Implementing element recycling (virtualization)
-		 * 2. Using event delegation instead of many individual listeners
-		 * 3. Efficiently batching DOM operations
-		 * 4. Cleaning up elements that are far outside the viewport
-		 * 5. Only initializing new elements once
+		 * This implementation significantly reduces DOM bloat while preserving recently viewed content by:
+		 * 1. Implementing direction-aware virtualization that maintains more items in scroll direction
+		 * 2. Tracking and preserving recently viewed sections when scrolling back up
+		 * 3. Using event delegation for efficient event handling
+		 * 4. Efficiently batching DOM operations
+		 * 5. Implementing "viewed sections" to keep recently viewed areas in the DOM longer
 		 */
 		document.addEventListener('DOMContentLoaded', function () {
 			// Configuration
 			const config = {
-				bufferSize: 100,         // Maximum number of items to keep in DOM
+				bufferSize: 100,         // Maximum number of items to keep in DOM at once
 				batchSize: 24,           // Number of items per fetch
 				loadingThreshold: 800,   // Load more when this far from bottom (px)
 				cleanupThreshold: 2000,  // Remove items when this far from viewport (px)
 				throttleDelay: 100,      // Throttle scroll event (ms)
 				debug: false,            // Enable debugging information
-				fadeInDuration: 500      // Fade in animation duration (ms)
+				fadeInDuration: 500,     // Fade in animation duration (ms)
+				scrollBufferDelay: 300   // Delay cleanup after scroll direction changes (ms)
 			};
 
 			// Core Elements
@@ -10290,7 +10291,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 				isLoading: false,          // Flag to prevent multiple requests
 				allLoaded: false,          // Flag for when all content is loaded
 				currentPage: 1,            // Current page (starts at 1)
-				lastScrollY: 0,            // Last scroll position for throttling
+				lastScrollY: window.scrollY, // Last scroll position for throttling
 				totalItems: 0,             // Total items loaded so far
 				loadedItemsMap: new Map(), // Map of all loaded items by unique ID
 				visibleItems: new Set(),   // Currently visible item IDs
@@ -10299,7 +10300,17 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 				cleanupPending: false,     // Flag to prevent multiple cleanups
 				loadingItemsCount: 0,      // Number of items currently being loaded
 				uniqueIdCounter: 0,        // Counter for assigning unique IDs
-				elementRegistry: {}        // Registry of event handlers
+				elementRegistry: {},       // Registry of event handlers
+				scrollDirection: "down",   // Current scroll direction
+				viewedSections: new Map(), // Map of recently viewed sections with timestamps
+				sectionRetention: 60000,   // How long to keep viewed sections (60 seconds)
+				topBuffer: 50,             // Items to keep above viewport
+				bottomBuffer: 75,          // Items to keep below viewport
+				staggeredCleanup: true,    // Use staggered cleanup for smoother experience
+				lastCleanupTime: 0,        // Timestamp of last cleanup
+				cleanupInterval: 2000,     // Minimum time between cleanups (ms)
+				scrollIdleTimer: null,     // Timer for detecting scroll idle
+				scrollIdleDelay: 500       // Delay before considering scroll idle (ms)
 			};
 
 			// DOM Elements
@@ -10309,6 +10320,11 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 				observer: null,            // Intersection observer
 				scrollThrottleTimer: null  // Timer for scroll throttling
 			};
+
+			// Detect if device supports touch events
+			const isTouchDevice = 'ontouchstart' in window ||
+				navigator.maxTouchPoints > 0 ||
+				navigator.msMaxTouchPoints > 0;
 
 			//============== CORE FUNCTIONALITY ==============//
 
@@ -10345,7 +10361,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 				// Initial check in case page is short
 				setTimeout(checkScroll, 500);
 
-				if (config.debug) console.log('Virtual Scroll initialized with buffer size:', config.bufferSize);
+				if (config.debug) console.log('Direction-Aware Virtual Scroll initialized with buffer size:', config.bufferSize);
 			}
 
 			/**
@@ -10416,6 +10432,11 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 						else if (targetElement.classList.contains('gallery-item')) {
 							if (entry.isIntersecting) {
 								state.visibleItems.add(targetElement.dataset.itemId);
+
+								// Ensure item is properly restored if it was removed
+								if (!targetElement.parentNode) {
+									restoreItem(targetElement.dataset.itemId);
+								}
 							} else {
 								state.visibleItems.delete(targetElement.dataset.itemId);
 							}
@@ -10423,7 +10444,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 					});
 				}, {
 					root: null,
-					rootMargin: '200px',
+					rootMargin: '300px',
 					threshold: 0.1
 				});
 			}
@@ -10605,9 +10626,22 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 				}
 
 				// Check if we should perform cleanup
-				if (!state.cleanupPending && state.loadedItemsMap.size > config.bufferSize) {
-					state.cleanupPending = true;
-					requestAnimationFrame(cleanupOffscreenItems);
+				const now = Date.now();
+				const timeSinceLastCleanup = now - state.lastCleanupTime;
+
+				if (!state.cleanupPending &&
+					state.loadedItemsMap.size > config.bufferSize &&
+					timeSinceLastCleanup > state.cleanupInterval) {
+
+					// Delay cleanup if we just changed direction
+					if (state.scrollIdleTimer) {
+						clearTimeout(state.scrollIdleTimer);
+					}
+
+					state.scrollIdleTimer = setTimeout(() => {
+						state.cleanupPending = true;
+						requestAnimationFrame(directionAwareCleanup);
+					}, state.scrollDirection === "changing" ? config.scrollBufferDelay : 50);
 				}
 			}
 
@@ -10615,8 +10649,36 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 			 * Throttled scroll event handler using requestAnimationFrame
 			 */
 			function throttleScroll() {
-				// Store current scroll position
-				state.lastScrollY = window.scrollY;
+				const currentScrollY = window.scrollY;
+
+				// Determine scroll direction
+				if (Math.abs(currentScrollY - state.lastScrollY) > 5) {
+					const oldDirection = state.scrollDirection;
+
+					if (currentScrollY > state.lastScrollY) {
+						state.scrollDirection = "down";
+					} else if (currentScrollY < state.lastScrollY) {
+						state.scrollDirection = "up";
+					}
+
+					// If direction changed, mark as changing
+					if (oldDirection !== state.scrollDirection) {
+						state.scrollDirection = "changing";
+
+						// Set back to actual direction after a short delay
+						setTimeout(() => {
+							state.scrollDirection = currentScrollY > state.lastScrollY ? "down" : "up";
+						}, 100);
+					}
+				}
+
+				// Store current section as viewed
+				const viewportMiddle = currentScrollY + (window.innerHeight / 2);
+				const currentSection = Math.floor(viewportMiddle / (window.innerHeight * 2)); // Section = 2 viewports
+				state.viewedSections.set(currentSection, Date.now());
+
+				// Update last scroll position
+				state.lastScrollY = currentScrollY;
 
 				// Use requestAnimationFrame to limit updates
 				if (!state.ticking) {
@@ -10837,11 +10899,14 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 			}
 
 			/**
-			 * Remove items that are far outside the viewport to reduce DOM size
+			 * Smart cleanup that considers scroll direction and recently viewed areas
 			 */
-			function cleanupOffscreenItems() {
+			function directionAwareCleanup() {
 				// Reset pending flag
 				state.cleanupPending = false;
+
+				// Track cleanup time
+				state.lastCleanupTime = Date.now();
 
 				// Don't cleanup if we have fewer than buffer size items
 				if (state.loadedItemsMap.size <= config.bufferSize) {
@@ -10850,60 +10915,135 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 
 				const currentScrollY = window.scrollY;
 				const windowHeight = window.innerHeight;
-				const cleanupThreshold = config.cleanupThreshold;
+				const documentHeight = document.documentElement.scrollHeight;
 
-				// Sort items by distance from viewport
-				const itemsByDistance = Array.from(state.loadedItemsMap.entries()).map(([id, data]) => {
-					let distance = Infinity;
+				// Current time to check viewed sections
+				const now = Date.now();
 
-					// If element is in the DOM, calculate distance
-					if (data.element.parentNode) {
-						const rect = data.element.getBoundingClientRect();
-						const topDistance = rect.top;
-						const bottomDistance = rect.bottom - windowHeight;
-
-						// Use the smaller absolute distance
-						distance = Math.abs(topDistance) < Math.abs(bottomDistance) ?
-							topDistance : bottomDistance;
-					}
-
-					return {
-						id,
-						data,
-						distance: Math.abs(distance)
-					};
-				});
-
-				// Sort by distance (furthest first)
-				itemsByDistance.sort((a, b) => b.distance - a.distance);
-
-				// Calculate how many items to remove
-				const itemsToKeep = config.bufferSize;
-				const itemsToRemove = state.loadedItemsMap.size - itemsToKeep;
-
-				// Only remove items that are far from viewport
-				let removedCount = 0;
-
-				for (let i = 0; i < itemsByDistance.length && removedCount < itemsToRemove; i++) {
-					const item = itemsByDistance[i];
-
-					// Only remove if item is far enough from viewport
-					if (item.distance > cleanupThreshold && !state.visibleItems.has(item.id)) {
-						const element = item.data.element;
-
-						// Unobserve element
-						elements.observer.unobserve(element);
-
-						// Remove from DOM but keep in map
-						if (element.parentNode) {
-							element.parentNode.removeChild(element);
-							removedCount++;
-						}
+				// Clean out expired viewed sections
+				for (const [section, timestamp] of state.viewedSections.entries()) {
+					if (now - timestamp > state.sectionRetention) {
+						state.viewedSections.delete(section);
 					}
 				}
 
+				// Calculate viewport bounds
+				const viewportTop = currentScrollY;
+				const viewportBottom = viewportTop + windowHeight;
+
+				// Group items by position relative to viewport
+				const itemGroups = {
+					inViewport: [],
+					aboveViewport: [],
+					belowViewport: [],
+					inRecentlyViewedSections: []
+				};
+
+				// Get all section ranges currently considered "viewed"
+				const viewedRanges = Array.from(state.viewedSections.keys()).map(section => {
+					const sectionStart = section * (windowHeight * 2);
+					const sectionEnd = sectionStart + (windowHeight * 2);
+					return { start: sectionStart, end: sectionEnd };
+				});
+
+				// Categorize all items
+				state.loadedItemsMap.forEach((data, id) => {
+					const element = data.element;
+
+					// Skip if element isn't in DOM
+					if (!element.parentNode) return;
+
+					const rect = element.getBoundingClientRect();
+					const absTop = rect.top + currentScrollY;
+					const absBottom = rect.bottom + currentScrollY;
+
+					// Categorize based on position
+					if (absBottom >= viewportTop && absTop <= viewportBottom) {
+						// In viewport
+						itemGroups.inViewport.push({ id, data, position: absTop });
+					} else if (absBottom < viewportTop) {
+						// Above viewport
+						itemGroups.aboveViewport.push({
+							id, data, position: absTop,
+							distanceFromViewport: viewportTop - absBottom
+						});
+					} else {
+						// Below viewport
+						itemGroups.belowViewport.push({
+							id, data, position: absTop,
+							distanceFromViewport: absTop - viewportBottom
+						});
+					}
+
+					// Check if in recently viewed section
+					const inRecentlyViewed = viewedRanges.some(range =>
+						(absTop >= range.start && absTop <= range.end) ||
+						(absBottom >= range.start && absBottom <= range.end)
+					);
+
+					if (inRecentlyViewed) {
+						itemGroups.inRecentlyViewedSections.push({ id, data, position: absTop });
+					}
+				});
+
+				// Set buffer size based on current scroll direction and position
+				const topBuffer = state.scrollDirection === "up" ? state.topBuffer * 1.5 : state.topBuffer;
+				const bottomBuffer = state.scrollDirection === "down" ? state.bottomBuffer * 1.5 : state.bottomBuffer;
+
+				// Sort groups by distance from viewport
+				itemGroups.aboveViewport.sort((a, b) => b.distanceFromViewport - a.distanceFromViewport);
+				itemGroups.belowViewport.sort((a, b) => b.distanceFromViewport - a.distanceFromViewport);
+
+				// All protected items (don't remove these)
+				const protectedIds = new Set([
+					...itemGroups.inViewport.map(item => item.id),
+					...itemGroups.inRecentlyViewedSections.map(item => item.id),
+					...itemGroups.aboveViewport.slice(0, topBuffer).map(item => item.id),
+					...itemGroups.belowViewport.slice(0, bottomBuffer).map(item => item.id)
+				]);
+
+				// Items eligible for removal
+				const removableAbove = itemGroups.aboveViewport.slice(topBuffer);
+				const removableBelow = itemGroups.belowViewport.slice(bottomBuffer);
+
+				// Calculate how many items we need to remove
+				const totalItems = state.loadedItemsMap.size;
+				const targetRemoval = Math.max(0, totalItems - config.bufferSize * 1.1); // Allow 10% buffer
+
+				// Balanced removal - take more from the opposite direction we're scrolling
+				const removalRatio = state.scrollDirection === "down" ? 0.7 : 0.3;
+				const targetRemoveAbove = Math.floor(targetRemoval * removalRatio);
+				const targetRemoveBelow = targetRemoval - targetRemoveAbove;
+
+				// Items to actually remove
+				const removeFromAbove = removableAbove.slice(0, targetRemoveAbove);
+				const removeFromBelow = removableBelow.slice(0, targetRemoveBelow);
+
+				// Combined removal list
+				const itemsToRemove = [...removeFromAbove, ...removeFromBelow];
+
+				// Remove items
+				let removedCount = 0;
+				itemsToRemove.forEach(item => {
+					// Skip if in protected set or visible
+					if (protectedIds.has(item.id) || state.visibleItems.has(item.id)) {
+						return;
+					}
+
+					const element = item.data.element;
+
+					// Unobserve element
+					elements.observer.unobserve(element);
+
+					// Remove from DOM but keep in map
+					if (element.parentNode) {
+						element.parentNode.removeChild(element);
+						removedCount++;
+					}
+				});
+
 				if (config.debug && removedCount > 0) {
-					console.log(`Cleaned up ${removedCount} items. Remaining in DOM: ${state.loadedItemsMap.size - removedCount}`);
+					console.log(`Cleaned up ${removedCount} items. Direction: ${state.scrollDirection}. Remaining in DOM: ${state.loadedItemsMap.size - removedCount}`);
 				}
 			}
 
@@ -10924,19 +11064,37 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 				const index = itemData.index;
 				let insertBefore = null;
 
-				// Find the next visible item to insert before
-				let foundPosition = false;
-				state.loadedItemsMap.forEach((data, id) => {
-					if (!foundPosition && data.element.parentNode && data.index > index) {
-						insertBefore = data.element;
-						foundPosition = true;
-					}
-				});
+				// Get all items currently in DOM, sorted by index
+				const visibleItems = Array.from(state.loadedItemsMap.values())
+					.filter(data => data.element.parentNode)
+					.sort((a, b) => a.index - b.index);
 
-				// Insert at the correct position
+				// Find insertion point using binary search for better performance
+				let low = 0;
+				let high = visibleItems.length - 1;
+
+				while (low <= high) {
+					const mid = Math.floor((low + high) / 2);
+					const midItem = visibleItems[mid];
+
+					if (midItem.index === index) {
+						// Exact match - shouldn't happen but handle anyway
+						insertBefore = midItem.element.nextSibling;
+						break;
+					} else if (midItem.index < index) {
+						low = mid + 1;
+					} else {
+						high = mid - 1;
+						insertBefore = midItem.element;
+						break;
+					}
+				}
+
+				// Insert at correct position
 				if (insertBefore) {
 					galleryContainer.insertBefore(element, insertBefore);
 				} else {
+					// If we couldn't find a position, append to end
 					galleryContainer.appendChild(element);
 				}
 
@@ -11043,13 +11201,13 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 							changePosterButton.setAttribute('data-filename', filenameValue);
 							changePosterButton.setAttribute('data-dirname', directoryValue);
 							changePosterButton.innerHTML = `
-							<svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-								<rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-								<circle cx="8.5" cy="8.5" r="1.5"></circle>
-								<polyline points="21 15 16 10 5 21"></polyline>
-							</svg>
-							Change Poster
-						`;
+						<svg class="image-action-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+							<rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+							<circle cx="8.5" cy="8.5" r="1.5"></circle>
+							<polyline points="21 15 16 10 5 21"></polyline>
+						</svg>
+						Change Poster
+					`;
 
 							// Insert before Delete button
 							deleteButton.parentNode.insertBefore(changePosterButton, deleteButton);
@@ -11092,9 +11250,9 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 					indicator.className = 'infinite-scroll-loading';
 					indicator.style.display = 'none';
 					indicator.innerHTML = `
-					<div class="loading-spinner" style="margin: 20px auto;"></div>
-					<div style="text-align: center; color: var(--text-secondary);">Loading more posters...</div>
-				`;
+				<div class="loading-spinner" style="margin: 20px auto;"></div>
+				<div style="text-align: center; color: var(--text-secondary);">Loading more posters...</div>
+			`;
 
 					// Insert after gallery
 					galleryContainer.parentNode.insertBefore(indicator, galleryContainer.nextSibling);
@@ -11141,12 +11299,12 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 					const placeholder = imageElement.previousElementSibling;
 					if (placeholder && placeholder.classList.contains('gallery-image-placeholder')) {
 						placeholder.innerHTML = `
-						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="opacity: 0.5;">
-							<circle cx="12" cy="12" r="10"></circle>
-							<line x1="15" y1="9" x2="9" y2="15"></line>
-							<line x1="9" y1="9" x2="15" y2="15"></line>
-						</svg>
-					`;
+					<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="opacity: 0.5;">
+						<circle cx="12" cy="12" r="10"></circle>
+						<line x1="15" y1="9" x2="9" y2="15"></line>
+						<line x1="9" y1="9" x2="15" y2="15"></line>
+					</svg>
+				`;
 					}
 
 					// Stop observing this image
@@ -11437,79 +11595,79 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 				backToTopButton.className = 'back-to-top-btn';
 				backToTopButton.setAttribute('aria-label', 'Back to top');
 				backToTopButton.innerHTML = `
-				<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-					<polyline points="18 15 12 9 6 15"></polyline>
-				</svg>
-			`;
+			<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+				<polyline points="18 15 12 9 6 15"></polyline>
+			</svg>
+		`;
 
 				// Add styles if not already in the page
 				if (!document.querySelector('style#backToTopStyle')) {
 					const style = document.createElement('style');
 					style.id = 'backToTopStyle';
 					style.textContent = `
+				.back-to-top-btn {
+					position: fixed;
+					bottom: 30px;
+					right: 30px;
+					width: 50px;
+					height: 50px;
+					border-radius: 50%;
+					background: linear-gradient(45deg, var(--accent-primary), #ff9f43);
+					color: #1f1f1f;
+					border: none;
+					cursor: pointer;
+					display: flex;
+					align-items: center;
+					justify-content: center;
+					box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+					opacity: 0;
+					visibility: hidden;
+					transform: translateY(20px);
+					transition: all 0.3s ease;
+					z-index: 99;
+				}
+
+				.back-to-top-btn.visible {
+					opacity: 1;
+					visibility: visible;
+					transform: translateY(0);
+				}
+
+				.back-to-top-btn:hover {
+					background: linear-gradient(45deg, #f5b025, #ffa953);
+					transform: translateY(-5px);
+					box-shadow: 0 6px 15px rgba(0, 0, 0, 0.4);
+				}
+
+				.back-to-top-btn svg {
+					width: 24px;
+					height: 24px;
+					stroke-width: 2.5;
+				}
+
+				@media (max-width: 768px) {
 					.back-to-top-btn {
-						position: fixed;
-						bottom: 30px;
-						right: 30px;
-						width: 50px;
-						height: 50px;
-						border-radius: 50%;
-						background: linear-gradient(45deg, var(--accent-primary), #ff9f43);
-						color: #1f1f1f;
-						border: none;
-						cursor: pointer;
-						display: flex;
-						align-items: center;
-						justify-content: center;
-						box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
-						opacity: 0;
-						visibility: hidden;
-						transform: translateY(20px);
-						transition: all 0.3s ease;
-						z-index: 99;
+						width: 45px;
+						height: 45px;
+						bottom: 20px;
+						right: 20px;
 					}
-		
-					.back-to-top-btn.visible {
-						opacity: 1;
-						visibility: visible;
-						transform: translateY(0);
+				}
+
+				@media (max-width: 480px) {
+					.back-to-top-btn {
+						width: 40px;
+						height: 40px;
+						bottom: 15px;
+						right: 15px;
 					}
-		
-					.back-to-top-btn:hover {
-						background: linear-gradient(45deg, #f5b025, #ffa953);
-						transform: translateY(-5px);
-						box-shadow: 0 6px 15px rgba(0, 0, 0, 0.4);
-					}
-		
+	
 					.back-to-top-btn svg {
-						width: 24px;
-						height: 24px;
-						stroke-width: 2.5;
+						width: 20px;
+						height: 20px;
 					}
-		
-					@media (max-width: 768px) {
-						.back-to-top-btn {
-							width: 45px;
-							height: 45px;
-							bottom: 20px;
-							right: 20px;
-						}
-					}
-		
-					@media (max-width: 480px) {
-						.back-to-top-btn {
-							width: 40px;
-							height: 40px;
-							bottom: 15px;
-							right: 15px;
-						}
-			
-						.back-to-top-btn svg {
-							width: 20px;
-							height: 20px;
-						}
-					}
-				`;
+				}
+			`;
 					document.head.appendChild(style);
 				}
 
@@ -11555,85 +11713,80 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 
 			//============== UTILITY FUNCTIONS ==============//
 
-			// Detect if device supports touch events
-			const isTouchDevice = 'ontouchstart' in window ||
-				navigator.maxTouchPoints > 0 ||
-				navigator.msMaxTouchPoints > 0;
-
 			// Add necessary CSS if not already in the page
 			function addRequiredCSS() {
 				if (!document.querySelector('style#virtualScrollStyles')) {
 					const style = document.createElement('style');
 					style.id = 'virtualScrollStyles';
 					style.textContent = `
-					/* Animation for new items */
-					@keyframes fadeIn {
-						from { opacity: 0; transform: translateY(20px); }
-						to { opacity: 1; transform: translateY(0); }
+				/* Animation for new items */
+				@keyframes fadeIn {
+					from { opacity: 0; transform: translateY(20px); }
+					to { opacity: 1; transform: translateY(0); }
+				}
+
+				/* Loading indicator styles */
+				.infinite-scroll-loading {
+					margin: 30px 0;
+					padding: 20px;
+					text-align: center;
+					color: var(--text-secondary);
+				}
+
+				/* "All posters loaded" message */
+				.all-posters-loaded {
+					margin: 30px auto;
+					padding: 15px;
+					text-align: center;
+					font-weight: 500;
+					color: var(--text-secondary);
+					background: rgba(255, 159, 67, 0.1);
+					border: 1px solid var(--accent-primary);
+					border-radius: 8px;
+					width: 100%;
+					max-width: 400px;
+				}
+
+				/* Ensure placeholder styling */
+				.gallery-image-placeholder {
+					opacity: 1;
+					background-color: var(--bg-tertiary);
+				}
+
+				.gallery-image-placeholder.hidden {
+					opacity: 0;
+					transition: opacity 0.3s ease;
+				}
+
+				/* Special class for virtualized items */
+				.gallery-item[data-virtualized] {
+					animation: fadeIn ${config.fadeInDuration}ms ease-out;
+				}
+
+				/* Fix for mobile interactions */
+				@media (hover: none) {
+					.gallery-item.touch-active .image-overlay-actions {
+						opacity: 1 !important;
+						display: flex !important;
 					}
-		
-					/* Loading indicator styles */
-					.infinite-scroll-loading {
-						margin: 30px 0;
-						padding: 20px;
-						text-align: center;
-						color: var(--text-secondary);
+	
+					.gallery-item.touch-active .overlay-action-button {
+						display: flex !important;
 					}
-		
-					/* "All posters loaded" message */
-					.all-posters-loaded {
-						margin: 30px auto;
-						padding: 15px;
-						text-align: center;
-						font-weight: 500;
-						color: var(--text-secondary);
-						background: rgba(255, 159, 67, 0.1);
-						border: 1px solid var(--accent-primary);
-						border-radius: 8px;
-						width: 100%;
-						max-width: 400px;
+	
+					/* Fix for Plex buttons */
+					.change-poster-btn,
+					.send-to-plex-btn, 
+					.import-from-plex-btn {
+						display: flex !important;
 					}
-		
-					/* Ensure placeholder styling */
-					.gallery-image-placeholder {
-						opacity: 1;
-						background-color: var(--bg-tertiary);
+	
+					/* Ensure buttons are visible */
+					.gallery-item.touch-active .overlay-action-button {
+						pointer-events: auto !important;
 					}
-		
-					.gallery-image-placeholder.hidden {
-						opacity: 0;
-						transition: opacity 0.3s ease;
-					}
-		
-					/* Special class for virtualized items */
-					.gallery-item[data-virtualized] {
-						animation: fadeIn ${config.fadeInDuration}ms ease-out;
-					}
-		
-					/* Fix for mobile interactions */
-					@media (hover: none) {
-						.gallery-item.touch-active .image-overlay-actions {
-							opacity: 1 !important;
-							display: flex !important;
-						}
-			
-						.gallery-item.touch-active .overlay-action-button {
-							display: flex !important;
-						}
-			
-						/* Fix for Plex buttons */
-						.change-poster-btn,
-						.send-to-plex-btn, 
-						.import-from-plex-btn {
-							display: flex !important;
-						}
-			
-						/* Ensure buttons are visible */
-						.gallery-item.touch-active .overlay-action-button {
-							pointer-events: auto !important;
-						}
-					}
-				`;
+				}
+			`;
 					document.head.appendChild(style);
 				}
 			}
