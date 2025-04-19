@@ -10850,7 +10850,6 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 				}
 			}
 
-			// Load more content via AJAX
 			function loadMoreContent() {
 				if (isLoading || allLoaded) return;
 
@@ -10885,6 +10884,24 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 						return response.text();
 					})
 					.then(html => {
+						// Check if the response contains the "No posters found" message
+						if (html.includes('No posters found') || html.includes('No more posters found')) {
+							// No more items available
+							allLoaded = true;
+
+							// Add "all loaded" message
+							const allLoadedMsg = document.createElement('div');
+							allLoadedMsg.className = 'all-posters-loaded';
+							allLoadedMsg.innerHTML = 'All posters loaded';
+							indicator.parentNode.insertBefore(allLoadedMsg, indicator.nextSibling);
+
+							if (config.debug) {
+								console.log('No more posters found message detected');
+							}
+
+							return; // Exit early
+						}
+
 						// Parse HTML response
 						const parser = new DOMParser();
 						const doc = parser.parseFromString(html, 'text/html');
@@ -10903,38 +10920,99 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 							newItems = tempContainer.querySelectorAll('.gallery-item');
 						}
 
-						if (newItems.length > 0) {
-							// Append new items to gallery
-							newItems.forEach(item => {
-								galleryContainer.appendChild(document.importNode(item, true));
-							});
-
-							// Increment page counter
-							currentPage++;
-
-							// Check if we've loaded all pages
-							const totalPages = parseInt(galleryContainer.dataset.totalPages);
-							if (!isNaN(totalPages) && currentPage >= totalPages) {
-								allLoaded = true;
-
-								if (config.debug) {
-									console.log(`All pages loaded (${currentPage}/${totalPages})`);
+						// Check for duplicate items by creating a set of existing items
+						const existingFiles = new Set();
+						document.querySelectorAll('.gallery-item').forEach(item => {
+							const deleteBtn = item.querySelector('.delete-btn');
+							if (deleteBtn) {
+								const filename = deleteBtn.getAttribute('data-filename');
+								const dirname = deleteBtn.getAttribute('data-dirname');
+								existingFiles.add(`${dirname}:${filename}`);
+							} else {
+								// Try to get the URL from copy button as a fallback
+								const copyBtn = item.querySelector('.copy-url-btn');
+								if (copyBtn) {
+									existingFiles.add(copyBtn.getAttribute('data-url'));
 								}
+							}
+						});
 
-								// Add "all loaded" message
-								const allLoadedMsg = document.createElement('div');
-								allLoadedMsg.className = 'all-posters-loaded';
-								allLoadedMsg.innerHTML = 'All posters loaded';
+						// Filter out duplicates before appending
+						const uniqueNewItems = [];
+						newItems.forEach(item => {
+							const deleteBtn = item.querySelector('.delete-btn');
+							if (deleteBtn) {
+								const filename = deleteBtn.getAttribute('data-filename');
+								const dirname = deleteBtn.getAttribute('data-dirname');
+								const itemKey = `${dirname}:${filename}`;
 
-								// Insert after loading indicator
-								indicator.parentNode.insertBefore(allLoadedMsg, indicator.nextSibling);
+								if (!existingFiles.has(itemKey)) {
+									uniqueNewItems.push(item);
+									existingFiles.add(itemKey);
+								}
+							} else {
+								// Try to get the URL from copy button as a fallback
+								const copyBtn = item.querySelector('.copy-url-btn');
+								if (copyBtn) {
+									const url = copyBtn.getAttribute('data-url');
+									if (!existingFiles.has(url)) {
+										uniqueNewItems.push(item);
+										existingFiles.add(url);
+									}
+								} else {
+									// If no delete button or copy URL button, fallback to checking image src
+									const img = item.querySelector('.gallery-image');
+									if (img) {
+										const src = img.getAttribute('data-src');
+										if (src && !existingFiles.has(src)) {
+											uniqueNewItems.push(item);
+											existingFiles.add(src);
+										}
+									} else {
+										// Last resort: assume unique if we can't find identifiers
+										uniqueNewItems.push(item);
+									}
+								}
+							}
+						});
+
+						if (config.debug) {
+							console.log(`Found ${newItems.length} items, ${uniqueNewItems.length} are unique`);
+						}
+
+						// If no unique items found, mark as all loaded
+						if (uniqueNewItems.length === 0) {
+							allLoaded = true;
+
+							// Add "all loaded" message
+							const allLoadedMsg = document.createElement('div');
+							allLoadedMsg.className = 'all-posters-loaded';
+							allLoadedMsg.innerHTML = 'All posters loaded';
+							indicator.parentNode.insertBefore(allLoadedMsg, indicator.nextSibling);
+
+							if (config.debug) {
+								console.log('No unique items found, marking as all loaded');
 							}
 
-							// Initialize features for new items
-							initializeNewItems();
-						} else {
-							// No more items
+							return;
+						}
+
+						// Append only unique new items
+						uniqueNewItems.forEach(item => {
+							galleryContainer.appendChild(document.importNode(item, true));
+						});
+
+						// Increment page counter
+						currentPage++;
+
+						// Check if we've loaded all pages
+						const totalPages = parseInt(galleryContainer.dataset.totalPages);
+						if (!isNaN(totalPages) && currentPage >= totalPages) {
 							allLoaded = true;
+
+							if (config.debug) {
+								console.log(`All pages loaded (${currentPage}/${totalPages})`);
+							}
 
 							// Add "all loaded" message
 							const allLoadedMsg = document.createElement('div');
@@ -10943,11 +11021,10 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
 
 							// Insert after loading indicator
 							indicator.parentNode.insertBefore(allLoadedMsg, indicator.nextSibling);
-
-							if (config.debug) {
-								console.log('No more items found');
-							}
 						}
+
+						// Initialize features for new items
+						initializeNewItems();
 					})
 					.catch(error => {
 						console.error('Error loading more content:', error);
