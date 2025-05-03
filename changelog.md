@@ -340,3 +340,9 @@
 ### Fixed
 
 - Issue with Lazy Loading and posters with # in the filename
+
+## [1.5.7]
+
+### Fixed
+
+- Issue with Poster Wall getting stuck
