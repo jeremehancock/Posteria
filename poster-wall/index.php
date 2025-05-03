@@ -583,27 +583,42 @@ $proxy_url = "./proxy.php";
             debug: true // Enable debug logs
         };
 
-        // State variables
+        // 1. Use a more explicit state machine approach
+        const TransitionState = {
+            IDLE: 'idle',               // Normal display, no transition
+            PREPARING: 'preparing',     // Getting ready for transition
+            ANIMATING: 'animating',     // Visual transition is occurring
+            FINALIZING: 'finalizing'    // Transition visuals complete, updating state
+        };
+
+        // 2. Simplified state object with clearer separation of concerns
         let state = {
+            // Content data
             items: <?php echo !empty($items_json) ? $items_json : '[]'; ?>,
+            currentIndex: 0,
             isStreaming: <?php echo !empty($active_streams) ? 'true' : 'false'; ?>,
             hasMultipleStreams: <?php echo (count($active_streams) > 1) ? 'true' : 'false'; ?>,
-            currentIndex: 0,
-            transitioning: false,
+
+            // Transition state
+            transitionState: TransitionState.IDLE,
+            transitionStartTime: 0,
+            transitionTarget: null,     // Target state after transition
+
+            // Resource management
+            preloadedImages: {},
+            nextBatch: null,
+
+            // Timers (references only)
             displayTimer: null,
             streamCheckTimer: null,
-            streamCheckScheduled: false,
-            loadingNewBatch: false,
-            pendingBatch: null,
-            lastTransitionTime: 0,
-            transitionLock: false,
-            preloadedImages: {},
-            currentTransitionTimeout: null,
+            transitionTimeout: null,
+
+            // Utilities
+            uniqueId: 1,
+            lockedDimensions: null, // Store locked dimensions during transitions
             lastStreamCheck: 0, // Timestamp of last stream check
-            streamCheckQueue: [], // Queue of stream checks
-            previousStreams: [], // Keep track of previous stream sets
-            uniqueId: 1,  // Used for generating unique IDs for tracking streams
-            lockedDimensions: null // Store locked dimensions during transitions
+            streamCheckScheduled: false, // Flag for scheduled stream checks
+            previousStreams: [] // Keep track of previous stream sets
         };
 
         // URLs
@@ -625,76 +640,355 @@ $proxy_url = "./proxy.php";
             }
         }
 
-        // Initialize the app
-        function initialize() {
-            debug('Initializing Poster Wall');
+        // 3. Centralized transition manager
+        const transitionManager = {
+            // Start a transition with proper state handling
+            start(fromItem, toItem, onComplete) {
+                // Don't start a new transition if one is in progress
+                if (state.transitionState !== TransitionState.IDLE) {
+                    debug("Transition already in progress, ignoring new request");
+                    return false;
+                }
 
-            // Check if we have content to display
-            if (!state.items || state.items.length === 0) {
-                showError('No content available. Please check your server connection and refresh the page.');
-                return;
-            }
+                // Get poster URLs for transition
+                const fromPosterUrl = getPosterUrl(fromItem);
+                const toPosterUrl = getPosterUrl(toItem);
 
-            // Add unique IDs to each item for better tracking
-            state.items = state.items.map(item => {
-                return { ...item, _id: state.uniqueId++ };
-            });
+                if (!fromPosterUrl || !toPosterUrl) {
+                    debug("Missing poster URLs for transition");
+                    if (onComplete) onComplete(false);
+                    return false;
+                }
 
-            // Preload current poster's images
-            if (state.items[state.currentIndex]) {
-                preloadStreamImages(state.items[state.currentIndex]);
-            }
+                // Update transition state
+                state.transitionState = TransitionState.PREPARING;
+                state.transitionStartTime = Date.now();
+                state.transitionTarget = {
+                    fromItem,
+                    toItem,
+                    onComplete
+                };
 
-            // Set initial poster
-            updateDisplay();
+                // Lock dimensions during transition
+                this.lockDimensions();
 
-            // Start display timer only if we have multiple items to show 
-            // and not showing just a single stream
-            if (!state.isStreaming || state.hasMultipleStreams) {
-                startDisplayTimer();
-            }
+                // Start background transition
+                this.transitionBackground(toItem);
 
-            // Start stream checking
-            startStreamChecking();
+                // Create tile grid
+                setTimeout(() => {
+                    this.createTiles(fromPosterUrl, toPosterUrl);
 
-            // Handle window resize
-            window.addEventListener('resize', adjustPosterSize);
-            adjustPosterSize();
+                    // Move to animation state
+                    state.transitionState = TransitionState.ANIMATING;
 
-            // Set up resize observer for poster container
-            if (window.ResizeObserver) {
-                const resizeObserver = new ResizeObserver(entries => {
-                    for (let entry of entries) {
-                        if (entry.target === posterContainer && !state.transitioning) {
-                            const width = entry.contentRect.width;
-                            const height = entry.contentRect.height;
+                    // Set safety timeout
+                    this.setTimeoutWithCleanup(this.completeTransition.bind(this), config.transitionDuration + 500);
+                }, 50);
 
-                            // Maintain 2:3 aspect ratio (width:height)
-                            const targetHeight = width * (3 / 2);
+                return true;
+            },
 
-                            if (Math.abs(height - targetHeight) > 1) {
-                                posterContainer.style.height = `${targetHeight}px`;
-                            }
-                        }
+            // Create visual tiles for the transition
+            createTiles(fromPosterUrl, toPosterUrl) {
+                // Clear existing content
+                posterContainer.innerHTML = '';
+
+                const width = posterContainer.offsetWidth;
+                const height = posterContainer.offsetHeight;
+
+                // Use precise calculations with Math.floor to avoid rounding issues
+                const tileWidth = Math.floor(width / config.tileCols);
+                const tileHeight = Math.floor(height / config.tileRows);
+
+                // Create and animate tiles
+                const tiles = [];
+
+                for (let row = 0; row < config.tileRows; row++) {
+                    for (let col = 0; col < config.tileCols; col++) {
+                        // Handle last row/column dimensions
+                        const isLastCol = col === config.tileCols - 1;
+                        const isLastRow = row === config.tileRows - 1;
+
+                        const tileWidthActual = isLastCol ? width - (col * tileWidth) : tileWidth;
+                        const tileHeightActual = isLastRow ? height - (row * tileHeight) : tileHeight;
+
+                        // Create tile with consistent styling
+                        const tile = document.createElement('div');
+                        tile.className = 'tile';
+                        tile.style.width = `${tileWidthActual}px`;
+                        tile.style.height = `${tileHeightActual}px`;
+                        tile.style.top = `${row * tileHeight}px`;
+                        tile.style.left = `${col * tileWidth}px`;
+
+                        // Front face (current poster)
+                        tile.style.backgroundImage = `url(${fromPosterUrl})`;
+                        tile.style.backgroundPosition = `-${col * tileWidth}px -${row * tileHeight}px`;
+                        tile.style.backgroundSize = `${width}px ${height}px`;
+
+                        // Back face (target poster)
+                        const tileBack = document.createElement('div');
+                        tileBack.className = 'tile-back';
+                        tileBack.style.backgroundImage = `url(${toPosterUrl})`;
+                        tileBack.style.backgroundPosition = `-${col * tileWidth}px -${row * tileHeight}px`;
+                        tileBack.style.backgroundSize = `${width}px ${height}px`;
+
+                        tile.appendChild(tileBack);
+                        posterContainer.appendChild(tile);
+                        tiles.push(tile);
                     }
+                }
+
+                // Add stream info if needed
+                if (state.transitionTarget &&
+                    (state.isStreaming || state.transitionTarget.fromItem.user)) {
+                    this.addStreamingElements(state.transitionTarget.fromItem);
+                }
+
+                // Shuffle and animate tiles
+                this.animateTiles(tiles);
+            },
+
+            // Add streaming badge and info during transition
+            addStreamingElements(item) {
+                // Add streaming badge
+                const badge = document.createElement('div');
+                badge.className = 'streaming-badge';
+                badge.textContent = 'Currently Streaming';
+                badge.style.position = 'absolute';
+                badge.style.zIndex = '10';
+                posterContainer.appendChild(badge);
+
+                // Add stream info container
+                const infoContainer = document.createElement('div');
+                infoContainer.style.position = 'absolute';
+                infoContainer.style.bottom = '0';
+                infoContainer.style.left = '0';
+                infoContainer.style.width = '100%';
+                infoContainer.style.zIndex = '10';
+                posterContainer.appendChild(infoContainer);
+
+                // Add stream info
+                addStreamInfo(item, infoContainer);
+            },
+
+            // Animate tiles with proper cleanup
+            animateTiles(tiles) {
+                // Randomize animation order
+                shuffleArray(tiles);
+
+                const totalTiles = tiles.length;
+                const maxDelay = config.transitionDuration * 0.95;
+                let animatedTiles = 0;
+
+                // Animate each tile with an eased delay
+                tiles.forEach((tile, index) => {
+                    // Create slight ease-out effect
+                    const progress = index / totalTiles;
+                    const easedProgress = progress < 0.8 ?
+                        progress : 0.8 + (progress - 0.8) * 0.7;
+
+                    const delay = easedProgress * maxDelay;
+
+                    // Start animation after delay
+                    setTimeout(() => {
+                        tile.style.transform = 'rotateY(180deg)';
+                        animatedTiles++;
+
+                        // Check if all tiles have animated
+                        if (animatedTiles === totalTiles) {
+                            // Move to finalizing state
+                            state.transitionState = TransitionState.FINALIZING;
+
+                            // Allow a small delay for all visual effects to complete
+                            setTimeout(() => {
+                                this.completeTransition();
+                            }, 200);
+                        }
+                    }, delay);
                 });
+            },
 
-                resizeObserver.observe(posterContainer);
+            // Transition background image
+            transitionBackground(toItem) {
+                const artUrl = toItem.art || toItem.thumb ?
+                    getProxyUrl(toItem.art || toItem.thumb) : '';
+
+                if (artUrl) {
+                    // Set overlay to the new background
+                    backgroundOverlay.style.backgroundImage = `url(${artUrl})`;
+
+                    // Fade in overlay
+                    setTimeout(() => {
+                        backgroundOverlay.style.opacity = '0.4';
+                    }, 100);
+
+                    // Set main background after animation completes
+                    setTimeout(() => {
+                        background.style.backgroundImage = `url(${artUrl})`;
+                        backgroundOverlay.style.opacity = '0';
+                    }, config.transitionDuration + 500);
+                }
+            },
+
+            // Complete transition and clean up
+            completeTransition() {
+                // Only complete once
+                if (state.transitionState === TransitionState.IDLE) {
+                    return;
+                }
+
+                // Get target info
+                const target = state.transitionTarget;
+
+                // Clean up all timers
+                this.clearAllTransitionTimers();
+
+                // Unlock dimensions
+                this.unlockDimensions();
+
+                // Reset state to idle
+                state.transitionState = TransitionState.IDLE;
+                state.transitionStartTime = 0;
+
+                // Run completion callback if available
+                if (target && target.onComplete) {
+                    try {
+                        target.onComplete(true);
+                    } catch (e) {
+                        console.error('Error in transition callback:', e);
+                    }
+                }
+
+                // Reset transition target
+                state.transitionTarget = null;
+
+                // Update display
+                updateDisplay();
+            },
+
+            // Lock dimensions during transition
+            lockDimensions() {
+                const width = posterContainer.offsetWidth;
+                const height = posterContainer.offsetHeight;
+
+                state.lockedDimensions = {
+                    width: posterContainer.style.width,
+                    height: posterContainer.style.height
+                };
+
+                posterContainer.style.width = `${width}px`;
+                posterContainer.style.height = `${height}px`;
+            },
+
+            // Unlock dimensions after transition
+            unlockDimensions() {
+                if (state.lockedDimensions) {
+                    posterContainer.style.width = state.lockedDimensions.width;
+                    posterContainer.style.height = state.lockedDimensions.height;
+                    state.lockedDimensions = null;
+                }
+            },
+
+            // Set a timeout that won't be left dangling
+            setTimeoutWithCleanup(callback, delay) {
+                // Clear existing timeout
+                if (state.transitionTimeout) {
+                    clearTimeout(state.transitionTimeout);
+                }
+
+                // Set new timeout
+                state.transitionTimeout = setTimeout(() => {
+                    state.transitionTimeout = null;
+                    callback();
+                }, delay);
+
+                return state.transitionTimeout;
+            },
+
+            // Clean up all transition timers
+            clearAllTransitionTimers() {
+                if (state.transitionTimeout) {
+                    clearTimeout(state.transitionTimeout);
+                    state.transitionTimeout = null;
+                }
+            },
+
+            // Safety check - force complete if stuck
+            checkForStuckTransition() {
+                if (state.transitionState !== TransitionState.IDLE) {
+                    const currentTime = Date.now();
+                    const duration = currentTime - state.transitionStartTime;
+
+                    // If transition has been going for too long, force completion
+                    if (duration > config.transitionDuration * 2) {
+                        debug("Transition appears stuck, forcing completion");
+                        this.completeTransition();
+                        return true;
+                    }
+                }
+
+                return false;
             }
-        }
+        };
 
-        // Show error message
-        function showError(message) {
-            posterContainer.innerHTML = `
-                <div class="error-container">
-                    <h2>Error</h2>
-                    <p>${message}</p>
-                    <button onclick="location.reload()" style="margin-top: 20px; padding: 10px 20px; background: #cc7b19; border: none; color: white; border-radius: 5px; cursor: pointer;">
-                        Retry
-                    </button>
-                </div>
-            `;
-        }
+        // 1. Revise the timer manager to ensure stream checks happen reliably
+        const timerManager = {
+            // Start display timer with proper cleanup
+            startDisplayTimer() {
+                this.stopDisplayTimer();
+
+                state.displayTimer = setInterval(() => {
+                    // Only proceed if no transition is happening
+                    if (state.transitionState === TransitionState.IDLE) {
+                        nextPoster();
+                    }
+                }, config.displayDuration);
+
+                debug('Display timer started');
+            },
+
+            // Stop display timer
+            stopDisplayTimer() {
+                if (state.displayTimer) {
+                    clearInterval(state.displayTimer);
+                    state.displayTimer = null;
+                    debug('Display timer stopped');
+                }
+            },
+
+            // Start stream checking with proper cleanup - FIXED
+            startStreamChecking() {
+                // Clear existing timer first
+                if (state.streamCheckTimer) {
+                    clearInterval(state.streamCheckTimer);
+                    state.streamCheckTimer = null;
+                }
+
+                // Run an initial check immediately
+                checkForStreams();
+
+                // Set up regular interval for checking
+                state.streamCheckTimer = setInterval(checkForStreams, config.streamCheckInterval);
+
+                debug('Stream checking started');
+            },
+
+            // Clean up all timers
+            cleanupAllTimers() {
+                this.stopDisplayTimer();
+
+                if (state.streamCheckTimer) {
+                    clearInterval(state.streamCheckTimer);
+                    state.streamCheckTimer = null;
+                }
+
+                if (state.transitionTimeout) {
+                    clearTimeout(state.transitionTimeout);
+                    state.transitionTimeout = null;
+                }
+            }
+        };
 
         // Helper function to convert Plex URLs to proxy URLs
         function getProxyUrl(plexUrl) {
@@ -702,39 +996,13 @@ $proxy_url = "./proxy.php";
             return `${urls.proxy}?path=${btoa(plexUrl)}`;
         }
 
-        // Start display timer
-        function startDisplayTimer() {
-            // Clear existing timer
-            stopDisplayTimer();
+        // Helper to get the poster URL for an item
+        function getPosterUrl(item) {
+            if (!item) return '';
 
-            // Start new timer
-            debug('Starting display timer');
-            state.displayTimer = setInterval(nextPoster, config.displayDuration);
-        }
-
-        // Stop display timer
-        function stopDisplayTimer() {
-            if (state.displayTimer) {
-                debug('Stopping display timer');
-                clearInterval(state.displayTimer);
-                state.displayTimer = null;
-            }
-        }
-
-        // Start stream checking
-        function startStreamChecking() {
-            // Check immediately on start
-            scheduleStreamCheck(0);
-
-            // Clear existing timer
-            if (state.streamCheckTimer) {
-                clearInterval(state.streamCheckTimer);
-            }
-
-            // Start new timer
-            state.streamCheckTimer = setInterval(() => {
-                scheduleStreamCheck();
-            }, config.streamCheckInterval);
+            return (item.type === 'episode' && item.show_thumb) ?
+                getProxyUrl(item.show_thumb) :
+                (item.thumb ? getProxyUrl(item.thumb) : '');
         }
 
         // Schedule a stream check with debouncing
@@ -757,26 +1025,17 @@ $proxy_url = "./proxy.php";
             return `${stream.title}_${stream.user}`;
         }
 
-        // Check for streams
+        // 2. Simplified stream check function - FIXED to be more direct
         function checkForStreams() {
-            const now = Date.now();
-
-            // Ensure we don't check too frequently (debounce)
-            if (now - state.lastStreamCheck < config.streamCheckDebounce) {
-                debug('Skipping stream check - too soon since last check');
-                return;
-            }
-
-            state.lastStreamCheck = now;
-
             debug('Checking for active streams...');
 
-            // Skip if we're in the middle of a transition or lock
-            if (state.transitioning || state.transitionLock) {
-                debug('Skipping stream check - in transition or locked');
+            // Skip check if in the middle of a transition
+            if (state.transitionState !== TransitionState.IDLE) {
+                debug('Skipping stream check - in transition');
                 return;
             }
 
+            // Make direct API call to check streams endpoint
             fetch(urls.checkStreams)
                 .then(response => {
                     if (!response.ok) {
@@ -785,416 +1044,582 @@ $proxy_url = "./proxy.php";
                     return response.json();
                 })
                 .then(data => {
-                    // Apply transition lock to ensure nothing interrupts our state changes
-                    state.transitionLock = true;
+                    debug(`Stream check response: Active streams: ${(data.active_streams || []).length}, Random items: ${(data.random_items || []).length}`);
 
-                    try {
-                        processStreamCheckResult(data);
-                    } finally {
-                        // Ensure lock gets removed even if there's an error
-                        setTimeout(() => {
-                            state.transitionLock = false;
-                        }, 500);
+                    // Process stream data 
+                    if (data && (data.active_streams || data.random_items)) {
+                        handleStreamCheck(data);
                     }
                 })
                 .catch(error => {
                     console.error('Error checking for streams:', error);
-                    state.transitionLock = false;
                 });
         }
 
-        // Process the result of a stream check
-        function processStreamCheckResult(data) {
-            debug('Processing stream check result');
-
+        function handleStreamCheck(data) {
             // Add unique IDs to all items
-            let activeStreams = (data.active_streams || []).map(item => {
-                return { ...item, _id: state.uniqueId++ };
-            });
+            const activeStreams = (data.active_streams || []).map(item => ({
+                ...item,
+                _id: state.uniqueId++
+            }));
 
-            let randomItems = (data.random_items || []).map(item => {
-                return { ...item, _id: state.uniqueId++ };
-            });
+            const randomItems = (data.random_items || []).map(item => ({
+                ...item,
+                _id: state.uniqueId++
+            }));
 
+            // Determine if we should be streaming
+            const shouldBeStreaming = activeStreams.length > 0;
+            const shouldHaveMultipleStreams = activeStreams.length > 1;
+
+            // Current state and item
+            const isStreaming = state.isStreaming;
+            const currentItem = state.items[state.currentIndex];
+
+            debug(`Stream check result: Should be streaming: ${shouldBeStreaming}, Current streaming: ${isStreaming}`);
+
+            // Handle state transitions
+            if (!isStreaming && shouldBeStreaming) {
+                // Switch from random items to streaming
+                debug('Switching to streaming mode');
+
+                // Preload images
+                if (activeStreams[0]) {
+                    preloadStreamImages(activeStreams[0]);
+                }
+
+                // Transition to streaming
+                transitionManager.start(currentItem, activeStreams[0], success => {
+                    if (success) {
+                        // Update state after transition
+                        state.isStreaming = true;
+                        state.hasMultipleStreams = shouldHaveMultipleStreams;
+                        state.items = activeStreams;
+                        state.currentIndex = 0;
+
+                        // Control display timer based on number of streams
+                        if (shouldHaveMultipleStreams) {
+                            timerManager.startDisplayTimer();
+                        } else {
+                            timerManager.stopDisplayTimer();
+                        }
+
+                        debug('Now in streaming mode');
+                    }
+                });
+            }
+            else if (isStreaming && !shouldBeStreaming) {
+                // Switch from streaming to random items
+                debug('Switching back to random posters');
+
+                if (randomItems.length === 0) {
+                    debug('No random items available');
+                    return;
+                }
+
+                // Preload images
+                preloadStreamImages(randomItems[0]);
+
+                // Transition to random items
+                transitionManager.start(currentItem, randomItems[0], success => {
+                    if (success) {
+                        // Update state after transition
+                        state.isStreaming = false;
+                        state.hasMultipleStreams = false;
+                        state.items = randomItems;
+                        state.currentIndex = 0;
+
+                        // Always start display timer for random posters
+                        timerManager.startDisplayTimer();
+
+                        debug('Now showing random posters');
+                    }
+                });
+            }
+            else if (isStreaming && shouldBeStreaming) {
+                // Update active streams or handle streams that were added/removed
+                updateActiveStreams(currentItem, activeStreams, shouldHaveMultipleStreams);
+            }
+            else if (!isStreaming && randomItems.length > 0) {
+                // Store random items for next batch
+                state.nextBatch = randomItems;
+            }
+        }
+
+        function updateActiveStreams(currentItem, newStreams, hasMultipleStreams) {
+            // If we have no current item, use the first new stream
+            if (!currentItem && newStreams.length > 0) {
+                state.items = newStreams;
+                state.currentIndex = 0;
+                state.hasMultipleStreams = hasMultipleStreams;
+                updateDisplay();
+                return;
+            }
+
+            // Check if current stream still exists
+            const currentKey = currentItem ? getStreamKey(currentItem) : null;
+            const stillExists = currentKey ?
+                newStreams.some(s => getStreamKey(s) === currentKey) : false;
+
+            if (stillExists) {
+                // Current stream still exists, just update the streams array
+                const newIndex = newStreams.findIndex(s => getStreamKey(s) === currentKey);
+
+                state.items = newStreams;
+                state.currentIndex = newIndex !== -1 ? newIndex : 0;
+                state.hasMultipleStreams = hasMultipleStreams;
+
+                // Update timer based on stream count
+                if (hasMultipleStreams) {
+                    timerManager.startDisplayTimer();
+                } else {
+                    timerManager.stopDisplayTimer();
+                }
+
+                // Update display to refresh progress
+                updateStreamInfo(state.items[state.currentIndex]);
+                debug('Updated existing stream info');
+            }
+            else {
+                // Current stream was removed, transition to a new one
+                debug('Current stream was removed, transitioning to new stream');
+
+                transitionManager.start(currentItem, newStreams[0], success => {
+                    if (success) {
+                        state.items = newStreams;
+                        state.currentIndex = 0;
+                        state.hasMultipleStreams = hasMultipleStreams;
+
+                        // Update timer based on stream count
+                        if (hasMultipleStreams) {
+                            timerManager.startDisplayTimer();
+                        } else {
+                            timerManager.stopDisplayTimer();
+                        }
+
+                        debug('Transitioned to new stream');
+                    }
+                });
+            }
+        }
+
+        // Process stream data with simplified state management
+        function processStreamData(data) {
+            // Add unique IDs to all items
+            const activeStreams = (data.active_streams || []).map(item => ({
+                ...item,
+                _id: state.uniqueId++
+            }));
+
+            const randomItems = (data.random_items || []).map(item => ({
+                ...item,
+                _id: state.uniqueId++
+            }));
+
+            // Capture current state
             const wasStreaming = state.isStreaming;
             const hadMultipleStreams = state.hasMultipleStreams;
+            const currentItem = state.items[state.currentIndex];
 
-            // Check current state
+            // Calculate new state
             const isStreaming = activeStreams.length > 0;
             const hasMultipleStreams = activeStreams.length > 1;
 
             debug(`Stream check: was=${wasStreaming}(${hadMultipleStreams ? 'multiple' : 'single'}), now=${isStreaming}(${hasMultipleStreams ? 'multiple' : 'single'})`);
 
             // VERY IMPORTANT: Remember the current item being displayed
-            const currentDisplayedItem = state.items[state.currentIndex];
-            if (!currentDisplayedItem) {
-                debug('No current item found - this should not happen');
-            } else {
-                debug(`Current displayed item: ${currentDisplayedItem.title}`);
-            }
+            debug(`Current displayed item: ${currentItem ? currentItem.title : 'none'}`);
 
-            // Save current streams for tracking stream changes
+            // Save current streams for tracking
             if (state.isStreaming) {
                 state.previousStreams = [...state.items];
             }
 
-            // Calculate new streaming state
-
-            // Case 1: Switching from no streams to streaming
+            // Determine transition needed
             if (!wasStreaming && isStreaming) {
+                // Transition from random to streaming
                 debug(`Switching to streaming mode. Streams: ${activeStreams.length}`);
-                handleSwitchToStreaming(currentDisplayedItem, activeStreams, hasMultipleStreams);
+
+                // Preload the stream images
+                preloadStreamImages(activeStreams[0]);
+
+                // Start transition to first stream
+                transitionManager.start(currentItem, activeStreams[0], success => {
+                    if (success) {
+                        // Update state after transition
+                        state.isStreaming = true;
+                        state.hasMultipleStreams = hasMultipleStreams;
+                        state.items = activeStreams;
+                        state.currentIndex = 0;
+
+                        // Manage timer based on stream count
+                        if (hasMultipleStreams) {
+                            timerManager.startDisplayTimer();
+                        } else {
+                            timerManager.stopDisplayTimer();
+                        }
+
+                        debug('Transition to streaming mode complete');
+                    }
+                });
             }
-            // Case 2: Switching from streaming to no streams
             else if (wasStreaming && !isStreaming) {
+                // Transition from streaming to random
                 debug('Switching back to random posters');
-                handleSwitchToRandom(currentDisplayedItem, randomItems);
+
+                // Ensure we have random items
+                if (randomItems.length === 0) {
+                    debug('No random items available');
+                    return;
+                }
+
+                // Preload random poster
+                preloadStreamImages(randomItems[0]);
+
+                // Start transition
+                transitionManager.start(currentItem, randomItems[0], success => {
+                    if (success) {
+                        // Update state after transition
+                        state.isStreaming = false;
+                        state.hasMultipleStreams = false;
+                        state.items = randomItems;
+                        state.currentIndex = 0;
+
+                        // Always start timer for random posters
+                        timerManager.startDisplayTimer();
+
+                        debug('Transition to random posters complete');
+                    }
+                });
             }
-            // Case 3: Staying in streaming mode but stream count changed
             else if (wasStreaming && isStreaming) {
-                debug(`Stream count: ${activeStreams.length}`);
-                handleStreamChanges(currentDisplayedItem, activeStreams, hadMultipleStreams, hasMultipleStreams);
-            }
-            // Case 4: Store random items for later use
-            else if (!state.isStreaming && randomItems.length > 0 && state.pendingBatch === null) {
-                // Store random items for next batch
-                state.pendingBatch = randomItems;
-            }
-        }
+                // Handle stream changes
+                // Use keys to detect changes
+                const currentKeys = new Set(state.items.map(getStreamKey));
+                const newKeys = new Set(activeStreams.map(getStreamKey));
 
-        // Handle switching from no streams to active streams
-        function handleSwitchToStreaming(currentDisplayedItem, activeStreams, hasMultipleStreams) {
-            // Get the current random poster for transition
-            const currentRandomPoster = currentDisplayedItem;
+                // Find streams that have been added or removed
+                const removedStreams = state.items.filter(s => !newKeys.has(getStreamKey(s)));
+                const addedStreams = activeStreams.filter(s => !currentKeys.has(getStreamKey(s)));
 
-            // Preload the stream images
-            preloadStreamImages(activeStreams[0]);
+                const streamsChanged = removedStreams.length > 0 || addedStreams.length > 0;
+                debug(`Stream analysis: removed=${removedStreams.length}, added=${addedStreams.length}, changed=${streamsChanged}`);
 
-            // Create transition items array with current random poster and first stream
-            const transitionItems = [currentRandomPoster, activeStreams[0]];
-
-            debug(`Transitioning from random "${currentRandomPoster.title}" to stream "${activeStreams[0].title}"`);
-
-            // Create transition with callback
-            performTransition(0, 1, transitionItems, () => {
-                // After transition completes, update full state
-                state.isStreaming = true;
-                state.hasMultipleStreams = hasMultipleStreams;
-                state.items = activeStreams;
-                state.currentIndex = 0;
-
-                // Start or stop the display timer based on number of streams
-                if (hasMultipleStreams) {
-                    startDisplayTimer();
-                } else {
-                    stopDisplayTimer();
-                }
-
-                debug('Transition to streaming mode complete');
-            });
-        }
-
-        // Handle switching from streams to random posters
-        function handleSwitchToRandom(currentDisplayedItem, randomItems) {
-            // Get the current stream for transition
-            const currentStream = currentDisplayedItem;
-
-            // Ensure we have random items to transition to
-            if (randomItems.length === 0) {
-                debug('No random items available for transition');
-                state.isStreaming = false;
-                state.hasMultipleStreams = false;
-                state.items = [];
-                state.currentIndex = 0;
-                updateDisplay();
-                return;
-            }
-
-            // Preload the random poster image
-            preloadStreamImages(randomItems[0]);
-
-            // Create transition items array with current stream and first random poster
-            const transitionItems = [currentStream, randomItems[0]];
-
-            debug(`Transitioning from stream "${currentStream.title}" to random "${randomItems[0].title}"`);
-
-            // Perform transition with callback
-            performTransition(0, 1, transitionItems, () => {
-                // After transition completes, update full state
-                state.isStreaming = false;
-                state.hasMultipleStreams = false;
-                state.items = randomItems;
-                state.currentIndex = 0;
-
-                // Always start transition timer for random posters
-                startDisplayTimer();
-
-                debug('Transition to random posters complete');
-            });
-        }
-
-        // Handle changes to the stream list
-        function handleStreamChanges(currentDisplayedItem, activeStreams, hadMultipleStreams, hasMultipleStreams) {
-            // Use keys to more accurately detect changes
-            const currentStreamsKeys = new Set(state.items.map(getStreamKey));
-            const newStreamsKeys = new Set(activeStreams.map(getStreamKey));
-
-            // Find streams that have been removed
-            const removedStreams = state.items.filter(stream =>
-                !newStreamsKeys.has(getStreamKey(stream))
-            );
-
-            // Find streams that have been added
-            const addedStreams = activeStreams.filter(stream =>
-                !currentStreamsKeys.has(getStreamKey(stream))
-            );
-
-            // Only consider it a change if streams were added or removed
-            const streamsChanged = removedStreams.length > 0 || addedStreams.length > 0;
-
-            debug(`Stream analysis: removed=${removedStreams.length}, added=${addedStreams.length}, changed=${streamsChanged}`);
-
-            if (streamsChanged) {
-                debug('Stream list changed, updating');
-
-                // If changing from multiple to single stream
-                if (hadMultipleStreams && !hasMultipleStreams) {
-                    debug('Switching from multiple streams to single stream');
-                    handleMultipleToSingleStream(currentDisplayedItem, activeStreams);
-                }
-                // If changing from single to multiple streams
-                else if (!hadMultipleStreams && hasMultipleStreams) {
-                    debug('Switching from single stream to multiple streams');
-                    handleSingleToMultipleStreams(currentDisplayedItem, activeStreams);
-                }
-                // If staying with multiple streams but the list changed
-                else if (hasMultipleStreams) {
-                    debug('Updating multiple streams list');
-                    handleMultipleStreamsUpdate(currentDisplayedItem, activeStreams, removedStreams);
-                }
-                // If staying with single stream but the stream changed
-                else {
-                    debug('Switching to different single stream');
-                    handleSingleStreamUpdate(currentDisplayedItem, activeStreams);
-                }
-            } else {
-                // Same streams, just update progress if streaming
-                if (state.isStreaming) {
+                if (!streamsChanged) {
+                    // Just update progress data
                     debug('Same streams, updating progress');
-
-                    // Update with new progress data while preserving current index
-                    const currentStreamKey = getStreamKey(currentDisplayedItem);
-
                     state.items = activeStreams;
 
-                    // Find the same stream in the updated array
-                    const newIndex = activeStreams.findIndex(s =>
-                        getStreamKey(s) === currentStreamKey);
+                    // Find the current stream in the updated array
+                    const currentKey = currentItem ? getStreamKey(currentItem) : null;
+                    const newIndex = currentKey ? activeStreams.findIndex(s => getStreamKey(s) === currentKey) : -1;
 
                     if (newIndex !== -1) {
                         state.currentIndex = newIndex;
                     }
 
                     updateStreamInfo(state.items[state.currentIndex]);
+                    return;
                 }
+
+                // Handle different transition scenarios based on multiple/single streams
+                if (hadMultipleStreams && !hasMultipleStreams) {
+                    debug('Switching from multiple streams to single stream');
+
+                    if (activeStreams.length === 0) return;
+
+                    const currentKey = currentItem ? getStreamKey(currentItem) : null;
+                    const newStream = activeStreams[0];
+                    const newKey = getStreamKey(newStream);
+
+                    // Check if current stream is the remaining one
+                    if (currentKey === newKey) {
+                        // No transition needed
+                        state.items = activeStreams;
+                        state.hasMultipleStreams = false;
+                        state.currentIndex = 0;
+                        timerManager.stopDisplayTimer();
+                        updateStreamInfo(newStream);
+                        debug('Current stream is the remaining stream, no transition needed');
+                    } else {
+                        // Transition to the remaining stream
+                        transitionManager.start(currentItem, newStream, success => {
+                            if (success) {
+                                state.items = activeStreams;
+                                state.hasMultipleStreams = false;
+                                state.currentIndex = 0;
+                                timerManager.stopDisplayTimer();
+                                debug('Transition to single stream complete');
+                            }
+                        });
+                    }
+                }
+                else if (!hadMultipleStreams && hasMultipleStreams) {
+                    debug('Switching from single stream to multiple streams');
+
+                    if (activeStreams.length < 2) return;
+
+                    // Find a different stream to transition to
+                    const currentKey = currentItem ? getStreamKey(currentItem) : null;
+                    const targetIndex = currentKey ?
+                        activeStreams.findIndex(s => getStreamKey(s) !== currentKey) : 0;
+                    const targetStream = activeStreams[targetIndex !== -1 ? targetIndex : 1];
+
+                    // Transition to the new stream
+                    transitionManager.start(currentItem, targetStream, success => {
+                        if (success) {
+                            state.items = activeStreams;
+                            state.hasMultipleStreams = true;
+                            state.currentIndex = targetIndex !== -1 ? targetIndex : 1;
+                            timerManager.startDisplayTimer();
+                            debug('Transition to multiple streams complete');
+                        }
+                    });
+                }
+                else if (hasMultipleStreams) {
+                    debug('Updating multiple streams list');
+
+                    const currentKey = currentItem ? getStreamKey(currentItem) : null;
+                    const currentRemoved = currentKey ?
+                        removedStreams.some(s => getStreamKey(s) === currentKey) : false;
+
+                    if (currentRemoved) {
+                        // Transition to first available stream
+                        transitionManager.start(currentItem, activeStreams[0], success => {
+                            if (success) {
+                                state.items = activeStreams;
+                                state.hasMultipleStreams = true;
+                                state.currentIndex = 0;
+                                timerManager.startDisplayTimer();
+                                debug('Transition after stream removal complete');
+                            }
+                        });
+                    } else {
+                        // Find current stream in new list
+                        const newIndex = currentKey ?
+                            activeStreams.findIndex(s => getStreamKey(s) === currentKey) : 0;
+
+                        state.items = activeStreams;
+                        state.currentIndex = newIndex !== -1 ? newIndex : 0;
+                        timerManager.startDisplayTimer();
+                        updateDisplay();
+                        debug('Updated multiple streams without transition');
+                    }
+                }
+                else {
+                    debug('Switching to different single stream');
+
+                    if (activeStreams.length === 0) return;
+
+                    // Transition to the new stream
+                    transitionManager.start(currentItem, activeStreams[0], success => {
+                        if (success) {
+                            state.items = activeStreams;
+                            state.hasMultipleStreams = false;
+                            state.currentIndex = 0;
+                            debug('Transition to new single stream complete');
+                        }
+                    });
+                }
+            }
+            else if (!wasStreaming && randomItems.length > 0) {
+                // Store random items for next batch
+                state.nextBatch = randomItems;
+                debug('Stored random items for next batch');
+            }
+        }
+
+        // Handle transition from random to streaming
+        function transitionToStreaming(currentItem, activeStreams, hasMultipleStreams) {
+            debug(`Switching to streaming mode. Streams: ${activeStreams.length}`);
+
+            // Preload the stream images
+            preloadStreamImages(activeStreams[0]);
+
+            // Start transition to first stream
+            transitionManager.start(currentItem, activeStreams[0], success => {
+                if (success) {
+                    // Update state after transition
+                    state.isStreaming = true;
+                    state.hasMultipleStreams = hasMultipleStreams;
+                    state.items = activeStreams;
+                    state.currentIndex = 0;
+
+                    // Manage timer based on stream count
+                    if (hasMultipleStreams) {
+                        timerManager.startDisplayTimer();
+                    } else {
+                        timerManager.stopDisplayTimer();
+                    }
+                }
+            });
+        }
+
+        // Handle transition from streaming to random
+        function transitionToRandom(currentItem, randomItems) {
+            debug('Switching back to random posters');
+
+            // Ensure we have random items
+            if (randomItems.length === 0) {
+                debug('No random items available');
+                return;
+            }
+
+            // Preload random poster
+            preloadStreamImages(randomItems[0]);
+
+            // Start transition
+            transitionManager.start(currentItem, randomItems[0], success => {
+                if (success) {
+                    // Update state after transition
+                    state.isStreaming = false;
+                    state.hasMultipleStreams = false;
+                    state.items = randomItems;
+                    state.currentIndex = 0;
+
+                    // Always start timer for random posters
+                    timerManager.startDisplayTimer();
+                }
+            });
+        }
+
+        // Handle updates to the stream list
+        function updateStreams(currentItem, activeStreams, hasMultipleStreams) {
+            // Use keys to detect changes
+            const currentKey = getStreamKey(currentItem);
+            const currentKeys = new Set(state.items.map(getStreamKey));
+            const newKeys = new Set(activeStreams.map(getStreamKey));
+
+            // Find streams that have been added or removed
+            const removedStreams = state.items.filter(s => !newKeys.has(getStreamKey(s)));
+            const addedStreams = activeStreams.filter(s => !currentKeys.has(getStreamKey(s)));
+
+            const streamsChanged = removedStreams.length > 0 || addedStreams.length > 0;
+            debug(`Stream analysis: removed=${removedStreams.length}, added=${addedStreams.length}, changed=${streamsChanged}`);
+
+            if (!streamsChanged) {
+                // Just update progress data
+                state.items = activeStreams;
+
+                // Find the current stream in the updated array
+                const newIndex = activeStreams.findIndex(s => getStreamKey(s) === currentKey);
+                if (newIndex !== -1) {
+                    state.currentIndex = newIndex;
+                }
+
+                updateStreamInfo(state.items[state.currentIndex]);
+                return;
+            }
+
+            // Handle different transition scenarios
+            if (hadMultipleStreams && !hasMultipleStreams) {
+                handleMultipleToSingleStream(currentItem, activeStreams);
+            }
+            else if (!hadMultipleStreams && hasMultipleStreams) {
+                handleSingleToMultipleStreams(currentItem, activeStreams);
+            }
+            else if (hasMultipleStreams) {
+                handleMultipleStreamsUpdate(currentItem, activeStreams, removedStreams);
+            }
+            else {
+                handleSingleStreamUpdate(currentItem, activeStreams);
             }
         }
 
         // Handle transition from multiple streams to a single stream
-        function handleMultipleToSingleStream(currentDisplayedItem, activeStreams) {
-            // First make sure there is at least one stream
-            if (activeStreams.length === 0) {
-                debug('No streams left, unusual state');
-                state.isStreaming = false;
-                state.hasMultipleStreams = false;
-                // We should have caught this in the main handler
-                return;
-            }
+        function handleMultipleToSingleStream(currentItem, activeStreams) {
+            debug('Switching from multiple streams to single stream');
 
-            // We need to determine the right transition:
-            // 1. If current stream is gone, transition to the remaining stream
-            // 2. If current stream is the remaining stream, no transition needed
+            if (activeStreams.length === 0) return;
 
-            const currentStreamKey = getStreamKey(currentDisplayedItem);
-            const remainingStreamKey = getStreamKey(activeStreams[0]);
+            const currentKey = getStreamKey(currentItem);
+            const newStream = activeStreams[0];
+            const newKey = getStreamKey(newStream);
 
-            // Check if the current stream is still there
-            if (currentStreamKey === remainingStreamKey) {
-                debug('Current stream is the remaining stream, no transition needed');
+            // Check if current stream is the remaining one
+            if (currentKey === newKey) {
+                // No transition needed
                 state.items = activeStreams;
                 state.hasMultipleStreams = false;
                 state.currentIndex = 0;
-
-                // Stop timer for single stream
-                stopDisplayTimer();
-
-                // Just update info
-                updateStreamInfo(state.items[0]);
+                timerManager.stopDisplayTimer();
+                updateStreamInfo(newStream);
             } else {
-                debug('Current stream is gone, transitioning to remaining stream');
-
-                // Get current stream for transition
-                const currentStream = currentDisplayedItem;
-
-                // Preload the remaining stream
-                preloadStreamImages(activeStreams[0]);
-
-                // Create transition array with current and remaining stream
-                const transitionItems = [currentStream, activeStreams[0]];
-
-                debug(`Transitioning from "${currentStream.title}" to remaining stream "${activeStreams[0].title}"`);
-
-                // Perform transition with callback
-                performTransition(0, 1, transitionItems, () => {
-                    // After transition, update state
-                    state.items = activeStreams;
-                    state.hasMultipleStreams = false;
-                    state.currentIndex = 0;
-
-                    // Stop timer for single stream
-                    stopDisplayTimer();
-
-                    debug('Transition to single stream complete');
+                // Transition to the remaining stream
+                transitionManager.start(currentItem, newStream, success => {
+                    if (success) {
+                        state.items = activeStreams;
+                        state.hasMultipleStreams = false;
+                        state.currentIndex = 0;
+                        timerManager.stopDisplayTimer();
+                    }
                 });
             }
         }
 
         // Handle transition from single stream to multiple streams
-        function handleSingleToMultipleStreams(currentDisplayedItem, activeStreams) {
-            // Ensure we have at least 2 streams
-            if (activeStreams.length < 2) {
-                debug('Somehow switching to multiple streams but only have one stream');
-                state.items = activeStreams;
-                state.currentIndex = 0;
-                updateDisplay();
-                return;
-            }
+        function handleSingleToMultipleStreams(currentItem, activeStreams) {
+            debug('Switching from single stream to multiple streams');
 
-            // Deep clone the current stream
-            const currentStream = JSON.parse(JSON.stringify(currentDisplayedItem));
+            if (activeStreams.length < 2) return;
 
-            // Find the first stream in the new list that's DIFFERENT from our current one
-            const currentStreamKey = getStreamKey(currentStream);
-            let targetStreamIndex = -1;
+            // Find a different stream to transition to
+            const currentKey = getStreamKey(currentItem);
+            const targetIndex = activeStreams.findIndex(s => getStreamKey(s) !== currentKey);
+            const targetStream = activeStreams[targetIndex !== -1 ? targetIndex : 1];
 
-            for (let i = 0; i < activeStreams.length; i++) {
-                // Check if this stream is different from our current one
-                if (getStreamKey(activeStreams[i]) !== currentStreamKey) {
-                    targetStreamIndex = i;
-                    break;
+            // Transition to the new stream
+            transitionManager.start(currentItem, targetStream, success => {
+                if (success) {
+                    state.items = activeStreams;
+                    state.hasMultipleStreams = true;
+                    state.currentIndex = targetIndex !== -1 ? targetIndex : 1;
+                    timerManager.startDisplayTimer();
                 }
-            }
-
-            // If we couldn't find a different stream (unlikely), use the second stream
-            if (targetStreamIndex === -1) {
-                targetStreamIndex = 1; // Default to second stream
-            }
-
-            // Preload the stream images
-            preloadStreamImages(currentStream);
-            preloadStreamImages(activeStreams[targetStreamIndex]);
-
-            debug(`Will transition from "${currentStream.title}" to "${activeStreams[targetStreamIndex].title}"`);
-
-            // Create a dedicated transition array with exactly 2 items
-            const transitionItems = [currentStream, activeStreams[targetStreamIndex]];
-
-            // Perform transition with full callback
-            performTransition(0, 1, transitionItems, () => {
-                // After transition completes, update full state
-                state.items = activeStreams;
-                state.hasMultipleStreams = true;
-                state.currentIndex = targetStreamIndex; // IMPORTANT: Keep the current index at targetStreamIndex
-
-                // Start the timer for future transitions
-                startDisplayTimer();
-
-                debug('Stream transition complete');
             });
         }
 
         // Handle updates to multiple streams list
-        function handleMultipleStreamsUpdate(currentDisplayedItem, activeStreams, removedStreams) {
-            const currentStreamKey = getStreamKey(currentDisplayedItem);
+        function handleMultipleStreamsUpdate(currentItem, activeStreams, removedStreams) {
+            debug('Updating multiple streams list');
 
-            // Check if the current stream was removed
-            const currentStreamRemoved = removedStreams.some(s => getStreamKey(s) === currentStreamKey);
+            const currentKey = getStreamKey(currentItem);
+            const currentRemoved = removedStreams.some(s => getStreamKey(s) === currentKey);
 
-            if (currentStreamRemoved) {
-                debug('Current stream was removed, transitioning to another stream');
-
-                // Find a suitable stream to transition to
-                let targetStreamIndex = 0; // Default to first stream
-
-                // Create a transition array
-                const transitionItems = [currentDisplayedItem, activeStreams[targetStreamIndex]];
-
-                // Preload images
-                preloadStreamImages(activeStreams[targetStreamIndex]);
-
-                debug(`Transitioning from removed "${currentDisplayedItem.title}" to "${activeStreams[targetStreamIndex].title}"`);
-
-                // Perform transition with callback
-                performTransition(0, 1, transitionItems, () => {
-                    // After transition, update state
-                    state.items = activeStreams;
-                    state.hasMultipleStreams = true;
-                    state.currentIndex = targetStreamIndex;
-
-                    // Restart timer for multiple streams
-                    startDisplayTimer();
-
-                    debug('Transition after stream removal complete');
+            if (currentRemoved) {
+                // Transition to first available stream
+                transitionManager.start(currentItem, activeStreams[0], success => {
+                    if (success) {
+                        state.items = activeStreams;
+                        state.hasMultipleStreams = true;
+                        state.currentIndex = 0;
+                        timerManager.startDisplayTimer();
+                    }
                 });
             } else {
-                // Current stream is still in the list
+                // Find current stream in new list
+                const newIndex = activeStreams.findIndex(s => getStreamKey(s) === currentKey);
+
                 state.items = activeStreams;
-
-                // Find the current stream in the new list
-                const newIndex = activeStreams.findIndex(s => getStreamKey(s) === currentStreamKey);
-
-                if (newIndex !== -1) {
-                    state.currentIndex = newIndex;
-                } else {
-                    // This should not happen given our check above
-                    state.currentIndex = 0;
-                }
-
-                // Restart timer for multiple streams
-                startDisplayTimer();
-
-                // Just update the display
+                state.currentIndex = newIndex !== -1 ? newIndex : 0;
+                timerManager.startDisplayTimer();
                 updateDisplay();
             }
         }
 
         // Handle update to a single stream
-        function handleSingleStreamUpdate(currentDisplayedItem, activeStreams) {
-            // Check that we actually have a stream
-            if (activeStreams.length === 0) {
-                debug('No streams left, unusual state');
-                state.isStreaming = false;
-                state.hasMultipleStreams = false;
-                // We should have caught this in the main handler
-                return;
-            }
+        function handleSingleStreamUpdate(currentItem, activeStreams) {
+            debug('Switching to different single stream');
 
-            // Create transition to the new stream
-            const transitionItems = [currentDisplayedItem, activeStreams[0]];
+            if (activeStreams.length === 0) return;
 
-            debug(`Transitioning from "${currentDisplayedItem.title}" to new stream "${activeStreams[0].title}"`);
-
-            // Preload the new stream
-            preloadStreamImages(activeStreams[0]);
-
-            // Perform transition with callback
-            performTransition(0, 1, transitionItems, () => {
-                // After transition, update state
-                state.items = activeStreams;
-                state.hasMultipleStreams = false;
-                state.currentIndex = 0;
-
-                debug('Transition to new single stream complete');
+            // Transition to the new stream
+            transitionManager.start(currentItem, activeStreams[0], success => {
+                if (success) {
+                    state.items = activeStreams;
+                    state.hasMultipleStreams = false;
+                    state.currentIndex = 0;
+                }
             });
         }
 
@@ -1226,157 +1651,85 @@ $proxy_url = "./proxy.php";
             }
         }
 
-        // Load more random posters
-        function loadMorePosters() {
-            debug('Loading more posters...');
-
-            // If we already have a pending batch, use it
-            if (state.pendingBatch) {
-                processNewBatch(state.pendingBatch);
-                state.pendingBatch = null;
-                return;
-            }
-
-            // Set flag to avoid multiple requests
-            state.loadingNewBatch = true;
-
-            fetch(`${urls.checkStreams}?batch=${Math.floor(Math.random() * 1000)}`)
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! Status: ${response.status}`);
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    // Apply unique IDs to items
-                    const randomItems = (data.random_items || []).map(item => {
-                        return { ...item, _id: state.uniqueId++ };
-                    });
-
-                    const activeStreams = (data.active_streams || []).map(item => {
-                        return { ...item, _id: state.uniqueId++ };
-                    });
-
-                    // If we suddenly have active streams, switch to them
-                    if (activeStreams.length > 0 && !state.isStreaming) {
-                        state.isStreaming = true;
-                        state.hasMultipleStreams = activeStreams.length > 1;
-                        state.items = activeStreams;
-                        state.currentIndex = 0;
-
-                        if (state.hasMultipleStreams) {
-                            startDisplayTimer();
-                        } else {
-                            stopDisplayTimer();
-                        }
-
-                        updateDisplay();
-                        state.loadingNewBatch = false;
-                        return;
-                    }
-
-                    // If we're not streaming, process the new batch
-                    if (!state.isStreaming && randomItems.length > 0) {
-                        processNewBatch(randomItems);
-                    }
-
-                    // Reset loading flag
-                    state.loadingNewBatch = false;
-                })
-                .catch(error => {
-                    console.error('Error loading more posters:', error);
-                    state.loadingNewBatch = false;
-                });
-        }
-
-        // Process a new batch of posters with proper transition
-        function processNewBatch(newBatch) {
-            debug(`Processing new batch of ${newBatch.length} posters`);
-
-            // Save current item for transition
-            const currentItem = state.items[state.currentIndex];
-
-            // Create transition items array with just what we need for the transition
-            const transitionItems = [
-                currentItem,  // Current poster
-                newBatch[0]   // First poster in new batch
-            ];
-
-            // Preload images
-            preloadStreamImages(currentItem);
-            preloadStreamImages(newBatch[0]);
-
-            debug(`Transitioning batch: From "${currentItem.title}" to "${newBatch[0].title}"`);
-
-            // Perform transition with callback
-            performTransition(0, 1, transitionItems, () => {
-                // Update the items array after transition completes
-                state.items = newBatch;
-                state.currentIndex = 0;
-
-                debug('New batch loaded and transition completed');
-            });
-        }
-
-        // Move to next poster
+        // 5. Simplified poster navigation
         function nextPoster() {
-            if (state.transitioning || state.loadingNewBatch || state.transitionLock) {
-                debug('Skip nextPoster - transition state prevents it');
+            // Skip if transitioning
+            if (state.transitionState !== TransitionState.IDLE) {
                 return;
             }
 
-            // Skip transitions if we're showing a single stream
+            // Skip transitions for single stream
             if (state.isStreaming && !state.hasMultipleStreams) {
-                debug('Single stream mode - no transitions');
                 return;
             }
 
             // Check if we need to load more posters
-            if (!state.isStreaming && state.currentIndex >= config.preloadThreshold && !state.loadingNewBatch) {
-                debug(`At poster ${state.currentIndex} of ${state.items.length}, loading more`);
-                loadMorePosters();
+            if (!state.isStreaming && state.currentIndex >= config.preloadThreshold && state.nextBatch) {
+                loadNextBatch();
                 return;
             }
 
             // Calculate next index
             const nextIndex = (state.currentIndex + 1) % state.items.length;
 
-            debug(`Moving to next poster: ${state.currentIndex} -> ${nextIndex}`);
+            // Get items for transition
+            const fromItem = state.items[state.currentIndex];
+            const toItem = state.items[nextIndex];
 
-            // Preload next poster's images
-            if (state.items[nextIndex]) {
-                preloadStreamImages(state.items[nextIndex]);
-            }
+            // Preload next poster
+            preloadStreamImages(toItem);
 
-            // Transition to next poster
-            performTransition(state.currentIndex, nextIndex);
-
-            // Update current index
-            state.currentIndex = nextIndex;
+            // Start transition
+            transitionManager.start(fromItem, toItem, (success) => {
+                if (success) {
+                    // Update current index after successful transition
+                    state.currentIndex = nextIndex;
+                }
+            });
         }
 
-        // Perform a transition with safety mechanisms
-        function performTransition(fromIndex, toIndex, customItems, callback) {
-            // Apply transition lock
-            state.transitionLock = true;
+        // Load the next batch of random posters
+        function loadNextBatch() {
+            if (!state.nextBatch || state.nextBatch.length === 0) {
+                // If no pending batch, request new data
+                fetch(`${urls.checkStreams}?batch=${Math.floor(Math.random() * 1000)}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        const randomItems = (data.random_items || []).map(item => ({
+                            ...item,
+                            _id: state.uniqueId++
+                        }));
 
-            // Perform the actual transition
-            transition(fromIndex, toIndex, customItems, (...args) => {
-                // Remove transition lock after a delay
-                setTimeout(() => {
-                    state.transitionLock = false;
-                }, 100);
+                        if (randomItems.length > 0) {
+                            processNextBatch(randomItems);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error loading posters:', error);
+                    });
+            } else {
+                // Use the pending batch
+                processNextBatch(state.nextBatch);
+                state.nextBatch = null;
+            }
+        }
 
-                // Call the original callback if provided
-                if (callback) {
-                    callback(...args);
+        // Process a new batch of posters
+        function processNextBatch(newBatch) {
+            const currentItem = state.items[state.currentIndex];
+
+            // Transition to first poster in new batch
+            transitionManager.start(currentItem, newBatch[0], success => {
+                if (success) {
+                    state.items = newBatch;
+                    state.currentIndex = 0;
                 }
             });
         }
 
         // Update display with current item
         function updateDisplay() {
-            if (!state.items || state.items.length === 0 || state.transitioning) {
+            if (!state.items || state.items.length === 0 || state.transitionState !== TransitionState.IDLE) {
                 debug('Skip updateDisplay - invalid state');
                 return;
             }
@@ -1388,7 +1741,7 @@ $proxy_url = "./proxy.php";
                 return;
             }
 
-            debug(`Updating display to show: ${currentItem.title || 'Unknown'} (ID: ${currentItem._id || 'none'})`);
+            debug(`Updating display: ${currentItem.title || 'Unknown'} (ID: ${currentItem._id || 'none'})`);
 
             // Preload current item's images
             preloadStreamImages(currentItem);
@@ -1411,21 +1764,19 @@ $proxy_url = "./proxy.php";
             background.style.backgroundImage = artUrl ? `url(${artUrl})` : '';
 
             // Create poster
-            const posterUrl = (currentItem.type === 'episode' && currentItem.show_thumb) ?
-                getProxyUrl(currentItem.show_thumb) :
-                (currentItem.thumb ? getProxyUrl(currentItem.thumb) : '');
+            const posterUrl = getPosterUrl(currentItem);
 
             if (posterUrl) {
                 const poster = document.createElement('div');
                 poster.style.width = '100%';
                 poster.style.height = '100%';
                 poster.style.backgroundImage = `url(${posterUrl})`;
-                poster.style.backgroundSize = 'cover'; // Fill the container completely
+                poster.style.backgroundSize = 'cover';
                 poster.style.backgroundPosition = 'center';
                 poster.style.position = 'absolute';
                 poster.style.top = '0';
                 poster.style.left = '0';
-                poster.style.overflow = 'hidden'; // Prevent content from exceeding bounds
+                poster.style.overflow = 'hidden';
                 posterWrapper.appendChild(poster);
             }
 
@@ -1442,7 +1793,7 @@ $proxy_url = "./proxy.php";
             }
         }
 
-        // Update stream info only (for progress updates without changing the display)
+        // Update stream info only (for progress updates)
         function updateStreamInfo(stream) {
             if (!stream) return;
 
@@ -1456,7 +1807,7 @@ $proxy_url = "./proxy.php";
                 existingInfo.remove();
             }
 
-            // Add updated stream info to the wrapper
+            // Add updated stream info
             addStreamInfo(stream, posterWrapper);
         }
 
@@ -1491,254 +1842,23 @@ $proxy_url = "./proxy.php";
             container.appendChild(infoDiv);
         }
 
-        // Handle transition between posters
-        function transition(fromIndex, toIndex, customItems, callback) {
-            if (state.transitioning) {
-                debug('Skip transition - already transitioning');
-                return;
-            }
-
-            // Lock the poster container's dimensions
-            const lockedWidth = posterContainer.offsetWidth;
-            const lockedHeight = posterContainer.offsetHeight;
-
-            // Store original dimensions
-            const originalWidth = posterContainer.style.width;
-            const originalHeight = posterContainer.style.height;
-
-            // Apply fixed dimensions to prevent size shifts
-            posterContainer.style.width = `${lockedWidth}px`;
-            posterContainer.style.height = `${lockedHeight}px`;
-
-            // Store locked dimensions in state for possible restoration
-            state.lockedDimensions = {
-                originalWidth,
-                originalHeight,
-                lockedWidth,
-                lockedHeight
-            };
-
-            state.transitioning = true;
-            state.lastTransitionTime = Date.now();
-
-            // Clear any existing transition timeout
-            if (state.currentTransitionTimeout) {
-                clearTimeout(state.currentTransitionTimeout);
-                state.currentTransitionTimeout = null;
-            }
-
-            // Use custom items array if provided, otherwise use state.items
-            const items = customItems || state.items;
-
-            debug(`Starting transition from ${fromIndex} to ${toIndex} (Custom items: ${customItems ? 'Yes' : 'No'})`);
-
-            // Get items for transition
-            const fromItem = items[fromIndex];
-            const toItem = items[toIndex];
-
-            if (!fromItem || !toItem) {
-                debug('Invalid items for transition');
-                state.transitioning = false;
-                if (callback) callback();
-                updateDisplay();
-                return;
-            }
-
-            // Get URLs for transition
-            const fromPosterUrl = (fromItem.type === 'episode' && fromItem.show_thumb) ?
-                getProxyUrl(fromItem.show_thumb) :
-                (fromItem.thumb ? getProxyUrl(fromItem.thumb) : '');
-
-            const toPosterUrl = (toItem.type === 'episode' && toItem.show_thumb) ?
-                getProxyUrl(toItem.show_thumb) :
-                (toItem.thumb ? getProxyUrl(toItem.thumb) : '');
-
-            if (!fromPosterUrl || !toPosterUrl) {
-                debug('Missing poster URLs for transition');
-                state.transitioning = false;
-                if (callback) callback();
-                updateDisplay();
-                return;
-            }
-
-            // Update background for destination item - SMOOTH TRANSITION
-            const artUrl = toItem.art || toItem.thumb ?
-                getProxyUrl(toItem.art || toItem.thumb) : '';
-
-            if (artUrl) {
-                // Set the new background image on the overlay
-                backgroundOverlay.style.backgroundImage = `url(${artUrl})`;
-
-                // Fade in the overlay with the new background
-                setTimeout(() => {
-                    backgroundOverlay.style.opacity = '0.4';
-                }, 100);
-
-                // After transition completes, update the main background and reset the overlay
-                setTimeout(() => {
-                    background.style.backgroundImage = `url(${artUrl})`;
-                    backgroundOverlay.style.opacity = '0';
-                }, config.transitionDuration + 500);
-            }
-
-            // Clear existing content
-            posterContainer.innerHTML = '';
-
-            // Use precise calculations with Math.floor to avoid rounding issues
-            const tileWidth = Math.floor(lockedWidth / config.tileCols);
-            const tileHeight = Math.floor(lockedHeight / config.tileRows);
-
-            // Create tile grid for transition
-            const tiles = [];
-            for (let row = 0; row < config.tileRows; row++) {
-                for (let col = 0; col < config.tileCols; col++) {
-                    // Special handling for last column and row to avoid gaps
-                    const isLastCol = col === config.tileCols - 1;
-                    const isLastRow = row === config.tileRows - 1;
-
-                    const tileWidthActual = isLastCol ?
-                        lockedWidth - (col * tileWidth) : tileWidth;
-                    const tileHeightActual = isLastRow ?
-                        lockedHeight - (row * tileHeight) : tileHeight;
-
-                    const tile = document.createElement('div');
-                    tile.className = 'tile';
-                    tile.style.width = `${tileWidthActual}px`;
-                    tile.style.height = `${tileHeightActual}px`;
-                    tile.style.top = `${row * tileHeight}px`;
-                    tile.style.left = `${col * tileWidth}px`;
-
-                    // From poster image - using consistent styling
-                    tile.style.backgroundImage = `url(${fromPosterUrl})`;
-                    tile.style.backgroundPosition = `-${col * tileWidth}px -${row * tileHeight}px`;
-                    tile.style.backgroundSize = `${lockedWidth}px ${lockedHeight}px`;
-
-                    // Add back face with consistent styling
-                    const tileBack = document.createElement('div');
-                    tileBack.className = 'tile-back';
-                    tileBack.style.backgroundImage = `url(${toPosterUrl})`;
-                    tileBack.style.backgroundPosition = `-${col * tileWidth}px -${row * tileHeight}px`;
-                    tileBack.style.backgroundSize = `${lockedWidth}px ${lockedHeight}px`;
-
-                    tile.appendChild(tileBack);
-                    posterContainer.appendChild(tile);
-                    tiles.push(tile);
-                }
-            }
-
-            // Add streaming elements if in streaming mode
-            if (state.isStreaming || (customItems && fromItem.user)) {
-                // Add streaming badge in a fixed position over the tiles
-                const badge = document.createElement('div');
-                badge.className = 'streaming-badge';
-                badge.textContent = 'Currently Streaming';
-                badge.style.position = 'absolute';
-                badge.style.zIndex = '10';
-                posterContainer.appendChild(badge);
-
-                // Add stream info in a fixed position
-                const infoContainer = document.createElement('div');
-                infoContainer.style.position = 'absolute';
-                infoContainer.style.bottom = '0';
-                infoContainer.style.left = '0';
-                infoContainer.style.width = '100%';
-                infoContainer.style.zIndex = '10';
-                posterContainer.appendChild(infoContainer);
-
-                // Add stream info to this container
-                addStreamInfo(fromItem, infoContainer);
-            }
-
-            // Shuffle tiles for random flip effect
-            shuffleArray(tiles);
-
-            // Animate tiles
-            const totalTiles = tiles.length;
-            const maxDelay = config.transitionDuration * 0.95;
-
-            // Track tiles that have been animated
-            let animatedTiles = 0;
-
-            // Add event listener to track animation completions
-            tiles.forEach((tile, index) => {
-                // Create a slight ease-out effect
-                const progress = index / totalTiles;
-                const easedProgress = progress < 0.8 ?
-                    progress :
-                    0.8 + (progress - 0.8) * 0.7;
-
-                const delay = easedProgress * maxDelay;
-
-                // Start the tile animation
-                setTimeout(() => {
-                    tile.style.transform = 'rotateY(180deg)';
-                    animatedTiles++;
-
-                    // For additional safety, if all tiles have animated, double-check the callback
-                    if (animatedTiles === totalTiles) {
-                        // Reset immediately to prevent any stray "transitioning" flags
-                        setTimeout(() => {
-                            // If we're still transitioning after all tiles have flipped plus a safety margin,
-                            // something might be wrong - clean up just in case
-                            if (state.transitioning) {
-                                debug('Safety check: All tiles animated but still transitioning');
-                                finishTransition();
-                            }
-                        }, 500); // Small safety margin
-                    }
-                }, delay);
-            });
-
-            // Function to cleanly finish a transition
-            function finishTransition() {
-                debug('Finishing transition...');
-
-                // Reset transitioning flag
-                state.transitioning = false;
-
-                // Restore dynamic width/height if needed for responsive behavior
-                if (state.lockedDimensions) {
-                    if (state.lockedDimensions.originalWidth) {
-                        posterContainer.style.width = state.lockedDimensions.originalWidth;
-                    }
-                    if (state.lockedDimensions.originalHeight) {
-                        posterContainer.style.height = state.lockedDimensions.originalHeight;
-                    }
-                    state.lockedDimensions = null;
-                }
-
-                // Run callback if provided before updating display
-                if (callback) {
-                    try {
-                        callback();
-                    } catch (e) {
-                        console.error('Error in transition callback:', e);
-                    }
-                }
-
-                // Update display with new poster
-                updateDisplay();
-
-                // Restart display timer only if needed (multiple streams or not streaming)
-                if (!state.isStreaming || (state.isStreaming && state.hasMultipleStreams)) {
-                    startDisplayTimer();
-                }
-
-                // Clear the transition timeout reference
-                state.currentTransitionTimeout = null;
-            }
-
-            // Wait for transition to complete
-            const transitionTimeout = setTimeout(finishTransition, config.transitionDuration + 200);
-
-            // Keep track of the timeout for cleanup
-            state.currentTransitionTimeout = transitionTimeout;
+        // Show error message
+        function showError(message) {
+            posterContainer.innerHTML = `
+                <div class="error-container">
+                    <h2>Error</h2>
+                    <p>${message}</p>
+                    <button onclick="location.reload()" style="margin-top: 20px; padding: 10px 20px; background: #cc7b19; border: none; color: white; border-radius: 5px; cursor: pointer;">
+                        Retry
+                    </button>
+                </div>
+            `;
         }
 
         // Adjust poster size
         function adjustPosterSize() {
             // Skip adjustment during transitions
-            if (state.transitioning) {
+            if (state.transitionState !== TransitionState.IDLE) {
                 return;
             }
 
@@ -1782,7 +1902,7 @@ $proxy_url = "./proxy.php";
             posterContainer.style.height = `${Math.floor(posterHeight)}px`;
 
             // Update display if not in transition
-            if (!state.transitioning) {
+            if (state.transitionState === TransitionState.IDLE) {
                 updateDisplay();
             }
         }
@@ -1796,62 +1916,80 @@ $proxy_url = "./proxy.php";
             return array;
         }
 
-        // Safety check to make sure transitions don't get stuck
-        setInterval(() => {
-            // If we've been transitioning for too long, reset the flag
-            if (state.transitioning) {
-                const currentTime = Date.now();
-                const transitionDuration = currentTime - state.lastTransitionTime;
+        // 7. Create a periodic state maintenance checker for safety
+        function setupSafetyChecks() {
+            // Run every 5 seconds
+            setInterval(() => {
+                // Check if transition is stuck
+                const wasStuck = transitionManager.checkForStuckTransition();
 
-                if (transitionDuration > config.transitionDuration * 2) {
-                    debug('Transition seems stuck, resetting transition state');
-                    state.transitioning = false;
-
-                    // Also clear any lingering transition timeout
-                    if (state.currentTransitionTimeout) {
-                        clearTimeout(state.currentTransitionTimeout);
-                        state.currentTransitionTimeout = null;
-                    }
-
-                    // Restore original dimensions if needed
-                    if (state.lockedDimensions) {
-                        if (state.lockedDimensions.originalWidth) {
-                            posterContainer.style.width = state.lockedDimensions.originalWidth;
-                        }
-                        if (state.lockedDimensions.originalHeight) {
-                            posterContainer.style.height = state.lockedDimensions.originalHeight;
-                        }
-                        state.lockedDimensions = null;
-                    }
-
-                    // Update display
+                // If we found and fixed a stuck transition, update display
+                if (wasStuck) {
                     updateDisplay();
                 }
+            }, 5000);
+        }
+
+        function initialize() {
+            debug('Initializing Poster Wall');
+
+            // Clean up any existing timers
+            timerManager.cleanupAllTimers();
+
+            // Process initial data
+            if (!state.items || state.items.length === 0) {
+                showError('No content available. Please check your server connection and refresh the page.');
+                return;
             }
 
-            // Also reset lock if it's been too long
-            if (state.transitionLock) {
-                const currentTime = Date.now();
-                const transitionDuration = currentTime - state.lastTransitionTime;
+            // Add unique IDs to items
+            state.items = state.items.map(item => ({
+                ...item,
+                _id: state.uniqueId++
+            }));
 
-                if (transitionDuration > config.transitionDuration * 3) {
-                    debug('Transition lock seems stuck, resetting');
-                    state.transitionLock = false;
-                }
+            // Preload initial content
+            if (state.items[state.currentIndex]) {
+                preloadStreamImages(state.items[state.currentIndex]);
             }
-        }, 5000);
 
-        // Clean up when page unloads
+            // Set initial display
+            updateDisplay();
+
+            // Start appropriate timers
+            if (!state.isStreaming || state.hasMultipleStreams) {
+                timerManager.startDisplayTimer();
+            }
+
+            // Start stream checking - CRITICAL FOR STREAM DETECTION
+            timerManager.startStreamChecking();
+
+            // Set up window resize handler
+            window.addEventListener('resize', adjustPosterSize);
+            adjustPosterSize();
+
+            // Set up resize observer
+            if (window.ResizeObserver) {
+                const resizeObserver = new ResizeObserver(entries => {
+                    for (let entry of entries) {
+                        if (entry.target === posterContainer && state.transitionState === TransitionState.IDLE) {
+                            adjustPosterSize();
+                        }
+                    }
+                });
+
+                resizeObserver.observe(posterContainer);
+            }
+
+            // Set up safety checks
+            setupSafetyChecks();
+
+            debug('Initialization complete');
+        }
+
+        // Clean up on page unload
         window.addEventListener('beforeunload', () => {
-            if (state.displayTimer) {
-                clearInterval(state.displayTimer);
-            }
-            if (state.streamCheckTimer) {
-                clearInterval(state.streamCheckTimer);
-            }
-            if (state.currentTransitionTimeout) {
-                clearTimeout(state.currentTransitionTimeout);
-            }
+            if (timerManager) timerManager.cleanupAllTimers();
         });
 
         // Initialize when page loads
