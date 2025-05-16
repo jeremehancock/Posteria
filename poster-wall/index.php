@@ -299,11 +299,6 @@ function getRandomLibraryItems($server_url, $token, $count = 10)
                 $items[] = $item;
             }
         }
-
-        // If we have enough items, break early
-        if (count($items) >= $count * 2) {
-            break;
-        }
     }
 
     // Shuffle and limit the items
@@ -1692,7 +1687,7 @@ $proxy_url = "./proxy.php";
         function loadNextBatch() {
             if (!state.nextBatch || state.nextBatch.length === 0) {
                 // If no pending batch, request new data
-                fetch(`${urls.checkStreams}?batch=${Math.floor(Math.random() * 1000)}`)
+                fetch(`${urls.checkStreams}?batch=${Math.floor(Math.random() * 1000)}&count=30`)
                     .then(response => response.json())
                     .then(data => {
                         const randomItems = (data.random_items || []).map(item => ({
