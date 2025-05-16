@@ -346,3 +346,9 @@
 ### Fixed
 
 - Issue with Poster Wall getting stuck
+
+## [1.5.8]
+
+### Fixed
+
+- Issue with Poster Wall not pulling from all available posters
