@@ -352,3 +352,9 @@
 ### Fixed
 
 - Issue with Poster Wall not pulling from all available posters
+
+## [1.5.9]
+
+### Fixed
+
+- Search was too fuzzy. Now it is more specific
