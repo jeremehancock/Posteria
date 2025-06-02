@@ -265,51 +265,127 @@ function getImageFiles($config, $currentDirectory = '')
 	return $files;
 }
 
-// Improved fuzzy search implementation that handles special characters
+// Improved fuzzy search implementation that prioritizes relevance
 function improvedFuzzySearch($pattern, $str)
 {
-	// Check if pattern is directly in the original string (case insensitive)
+	// Normalize both strings
+	$normalizedPattern = normalizeString(strtolower($pattern));
+	$normalizedStr = normalizeString(strtolower($str));
+	$originalStr = strtolower($str);
+	$originalPattern = strtolower($pattern);
+
+	// 1. Exact match (highest priority)
+	if ($normalizedPattern === $normalizedStr || $originalPattern === $originalStr) {
+		return true;
+	}
+
+	// 2. Direct substring match in original strings (high priority)
 	if (stripos($str, $pattern) !== false) {
 		return true;
 	}
 
-	// Normalize both strings by removing accents and special characters for comparison
-	$normalizedPattern = normalizeString(strtolower($pattern));
-	$normalizedStr = normalizeString(strtolower($str));
-
-	// Direct check with normalized strings
+	// 3. Direct substring match in normalized strings (high priority)
 	if (stripos($normalizedStr, $normalizedPattern) !== false) {
 		return true;
 	}
 
-	// Continue with character-by-character fuzzy matching if direct matches fail
-	$patternLength = mb_strlen($normalizedPattern);
-	$strLength = mb_strlen($normalizedStr);
+	// 4. Word boundary matches (medium-high priority)
+	// Check if the pattern matches at word boundaries
+	if (
+		matchesWordBoundary($normalizedPattern, $normalizedStr) ||
+		matchesWordBoundary($originalPattern, $originalStr)
+	) {
+		return true;
+	}
+
+	// 5. Starts with match (medium priority)
+	if (
+		stripos($normalizedStr, $normalizedPattern) === 0 ||
+		stripos($originalStr, $originalPattern) === 0
+	) {
+		return true;
+	}
+
+	// 6. Very restrictive fuzzy match only for short patterns (low priority)
+	// Only do fuzzy matching for patterns 4+ characters to avoid too many false positives
+	if (mb_strlen($normalizedPattern) >= 4) {
+		return restrictiveFuzzyMatch($normalizedPattern, $normalizedStr);
+	}
+
+	return false;
+}
+
+// Function to check word boundary matches
+function matchesWordBoundary($pattern, $str)
+{
+	// Split the string into words
+	$words = preg_split('/\s+/', $str);
+
+	foreach ($words as $word) {
+		// Check if any word starts with the pattern
+		if (stripos($word, $pattern) === 0) {
+			return true;
+		}
+
+		// Check if any word exactly matches the pattern
+		if (strtolower($word) === strtolower($pattern)) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+// More restrictive fuzzy matching that requires consecutive character clusters
+function restrictiveFuzzyMatch($pattern, $str)
+{
+	$patternLength = mb_strlen($pattern);
+	$strLength = mb_strlen($str);
 
 	if ($patternLength > $strLength) {
 		return false;
 	}
 
-	if ($patternLength === $strLength) {
-		return $normalizedPattern === $normalizedStr;
-	}
+	// For restrictive fuzzy matching, require at least 70% of characters to match
+	// in relatively close proximity
+	$requiredMatches = max(3, ceil($patternLength * 0.7));
+	$matchedChars = 0;
+	$lastMatchPos = -2; // Start at -2 so first match at position 0 works
+	$maxGap = 3; // Maximum gap between consecutive matches
 
-	$previousIndex = -1;
 	for ($i = 0; $i < $patternLength; $i++) {
-		$currentChar = mb_substr($normalizedPattern, $i, 1);
-		$index = mb_strpos($normalizedStr, $currentChar, $previousIndex + 1);
+		$char = mb_substr($pattern, $i, 1);
+		$pos = mb_strpos($str, $char, max(0, $lastMatchPos + 1));
 
-		if ($index === false) {
-			return false;
+		if ($pos !== false && ($pos - $lastMatchPos) <= $maxGap) {
+			$matchedChars++;
+			$lastMatchPos = $pos;
+		} else {
+			// Try to find the character within a reasonable distance
+			$searchStart = max(0, $lastMatchPos + 1);
+			$searchEnd = min($strLength, $searchStart + $maxGap + 2);
+			$found = false;
+
+			for ($j = $searchStart; $j < $searchEnd; $j++) {
+				if (mb_substr($str, $j, 1) === $char) {
+					$matchedChars++;
+					$lastMatchPos = $j;
+					$found = true;
+					break;
+				}
+			}
+
+			if (!$found) {
+				// Reset if we can't find consecutive matches
+				break;
+			}
 		}
-
-		$previousIndex = $index;
 	}
 
-	return true;
+	return $matchedChars >= $requiredMatches;
 }
 
-// Function to normalize strings by removing accents and special characters
+// Keep the existing normalizeString function as it was
 function normalizeString($str)
 {
 	// Check if the Transliterator extension is available
@@ -359,7 +435,7 @@ function normalizeString($str)
 			'đ' => 'd',
 			'ł' => 'l',
 			'ō' => 'o',
-			'ū' => 'u', // Special case for Shōgun example
+			'ū' => 'u',
 			// Uppercase variants
 			'À' => 'A',
 			'Á' => 'A',
@@ -411,6 +487,7 @@ function normalizeString($str)
 	return $str;
 }
 
+// Enhanced filter function with better relevance scoring
 function filterImages($images, $searchQuery)
 {
 	if (empty($searchQuery)) {
@@ -418,7 +495,7 @@ function filterImages($images, $searchQuery)
 	}
 
 	$searchQueryLower = strtolower(trim($searchQuery));
-	$filteredImages = [];
+	$results = [];
 
 	// Special case for searching "orphaned"
 	$searchingForOrphaned = ($searchQueryLower === 'orphaned');
@@ -429,30 +506,84 @@ function filterImages($images, $searchQuery)
 
 		// Check for special search terms first
 		if ($searchingForOrphaned) {
-			// If searching for orphaned, just check if file doesn't have Plex tag
 			if (strpos($fullFilename, '--plex--') === false) {
-				$filteredImages[] = $image;
+				$results[] = ['image' => $image, 'score' => 100];
 			}
 			continue;
 		}
 
-		// Regular search for other terms
-		// Clean filename for searching - removes tags and metadata formatting
+		// Clean filename for searching
 		$cleanFilename = $filename;
-		// Remove Plex and Orphaned tags
 		$cleanFilename = str_replace(['--Plex--', '--Orphaned--'], '', $cleanFilename);
-		// Remove both single [ID] and double [[Library]] brackets with their contents
 		$cleanFilename = preg_replace('/\[\[.*?\]\]|\[.*?\]/s', '', $cleanFilename);
-		// Trim any resulting extra spaces
+		$cleanFilename = preg_replace('/\s*\(A\d{8,12}\)\s*/', ' ', $cleanFilename);
 		$cleanFilename = trim($cleanFilename);
 
-		// Check if the search query matches the clean filename
-		if (improvedFuzzySearch($searchQuery, $cleanFilename)) {
-			$filteredImages[] = $image;
+		// Calculate relevance score
+		$score = calculateRelevanceScore($searchQuery, $cleanFilename, $filename);
+
+		if ($score > 0) {
+			$results[] = ['image' => $image, 'score' => $score];
 		}
 	}
 
-	return $filteredImages;
+	// Sort by relevance score (highest first)
+	usort($results, function ($a, $b) {
+		return $b['score'] - $a['score'];
+	});
+
+	// Extract just the images from the scored results
+	return array_map(function ($result) {
+		return $result['image'];
+	}, $results);
+}
+
+// Calculate relevance score for search results
+function calculateRelevanceScore($searchQuery, $cleanFilename, $originalFilename)
+{
+	$query = strtolower(trim($searchQuery));
+	$clean = strtolower($cleanFilename);
+	$original = strtolower($originalFilename);
+
+	// Exact match (highest score)
+	if ($clean === $query || $original === $query) {
+		return 1000;
+	}
+
+	// Starts with query (very high score)
+	if (stripos($clean, $query) === 0) {
+		return 900;
+	}
+
+	// Contains query as whole word (high score)
+	if (preg_match('/\b' . preg_quote($query, '/') . '\b/i', $clean)) {
+		return 800;
+	}
+
+	// Contains query as substring (medium-high score)
+	if (stripos($clean, $query) !== false) {
+		return 700;
+	}
+
+	// Word boundary match (medium score)
+	if (matchesWordBoundary($query, $clean)) {
+		return 600;
+	}
+
+	// Check if query matches start of any word (medium-low score)
+	$words = preg_split('/\s+/', $clean);
+	foreach ($words as $word) {
+		if (stripos($word, $query) === 0 && strlen($word) > strlen($query)) {
+			return 500;
+		}
+	}
+
+	// Very restrictive fuzzy match for longer queries only (low score)
+	if (strlen($query) >= 4 && restrictiveFuzzyMatch(normalizeString($query), normalizeString($clean))) {
+		return 200;
+	}
+
+	return 0; // No match
 }
 
 // Check if user is logged in
