@@ -22,29 +22,10 @@ RUN sed -i 's/AllowOverride None/AllowOverride All/' /etc/apache2/apache2.conf &
 RUN mkdir -p /var/www/html/posters/movies /var/www/html/posters/tv-shows /var/www/html/posters/tv-seasons /var/www/html/posters/collections /var/www/html/assets /var/www/html/data /var/www/html/include /var/www/html/poster-wall
 
 # Copy the application files
-COPY index.php /var/www/html/
-COPY poster-wall/index.php /var/www/html/poster-wall/
-COPY poster-wall/proxy.php /var/www/html/poster-wall/
-COPY poster-wall/check-streams.php /var/www/html/poster-wall/
-COPY include/version.php /var/www/html/include/
-COPY include/plex-import.php /var/www/html/include/
-COPY include/send-to-plex.php /var/www/html/include/
-COPY include/get-from-plex.php /var/www/html/include/
-COPY include/change-poster.php /var/www/html/include/
-COPY include/plex-id-storage.php /var/www/html/include/
-COPY include/library-tracking.php /var/www/html/include/
-COPY include/fetch-posters.php /var/www/html/include/
-COPY include/delete-orphans.php /var/www/html/include/
-COPY include/config.php /var/www/html/include/
-COPY include/remove-overlay-label.sh /var/www/html/include/
-COPY include/.htaccess /var/www/html/include/
-COPY include/auto-import.php /var/www/html/include/
-
-# Copy assets directory
-COPY assets/ /var/www/html/assets/
+COPY src/ /var/www/html/
 
 # Copy and set up entrypoint script
-COPY docker-entrypoint.sh /usr/local/bin/
+COPY docker/docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # Ensure proper permissions
