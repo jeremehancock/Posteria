@@ -18,3 +18,12 @@ mkdir -p \
     /config/posters/tv-seasons \
     /config/posters/collections
 lsiown -R abc:abc /config/posters
+
+# Save environment variables to a file that will be accessible to cron jobs
+env | grep -E '^(PLEX_|AUTO_IMPORT_|AUTH_)' >/app/docker-env.sh
+lsiown abc:abc /app/docker-env.sh
+sed -i 's/^/export /' /app/docker-env.sh
+
+# proposer permission for scripts
+chmod +x /app/www/public/include/*.sh
+chmod +x /app/*.sh

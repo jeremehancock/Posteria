@@ -1,0 +1,18 @@
+#!/usr/bin/with-contenv bash
+# shellcheck shell=bash
+
+# Edit to reduce cron logging 
+# Based on: https://github.com/linuxserver/docker-mods/pull/1012/files#diff-2b5785039180f3da6555ce1f9b054dc8d57284d3efad5676e6dd00e50311ea4c
+
+if builtin command -v crontab >/dev/null 2>&1 && [[ -n "$(crontab -l -u abc 2>/dev/null || true)" || -n "$(crontab -l -u root 2>/dev/null || true)" ]]; then
+    if builtin command -v busybox >/dev/null 2>&1 && [[ $(busybox || true) =~ [[:space:]](crond)([,]|$) ]]; then
+        exec busybox crond -f -S -l 7
+    elif [[ -f /usr/bin/apt ]] && [[ -f /usr/sbin/cron ]]; then
+        exec /usr/sbin/cron -f -L 1
+    else
+        echo "**** cron not found ****"
+        sleep infinity
+    fi
+else
+    sleep infinity
+fi
