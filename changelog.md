@@ -358,3 +358,9 @@
 ### Fixed
 
 - Search was too fuzzy. Now it is more specific
+
+## [1.6.0]
+
+### Fixed
+
+- Fixed poster fetch :)
