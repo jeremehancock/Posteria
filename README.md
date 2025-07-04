@@ -157,7 +157,7 @@ The Docker container uses the following volume mounts:
 4. Change posters:
    - Support for local file upload
    - Support for direct URL upload
-   - Grab posters from TMDB & Fanart.tv
+   - Grab posters from TMDB, TVDB, & Fanart.tv
 5. Posters are automatically updated on Plex
 6. As you add more media to Plex just re-import to add new posters
 7. Orphaned poster detection
