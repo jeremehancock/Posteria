@@ -69,7 +69,7 @@ function checkForUpdates()
     // Safe URL fetch with timeout and error handling
     try {
         // Try to fetch the latest version from GitHub safely
-        $versionUrl = 'https://raw.githubusercontent.com/jeremehancock/Posteria/refs/heads/docker-size/version';
+        $versionUrl = 'https://raw.githubusercontent.com/jeremehancock/Posteria/refs/heads/main/version';
 
         // Use cURL if available (more reliable)
         if (function_exists('curl_init')) {
