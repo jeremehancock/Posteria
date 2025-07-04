@@ -7410,7 +7410,6 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 	position: relative;
 	aspect-ratio: 2/3;
 	border-radius: 8px;
-	overflow: hidden;
 	cursor: pointer;
 	transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
 	border: 2px solid transparent;
