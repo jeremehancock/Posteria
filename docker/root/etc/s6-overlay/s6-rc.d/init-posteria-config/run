@@ -1,0 +1,29 @@
+#!/usr/bin/with-contenv bash
+# shellcheck shell=bash
+
+# symlink config folders
+for dir in posters data; do
+    mkdir -p "/config/${dir}"
+    if [ "$(readlink /app/www/public/${dir})" != "/config/${dir}" ]; then
+        rm -rf "/app/www/public/${dir}"
+        ln -s "/config/${dir}" "/app/www/public/${dir}"
+        lsiown abc:abc "/config/${dir}" "/app/www/public/${dir}"
+    fi
+done
+
+# create posters sub-folders
+mkdir -p \
+    /config/posters/movies \
+    /config/posters/tv-shows \
+    /config/posters/tv-seasons \
+    /config/posters/collections
+lsiown -R abc:abc /config/posters
+
+# Save environment variables to a file that will be accessible to cron jobs
+env | grep -E '^(PLEX_|AUTO_IMPORT_|AUTH_)' >/app/docker-env.sh
+lsiown abc:abc /app/docker-env.sh
+sed -i 's/^/export /' /app/docker-env.sh
+
+# proposer permission for scripts
+chmod +x /app/www/public/include/*.sh
+chmod +x /app/*.sh

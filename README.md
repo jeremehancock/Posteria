@@ -56,6 +56,10 @@ services:
       - SESSION_DURATION=3600 # In seconds
       - AUTH_BYPASS=false # DO NOT USE if you expose Posteria outside your local network
 
+      - PUID=1000 # Specify the user id
+      - PGID=1000 # Specify the group id
+      - TZ=Etc/UTC # Specify a timezone to use
+
       - IMAGES_PER_PAGE=24
       - MAX_FILE_SIZE=5242880 # In bytes
 
@@ -73,11 +77,8 @@ services:
       - AUTO_IMPORT_SEASONS=false # Import TV season posters
       - AUTO_IMPORT_COLLECTIONS=false # Import Collection posters
     volumes:
-      - ./posters/movies:/var/www/html/posters/movies
-      - ./posters/tv-shows:/var/www/html/posters/tv-shows
-      - ./posters/tv-seasons:/var/www/html/posters/tv-seasons
-      - ./posters/collections:/var/www/html/posters/collections
-      - ./data:/var/www/html/data # Logs are found here
+      - ./posters:/config/posters
+      - ./data:/config/data # Logs are found here
     restart: unless-stopped
 ```
 
@@ -96,6 +97,9 @@ docker-compose up -d
 | SITE_TITLE                | Website title                        | Posteria                                                                                              |
 | AUTH_USERNAME             | Admin username                       | admin                                                                                                 |
 | AUTH_PASSWORD             | Admin password                       | changeme                                                                                              |
+| PUID                      | User ID                              | 911 [More info](#note)                                                                                |
+| PGID                      | Group ID                             | 911 [More info](#note)                                                                                |
+| TZ                        | Timezone                             | Etc/UTC [List](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones#List)                     |
 | SESSION_DURATION          | Login session duration in seconds    | 3600 (1 Hour)                                                                                         |
 | AUTH_BYPASS               | Bypass Authentication                | false                                                                                                 |
 | IMAGES_PER_PAGE           | Number of posters displayed per page | 24                                                                                                    |
@@ -114,6 +118,24 @@ docker-compose up -d
 
 #### Note:
 
+`PUID` and `PGID`
+
+When using volumes (`-v` flags), permissions issues can arise between the host OS and the container, we avoid this issue by allowing you to specify the user `PUID` and group `PGID`.
+
+Ensure any volume directories on the host are owned by the same user you specify and any permissions issues will vanish like magic.
+
+In this instance `PUID=1000` and `PGID=1000`, to find yours use `id your_user` as below:
+
+```bash
+id your_user
+```
+
+Example output:
+
+```text
+uid=1000(your_user) gid=1000(your_user) groups=1000(your_user)
+```
+
 `PLEX_REMOVE_OVERLAY_LABEL`
 
 Controls whether Posteria will remove the "Overlay" label in Plex when the poster is updated. The "Overlay" label is used by Kometa for re-applying overlays on updated posters. Set to true if you use [Kometa](https://kometa.wiki/en/latest/).
@@ -124,10 +146,8 @@ Controls whether Posteria will remove the "Overlay" label in Plex when the poste
 
 The Docker container uses the following volume mounts:
 
-- `./posters/movies`: Movie posters
-- `./posters/tv-shows`: TV show posters
-- `./posters/tv-seasons`: TV season posters
-- `./posters/collections`: Collection posters
+- `/config/posters`: Posters
+- `/config/data`: Logs
 
 ## Usage
 
