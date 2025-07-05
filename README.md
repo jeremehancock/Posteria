@@ -240,7 +240,7 @@ Yes! Posteria is designed as a responsive Progressive Web App (PWA), which means
 
 ## Breaking Change Notice
 
-[More info](https://github.com/jeremehancock/Posteria/discussions/28)
+[More info](https://github.com/jeremehancock/Posteria/discussions/57)
 
 ## License
 
