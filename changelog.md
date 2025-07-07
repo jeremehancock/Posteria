@@ -364,3 +364,22 @@
 ### Fixed
 
 - Fixed poster fetch :)
+
+## [1.6.1]
+
+### Updated
+
+- Updated to have smaller docker container
+- See: https://github.com/jeremehancock/Posteria/pull/54
+
+## [1.6.2]
+
+### Fixed
+
+- Fixed issues in Firefox
+
+## [1.6.3]
+
+### Fixed
+
+- Fixed issues with import
