@@ -7,7 +7,7 @@ for dir in posters data; do
     if [ "$(readlink /app/www/public/${dir})" != "/config/${dir}" ]; then
         rm -rf "/app/www/public/${dir}"
         ln -s "/config/${dir}" "/app/www/public/${dir}"
-        lsiown abc:abc "/config/${dir}" "/app/www/public/${dir}"
+        lsiown -R abc:abc "/config/${dir}" "/app/www/public/${dir}"
     fi
 done
 
@@ -24,6 +24,6 @@ env | grep -E '^(PLEX_|AUTO_IMPORT_|AUTH_)' >/app/docker-env.sh
 lsiown abc:abc /app/docker-env.sh
 sed -i 's/^/export /' /app/docker-env.sh
 
-# proposer permission for scripts
+# Proper permission for scripts
 chmod +x /app/www/public/include/*.sh
 chmod +x /app/*.sh
