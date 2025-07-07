@@ -383,3 +383,9 @@
 ### Fixed
 
 - Fixed issues with import
+
+## [1.6.4]
+
+### Fixed
+
+- Fixed permission issues
