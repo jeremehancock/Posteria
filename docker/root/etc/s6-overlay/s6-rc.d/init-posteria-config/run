@@ -1,17 +1,17 @@
 #!/usr/bin/with-contenv bash
 # shellcheck shell=bash
 
-# symlink config folders
+# Symlink config folders
 for dir in posters data; do
     mkdir -p "/config/${dir}"
     if [ "$(readlink /app/www/public/${dir})" != "/config/${dir}" ]; then
         rm -rf "/app/www/public/${dir}"
         ln -s "/config/${dir}" "/app/www/public/${dir}"
-        lsiown abc:abc "/config/${dir}" "/app/www/public/${dir}"
+        lsiown -R abc:abc "/config/${dir}" "/app/www/public/${dir}"
     fi
 done
 
-# create posters sub-folders
+# Create posters sub-folders
 mkdir -p \
     /config/posters/movies \
     /config/posters/tv-shows \
@@ -24,6 +24,25 @@ env | grep -E '^(PLEX_|AUTO_IMPORT_|AUTH_)' >/app/docker-env.sh
 lsiown abc:abc /app/docker-env.sh
 sed -i 's/^/export /' /app/docker-env.sh
 
-# proposer permission for scripts
+# Proper permission for scripts
 chmod +x /app/www/public/include/*.sh
 chmod +x /app/*.sh
+
+# Setup auto import scheduling based on AUTO_IMPORT_SCHEDULE value
+if [ -z "$AUTO_IMPORT_SCHEDULE" ]; then
+    echo "AUTO_IMPORT_SCHEDULE not set, skipping auto import schedule setup."
+else
+    case "$AUTO_IMPORT_SCHEDULE" in
+        "24h") cron_expr="0 0 * * *"; human_description="At Midnight" ;;
+        "12h") cron_expr="0 */12 * * *"; human_description="Every 12 hours" ;;
+        "6h")  cron_expr="0 */6 * * *"; human_description="Every 6 hours" ;;
+        "3h")  cron_expr="0 */3 * * *"; human_description="Every 3 hours" ;;
+        "1h")  cron_expr="0 * * * *"; human_description="Every hour" ;;
+        *)     cron_expr="0 * * * *"; human_description="Every hour (Invalid value AUTO_IMPORT_SCHEDULE=\"$AUTO_IMPORT_SCHEDULE\", falling back to default)" ;; # fallback to 24h
+    esac
+    echo "$cron_expr /app/auto-import.sh" > /etc/crontabs/abc
+    echo "Setting up auto import schedule: $human_description (cron expression='$cron_expr')"
+fi
+
+# Remove default root's crontab jobs
+rm /etc/crontabs/root
