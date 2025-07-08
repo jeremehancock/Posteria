@@ -389,3 +389,9 @@
 ### Fixed
 
 - Fixed permission issues
+
+## [1.6.5]
+
+### Updated
+
+- Made some tweaks to the Poster Wall logic
