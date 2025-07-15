@@ -369,7 +369,7 @@
 
 ### Updated
 
-- Updated to have smaller docker container
+- Updated to have smaller docker container Thanks @gaufre2
 - See: https://github.com/jeremehancock/Posteria/pull/54
 
 ## [1.6.2]
@@ -395,3 +395,9 @@
 ### Updated
 
 - Made some tweaks to the Poster Wall logic
+
+## [1.6.6]
+
+### Fixed
+
+- Fixed container failing at restart Thanks @gaufre2
