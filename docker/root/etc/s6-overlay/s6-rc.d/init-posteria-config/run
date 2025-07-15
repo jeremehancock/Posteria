@@ -45,4 +45,6 @@ else
 fi
 
 # Remove default root's crontab jobs
-rm /etc/crontabs/root
+if [ -f /etc/crontabs/root ]; then
+    rm /etc/crontabs/root
+fi
