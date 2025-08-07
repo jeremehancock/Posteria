@@ -1365,6 +1365,20 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			transform: translateY(-1px);
 		}
 
+		.modal-button.filter-orphans {
+			background: var(--bg-tertiary);
+			color: var(--text-primary);
+			border: 1px solid var(--border-color);
+			display: flex;
+			align-items: center;
+		}
+
+		.modal-button.filter-orphans:hover {
+			background: var(--bg-secondary);
+			border-color: var(--accent-primary);
+			transform: translateY(-1px);
+		}
+
 		.modal-button.delete,
 		.delete-btn {
 			background: #8B0000;
@@ -3552,9 +3566,21 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 					</div>
 					<form id="deleteOrphansForm" method="POST">
 						<input type="hidden" name="action" value="delete_all_orphans">
-						<div class="modal-actions">
-							<button type="button" class="modal-button cancel" id="cancelDeleteOrphans">Cancel</button>
-							<button type="submit" class="modal-button delete">Delete All</button>
+						<div class="modal-actions" style="justify-content: space-between;">
+							<button type="button" class="modal-button filter-orphans" id="filterOrphans"
+								onclick="window.location.href = '?search=orphaned';">
+								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+									fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+									stroke-linejoin="round" style="margin-right: 6px;">
+									<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+								</svg>
+								Filter View
+							</button>
+							<div style="display: flex; gap: 12px;">
+								<button type="button" class="modal-button cancel"
+									id="cancelDeleteOrphans">Cancel</button>
+								<button type="submit" class="modal-button delete">Delete All</button>
+							</div>
 						</div>
 					</form>
 				</div>

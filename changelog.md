@@ -401,3 +401,9 @@
 ### Fixed
 
 - Fixed container failing at restart Thanks @gaufre2
+
+## [1.6.7]
+
+### Added
+
+- Added Filter View option to the Delete Orphans modal
