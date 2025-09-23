@@ -51,16 +51,47 @@ $query = trim($_POST['query']);
 $type = trim($_POST['type']);
 $season = isset($_POST['season']) ? intval($_POST['season']) : null;
 
-function generateClientInfoHeader()
-{
+function getServerTimeOffset() {
+    static $timeOffset = null;
+    
+    if ($timeOffset === null) {
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL => 'https://posteria.app/api/time.php',
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 5
+        ]);
+        
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        
+        if ($httpCode === 200 && $response) {
+            $data = json_decode($response, true);
+            if ($data && isset($data['server_time'])) {
+                $clientTime = round(microtime(true) * 1000);
+                $timeOffset = $data['server_time'] - $clientTime;
+            }
+        }
+        
+        // Fallback to 0 if sync failed
+        $timeOffset = $timeOffset ?? 0;
+    }
+    
+    return $timeOffset;
+}
+
+function generateClientInfoHeader() {
+    $timeOffset = getServerTimeOffset();
+    $syncedTimestamp = round(microtime(true) * 1000) + $timeOffset;
+    
     $payload = [
         'name' => 'Posteria',
-        'ts' => round(microtime(true) * 1000),
+        'ts' => $syncedTimestamp,
         'v' => '1.0',
         'platform' => 'php'
     ];
 
-    // Convert to JSON and encode as Base64
     return base64_encode(json_encode($payload));
 }
 
