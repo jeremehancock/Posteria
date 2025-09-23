@@ -407,3 +407,9 @@
 ### Added
 
 - Added Filter View option to the Delete Orphans modal
+
+## [1.6.8]
+
+### Fixed
+
+- Server time sync issue with backend API
