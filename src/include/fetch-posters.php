@@ -51,9 +51,10 @@ $query = trim($_POST['query']);
 $type = trim($_POST['type']);
 $season = isset($_POST['season']) ? intval($_POST['season']) : null;
 
-function getServerTimeOffset() {
+function getServerTimeOffset()
+{
     static $timeOffset = null;
-    
+
     if ($timeOffset === null) {
         $ch = curl_init();
         curl_setopt_array($ch, [
@@ -61,11 +62,11 @@ function getServerTimeOffset() {
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_TIMEOUT => 5
         ]);
-        
+
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
-        
+
         if ($httpCode === 200 && $response) {
             $data = json_decode($response, true);
             if ($data && isset($data['server_time'])) {
@@ -73,18 +74,19 @@ function getServerTimeOffset() {
                 $timeOffset = $data['server_time'] - $clientTime;
             }
         }
-        
+
         // Fallback to 0 if sync failed
         $timeOffset = $timeOffset ?? 0;
     }
-    
+
     return $timeOffset;
 }
 
-function generateClientInfoHeader() {
+function generateClientInfoHeader()
+{
     $timeOffset = getServerTimeOffset();
     $syncedTimestamp = round(microtime(true) * 1000) + $timeOffset;
-    
+
     $payload = [
         'name' => 'Posteria',
         'ts' => $syncedTimestamp,
@@ -253,7 +255,7 @@ if ($type === 'collection') {
 // Store the original search title before sending to API
 $originalSearchTitle = $query;
 
-$apiUrl = 'https://posteria.app/api/fetch/posters/new.php?';
+$apiUrl = 'https://posteria.app/api/fetch/posters?';
 if ($type === 'movie') {
     $apiUrl .= 'movie=' . urlencode($cleanQuery);
 } elseif ($type === 'tv') {
