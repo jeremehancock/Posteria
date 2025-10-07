@@ -413,3 +413,9 @@
 ### Fixed
 
 - Server time sync issue with backend API
+
+## [1.6.9]
+
+### Fixed
+
+- Fixed issue with poster-wall link
