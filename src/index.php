@@ -1147,6 +1147,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			overflow-y: scroll;
 			scrollbar-color: var(--bg-tertiary) var(--bg-primary);
 			scrollbar-width: thin;
+			overscroll-behavior-y: contain;
 		}
 
 		body {
