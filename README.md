@@ -98,8 +98,8 @@ docker-compose up -d
 | SITE_TITLE                | Website title                        | Posteria                                                                                              |
 | AUTH_USERNAME             | Admin username                       | admin                                                                                                 |
 | AUTH_PASSWORD             | Admin password                       | changeme                                                                                              |
-| PUID                      | User ID                              | Not Set [More info](#note)                                                                            |
-| PGID                      | Group ID                             | Not Set [More info](#note)                                                                            |
+| PUID                      | User ID                              | [More info](#note)                                                                                    |
+| PGID                      | Group ID                             | [More info](#note)                                                                                    |
 | TZ                        | Timezone                             | Etc/UTC [List](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones#List)                     |
 | SESSION_DURATION          | Login session duration in seconds    | 3600 (1 Hour)                                                                                         |
 | AUTH_BYPASS               | Bypass Authentication                | false                                                                                                 |
@@ -116,7 +116,7 @@ docker-compose up -d
 | AUTO_IMPORT_SHOWS         | Import TV Shows posters              | true                                                                                                  |
 | AUTO_IMPORT_SEASONS       | Import TV Seasons posters            | true                                                                                                  |
 | AUTO_IMPORT_COLLECTIONS   | Import Collection posters            | true                                                                                                  |
-| EXCLUDED_LIBRARIES        | Libraries to exclude from import     | Not Set (comma-separated, e.g., Kids Movies,Anime)                                                    |
+| EXCLUDED_LIBRARIES        | Libraries to exclude from import     | (comma-separated, e.g., Kids Movies,Anime)                                                            |
 
 #### Note:
 
