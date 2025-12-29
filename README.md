@@ -107,7 +107,7 @@ docker-compose up -d
 | MAX_FILE_SIZE             | Maximum upload file size in bytes    | 5242880 (5MB)                                                                                         |
 | PLEX_SERVER_URL           | URL for your Plex Server             | ex: http://your-server:32400                                                                          |
 | PLEX_TOKEN                | Plex Server Token                    | [More info](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/) |
-| PLEX_REMOVE_OVERLAY_LABEL | Remove Overlay Label                 | false [More info](#note)                                                                              |
+| PLEX_REMOVE_OVERLAY_LABEL | Remove Overlay Label                 | false [More info](#note-1)                                                                            |
 | IGNORE_ARTICLES_IN_SORT   | Ignore articles in sort              | true                                                                                                  |
 | SORT_BY_DATE_ADDED        | Sort by Recently Added               | false                                                                                                 |
 | AUTO_IMPORT_ENABLED       | Enable/disable auto-import           | true                                                                                                  |
@@ -116,7 +116,7 @@ docker-compose up -d
 | AUTO_IMPORT_SHOWS         | Import TV Shows posters              | true                                                                                                  |
 | AUTO_IMPORT_SEASONS       | Import TV Seasons posters            | true                                                                                                  |
 | AUTO_IMPORT_COLLECTIONS   | Import Collection posters            | true                                                                                                  |
-| EXCLUDED_LIBRARIES        | Libraries to exclude from import     | (comma-separated, e.g., Kids Movies,Anime)                                                            |
+| EXCLUDED_LIBRARIES        | Libraries to exclude from import     | Not Set [More info](#environment-variables)                                                           |
 
 #### Note:
 
