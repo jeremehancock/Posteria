@@ -1903,6 +1903,12 @@ try {
 
         logMessage("Processing library: {$libraryName} (ID: {$libraryId}, Type: {$libraryType})");
 
+        // Check if this library is excluded
+        if (in_array($libraryName, $auto_import_config['excluded_libraries'])) {
+            logMessage("Skipping excluded library: {$libraryName}");
+            continue;
+        }
+
         // Import movies if enabled and library type is 'movie'
         if ($auto_import_config['import_movies'] && $libraryType === 'movie') {
             importMovies($plex_config['server_url'], $plex_config['token'], $libraryId, $libraryName);

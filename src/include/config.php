@@ -58,6 +58,18 @@ if (!function_exists('getIntEnvWithFallback')) {
     }
 }
 
+if (!function_exists('getArrayEnvWithFallback')) {
+    function getArrayEnvWithFallback($key, $default = [])
+    {
+        $value = getenv($key);
+        if ($value === false || trim($value) === '') {
+            return $default;
+        }
+        // Split by comma and trim whitespace from each item
+        return array_map('trim', explode(',', $value));
+    }
+}
+
 $auth_config = [
     'username' => getEnvWithFallback('AUTH_USERNAME', 'admin'),
     'password' => getEnvWithFallback('AUTH_PASSWORD', 'changeme'),
@@ -86,7 +98,10 @@ $auto_import_config = [
     'import_movies' => getBoolEnvWithFallback('AUTO_IMPORT_MOVIES', true),
     'import_shows' => getBoolEnvWithFallback('AUTO_IMPORT_SHOWS', true),
     'import_seasons' => getBoolEnvWithFallback('AUTO_IMPORT_SEASONS', true),
-    'import_collections' => getBoolEnvWithFallback('AUTO_IMPORT_COLLECTIONS', true)
+    'import_collections' => getBoolEnvWithFallback('AUTO_IMPORT_COLLECTIONS', true),
+
+    // Libraries to exclude from import (comma-separated list of library names)
+    'excluded_libraries' => getArrayEnvWithFallback('EXCLUDED_LIBRARIES', [])
 
 ];
 

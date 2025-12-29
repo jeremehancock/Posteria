@@ -1686,8 +1686,14 @@ try {
         logDebug("Processing get_plex_libraries action");
         $result = getPlexLibraries($plex_config['server_url'], $plex_config['token']);
 
-        // ADD THIS CODE:
+        // Filter out excluded libraries
         if ($result['success'] && !empty($result['data'])) {
+            $result['data'] = array_filter($result['data'], function ($library) use ($auto_import_config) {
+                return !in_array($library['title'], $auto_import_config['excluded_libraries']);
+            });
+            // Re-index the array after filtering
+            $result['data'] = array_values($result['data']);
+
             // Store all libraries for reference
             storeLibraryInfo($result['data'], 'all');
         }
@@ -1701,15 +1707,6 @@ try {
     if (isset($_POST['action']) && $_POST['action'] === 'test_plex_connection') {
         logDebug("Processing test_plex_connection action");
         $result = validatePlexConnection($plex_config['server_url'], $plex_config['token']);
-        echo json_encode($result);
-        logDebug("Response sent", $result);
-        exit;
-    }
-
-    // Get Plex Libraries
-    if (isset($_POST['action']) && $_POST['action'] === 'get_plex_libraries') {
-        logDebug("Processing get_plex_libraries action");
-        $result = getPlexLibraries($plex_config['server_url'], $plex_config['token']);
         echo json_encode($result);
         logDebug("Response sent", $result);
         exit;
@@ -1770,8 +1767,13 @@ try {
         $availableLibraries = [];
         $librariesResult = getPlexLibraries($plex_config['server_url'], $plex_config['token']);
         if ($librariesResult['success']) {
-            // Filter libraries based on media type
+            // Filter libraries based on media type and exclusion list
             foreach ($librariesResult['data'] as $lib) {
+                // Skip excluded libraries
+                if (in_array($lib['title'], $auto_import_config['excluded_libraries'])) {
+                    continue;
+                }
+
                 if (
                     ($type === 'movies' && $lib['type'] === 'movie') ||
                     (($type === 'shows' || $type === 'seasons') && $lib['type'] === 'show') ||
