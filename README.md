@@ -76,6 +76,7 @@ services:
       - AUTO_IMPORT_SHOWS=false # Import TV Show posters
       - AUTO_IMPORT_SEASONS=false # Import TV season posters
       - AUTO_IMPORT_COLLECTIONS=false # Import Collection posters
+      - EXCLUDED_LIBRARIES= # Comma-separated list of library names to exclude (e.g., "Kids Movies,Anime")
     volumes:
       - ./posters:/config/posters
       - ./data:/config/data # Logs are found here
@@ -115,6 +116,7 @@ docker-compose up -d
 | AUTO_IMPORT_SHOWS         | Import TV Shows posters              | true                                                                                                  |
 | AUTO_IMPORT_SEASONS       | Import TV Seasons posters            | true                                                                                                  |
 | AUTO_IMPORT_COLLECTIONS   | Import Collection posters            | true                                                                                                  |
+| EXCLUDED_LIBRARIES        | Libraries to exclude from import     | (comma-separated, e.g., "Kids Movies,Anime")                                                          |
 
 #### Note:
 
