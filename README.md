@@ -116,7 +116,7 @@ docker-compose up -d
 | AUTO_IMPORT_SHOWS         | Import TV Shows posters              | true                                                                                                  |
 | AUTO_IMPORT_SEASONS       | Import TV Seasons posters            | true                                                                                                  |
 | AUTO_IMPORT_COLLECTIONS   | Import Collection posters            | true                                                                                                  |
-| EXCLUDED_LIBRARIES        | Libraries to exclude from import     | Not Set [More info](#environment-variables)                                                           |
+| EXCLUDED_LIBRARIES        | Libraries to exclude from import     | Not Set (comma-separated, e.g., Kids Movies,Anime)                                                    |
 
 #### Note:
 
