@@ -220,7 +220,7 @@ There are several excellent resources where you can find high-quality posters fo
 - **[The Movie Database (TMDB)](https://www.themoviedb.org/)** - Extensive library of official and fan-made artwork, now fully integrated with Posteria for automatic poster fetching
 - **[The TV Database (TVDB)](https://www.thetvdb.com/)** - Comprehensive database for TV show posters and fanart, now fully integrated with Posteria for automatic poster fetching
 - **[Fanart.tv](https://www.fanart.tv/)** - High-quality artwork for movies, TV shows, and collections, now fully integrated with Posteria for automatic poster fetching
-- **[Mediux](https://mediux.pro/)** - Collection of professionally designed media artwork
+- **[Mediux](https://mediux.pro/)** - Collection of professionally designed media artwork, now fully integrated with Posteria for automatic poster fetching
 
 Posteria supports using URLS from Mediux YAML files in the URL uploader when changing posters, making it a convenient choice for managing your collection.
 
