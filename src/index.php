@@ -1988,7 +1988,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 			padding: 24px;
 			border-radius: 12px;
 			width: 90%;
-			max-width: 400px;
+			max-width: 500px;
 			transition: transform 0.3s ease;
 			border: 1px solid var(--border-color);
 			box-shadow: var(--shadow-md);
