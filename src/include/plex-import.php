@@ -1767,8 +1767,13 @@ try {
         $availableLibraries = [];
         $librariesResult = getPlexLibraries($plex_config['server_url'], $plex_config['token']);
         if ($librariesResult['success']) {
-            // Filter libraries based on media type
+            // Filter libraries based on media type and exclusion list
             foreach ($librariesResult['data'] as $lib) {
+                // Skip excluded libraries
+                if (in_array($lib['title'], $auto_import_config['excluded_libraries'])) {
+                    continue;
+                }
+
                 if (
                     ($type === 'movies' && $lib['type'] === 'movie') ||
                     (($type === 'shows' || $type === 'seasons') && $lib['type'] === 'show') ||
