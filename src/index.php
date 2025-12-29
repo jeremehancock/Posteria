@@ -3574,7 +3574,7 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 									stroke-linejoin="round" style="margin-right: 6px;">
 									<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
 								</svg>
-								Filter View
+								Filter Orphans
 							</button>
 							<div style="display: flex; gap: 12px;">
 								<button type="button" class="modal-button cancel"

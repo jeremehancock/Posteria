@@ -438,3 +438,9 @@
 
 - Updated to allow for exluding Libraries
 - Added the ability to refresh since the issue in Android seems to be resolved
+
+## [1.7.3]
+
+### Updated
+
+- Updated text used for orphaned poster filter
