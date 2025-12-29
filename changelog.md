@@ -419,3 +419,22 @@
 ### Fixed
 
 - Fixed issue with poster-wall link
+
+## [1.7.0]
+
+### Updated
+
+- Updated to work for arm devices
+
+## [1.7.1]
+
+### Updated
+
+- Updated to hide the pull to refresh progress bar
+
+## [1.7.2]
+
+### Updated
+
+- Updated to allow for exluding Libraries
+- Added the ability to refresh since the issue in Android seems to be resolved

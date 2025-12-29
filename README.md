@@ -76,7 +76,7 @@ services:
       - AUTO_IMPORT_SHOWS=false # Import TV Show posters
       - AUTO_IMPORT_SEASONS=false # Import TV season posters
       - AUTO_IMPORT_COLLECTIONS=false # Import Collection posters
-      - EXCLUDED_LIBRARIES= # Comma-separated list of library names to exclude (e.g., "Kids Movies,Anime")
+      - EXCLUDED_LIBRARIES= # Comma-separated list of library names to exclude (e.g., Kids Movies,Anime)
     volumes:
       - ./posters:/config/posters
       - ./data:/config/data # Logs are found here
@@ -98,8 +98,8 @@ docker-compose up -d
 | SITE_TITLE                | Website title                        | Posteria                                                                                              |
 | AUTH_USERNAME             | Admin username                       | admin                                                                                                 |
 | AUTH_PASSWORD             | Admin password                       | changeme                                                                                              |
-| PUID                      | User ID                              | 911 [More info](#note)                                                                                |
-| PGID                      | Group ID                             | 911 [More info](#note)                                                                                |
+| PUID                      | User ID                              | Not Set [More info](#note)                                                                            |
+| PGID                      | Group ID                             | Not Set [More info](#note)                                                                            |
 | TZ                        | Timezone                             | Etc/UTC [List](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones#List)                     |
 | SESSION_DURATION          | Login session duration in seconds    | 3600 (1 Hour)                                                                                         |
 | AUTH_BYPASS               | Bypass Authentication                | false                                                                                                 |
@@ -116,7 +116,7 @@ docker-compose up -d
 | AUTO_IMPORT_SHOWS         | Import TV Shows posters              | true                                                                                                  |
 | AUTO_IMPORT_SEASONS       | Import TV Seasons posters            | true                                                                                                  |
 | AUTO_IMPORT_COLLECTIONS   | Import Collection posters            | true                                                                                                  |
-| EXCLUDED_LIBRARIES        | Libraries to exclude from import     | (comma-separated, e.g., "Kids Movies,Anime")                                                          |
+| EXCLUDED_LIBRARIES        | Libraries to exclude from import     | (comma-separated, e.g., Kids Movies,Anime)                                                            |
 
 #### Note:
 
@@ -137,6 +137,8 @@ Example output:
 ```text
 uid=1000(your_user) gid=1000(your_user) groups=1000(your_user)
 ```
+
+#### Note:
 
 `PLEX_REMOVE_OVERLAY_LABEL`
 
