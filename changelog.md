@@ -444,3 +444,9 @@
 ### Updated
 
 - Updated text used for orphaned poster filter
+
+## [1.7.4]
+
+### Fixed
+
+- Fixed issue with Donate button
