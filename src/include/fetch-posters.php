@@ -336,8 +336,8 @@ if ($type === 'movie') {
         $matchedResults[] = $movieResult;
     }
 
-    // If we found matches, use them; otherwise fall back to all results
-    $resultsToProcess = !empty($matchedResults) ? $matchedResults : $allResults;
+    // Only process exact matches - don't fall back to all results
+    $resultsToProcess = $matchedResults;
 
     // Process the selected results
     foreach ($resultsToProcess as $movieResult) {
@@ -407,8 +407,8 @@ if ($type === 'movie') {
         $matchedResults[] = $tvResult;
     }
 
-    // Process each TV show result to build posters array
-    $resultsToProcess = !empty($matchedResults) ? $matchedResults : $allResults;
+    // Only process exact matches - don't fall back to all results
+    $resultsToProcess = $matchedResults;
 
     foreach ($resultsToProcess as $tvResult) {
         $tvTitle = $tvResult['name'] ?? $tvResult['title'] ?? 'Unknown TV Show';
