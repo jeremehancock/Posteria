@@ -450,3 +450,10 @@
 ### Fixed
 
 - Fixed issue with Donate button
+
+## [1.7.5]
+
+### Updated
+
+- Removed special Star Wars title logic since the source of truth for media names should be Plex
+- This change will most likely cause orphaned posters after upgrade/import. Just reset the posters and re-import and things should be good.

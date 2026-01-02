@@ -308,7 +308,8 @@ function improvedFuzzySearch($pattern, $str)
 
 	// 6. Very restrictive fuzzy match only for short patterns (low priority)
 	// Only do fuzzy matching for patterns 4+ characters to avoid too many false positives
-	if (mb_strlen($normalizedPattern) >= 4) {
+	// Only apply fuzzy matching for single-word patterns to avoid false positives
+	if (mb_strlen($normalizedPattern) >= 4 && strpos($normalizedPattern, ' ') === false) {
 		return restrictiveFuzzyMatch($normalizedPattern, $normalizedStr);
 	}
 
@@ -579,7 +580,9 @@ function calculateRelevanceScore($searchQuery, $cleanFilename, $originalFilename
 	}
 
 	// Very restrictive fuzzy match for longer queries only (low score)
-	if (strlen($query) >= 4 && restrictiveFuzzyMatch(normalizeString($query), normalizeString($clean))) {
+	// Only apply fuzzy matching for single-word queries to avoid false positives
+	// Multi-word queries like "Star Wars" should require exact word matches
+	if (strlen($query) >= 4 && strpos($query, ' ') === false && restrictiveFuzzyMatch(normalizeString($query), normalizeString($clean))) {
 		return 200;
 	}
 
