@@ -252,4 +252,4 @@ Yes! Posteria is designed as a responsive Progressive Web App (PWA), which means
 
 ## AI Assistance Disclosure
 
-This tool was developed with assistance from AI language models.
+This project was created with the help of AI.
