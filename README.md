@@ -1,5 +1,13 @@
 <h1><img src="https://raw.githubusercontent.com/jeremehancock/Posteria/main/images/logo.png" height="50" /> Posteria</h1>
 
+> [!IMPORTANT]
+> ### Posteria is no longer actively developed
+>
+> Posteria has been replaced by **[Marquee](https://marquee.dumbprojects.com/)** — a complete re-write that is faster,
+> easier to run, and actively maintained. All new features and fixes happen there.
+>
+> **[Visit Marquee](https://marquee.dumbprojects.com/)** · **[Marquee on GitHub](https://github.com/jeremehancock/Marquee)**
+
 Posteria is a web-based media poster management system that allows you to organize and store custom posters for your movies, TV shows, seasons, and collections. It provides an elegant interface for uploading, importing, managing, and accessing your media artwork.
 
 ## Features
