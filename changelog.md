@@ -457,3 +457,9 @@
 
 - Removed special Star Wars title logic since the source of truth for media names should be Plex
 - This change will most likely cause orphaned posters after upgrade/import. Just reset the posters and re-import and things should be good.
+
+## [1.7.6]
+
+### Added
+
+- Added a notice to the main screen about Posteria being replaced by [Marquee](https://getmarquee.now)

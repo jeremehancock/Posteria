@@ -1646,6 +1646,67 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 		/* ==========================================================================
 		   8. Search
 		   ========================================================================== */
+		.deprecation-notice {
+			position: relative;
+			max-width: 800px;
+			margin: 0 auto 24px;
+			padding: 16px 44px 16px 20px;
+			background: var(--bg-secondary);
+			border: 1px solid var(--border-color);
+			border-left: 4px solid var(--accent-primary);
+			border-radius: 8px;
+			box-shadow: var(--shadow-sm);
+			text-align: left;
+		}
+
+		.deprecation-notice-close {
+			position: absolute;
+			top: 10px;
+			right: 12px;
+			background: none;
+			border: none;
+			color: var(--text-secondary);
+			font-size: 24px;
+			line-height: 1;
+			padding: 0 4px;
+			cursor: pointer;
+		}
+
+		.deprecation-notice-close:hover {
+			color: var(--text-primary);
+		}
+
+		.deprecation-notice-title {
+			display: flex;
+			align-items: center;
+			gap: 8px;
+			color: var(--accent-primary);
+			font-size: 18px;
+			font-weight: 600;
+			margin-bottom: 10px;
+		}
+
+		.deprecation-notice p {
+			color: var(--text-secondary);
+			font-size: 16px;
+			margin-bottom: 12px;
+		}
+
+		.deprecation-notice p:last-child {
+			margin-bottom: 0;
+		}
+
+		.deprecation-notice a {
+			color: var(--accent-primary);
+			text-decoration: none;
+			font-weight: 600;
+		}
+
+		.deprecation-notice a:hover {
+			color: var(--accent-hover);
+			text-decoration: underline;
+		}
+
 		.search-container {
 			text-align: center;
 			position: relative;
@@ -2854,6 +2915,19 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				width: 87%;
 			}
 
+			.deprecation-notice {
+				padding: 14px 16px;
+				margin-bottom: 20px;
+			}
+
+			.deprecation-notice-title {
+				font-size: 16px;
+			}
+
+			.deprecation-notice p {
+				font-size: 15px;
+			}
+
 			.site-title {
 				display: none;
 			}
@@ -3758,6 +3832,61 @@ $pageImages = array_slice($filteredImages, $startIndex, $config['imagesPerPage']
 				</div>
 			</div>
 		</div>
+
+		<div class="deprecation-notice" id="deprecationNotice">
+			<button type="button" class="deprecation-notice-close" id="deprecationNoticeClose"
+				aria-label="Dismiss notice">&times;</button>
+			<div class="deprecation-notice-title">
+				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="none"
+					stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+					style="flex-shrink: 0;">
+					<circle cx="12" cy="12" r="10"></circle>
+					<line x1="12" y1="8" x2="12" y2="12"></line>
+					<line x1="12" y1="16" x2="12.01" y2="16"></line>
+				</svg>
+				Posteria is no longer being actively developed
+			</div>
+			<p>
+				Posteria has been replaced by <a href="https://getmarquee.now" target="_blank"
+					rel="noopener noreferrer">Marquee</a> &mdash; a complete re-write that is faster, easier to run, and
+				actively maintained. All new features and fixes happen there.
+			</p>
+			<p>
+				<a href="https://getmarquee.now" target="_blank" rel="noopener noreferrer">Visit Marquee</a> &middot;
+				<a href="https://github.com/jeremehancock/Marquee" target="_blank" rel="noopener noreferrer">Marquee on
+					GitHub</a>
+			</p>
+		</div>
+
+		<script>
+			// Dismissable for the current browser session only; reappears in a new session
+			(function () {
+				const STORAGE_KEY = 'posteria_marquee_notice_dismissed';
+				const notice = document.getElementById('deprecationNotice');
+				if (!notice) return;
+
+				let dismissed = false;
+				try {
+					dismissed = sessionStorage.getItem(STORAGE_KEY) === 'true';
+				} catch (e) {
+					// sessionStorage unavailable (private mode, blocked cookies) - always show
+				}
+
+				if (dismissed) {
+					notice.style.display = 'none';
+					return;
+				}
+
+				document.getElementById('deprecationNoticeClose').addEventListener('click', function () {
+					notice.style.display = 'none';
+					try {
+						sessionStorage.setItem(STORAGE_KEY, 'true');
+					} catch (e) {
+						// Ignore - notice simply reappears on the next page load
+					}
+				});
+			})();
+		</script>
 
 		<div class="search-container">
 			<form class="search-form" method="GET" action="">
